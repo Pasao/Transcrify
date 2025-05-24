@@ -1,14 +1,14 @@
 # 🎙️ Transcrify
 
-Transcrify è un'applicazione Android innovativa progettata per convertire rapidamente messaggi vocali in testo chiaro e leggibile, sfruttando la potenza delle API di Groq con modelli AI gratuiti. L'app si integra perfettamente nel tuo flusso di lavoro come un **overlay fluttuante sempre disponibile**, permettendoti di registrare audio, trascriverlo automaticamente e copiarlo negli appunti in modo semplice e immediato.
+Transcrify è un'applicazione Android innovativa progettata per convertire rapidamente messaggi vocali in testo chiaro e leggibile, sfruttando la potenza delle API di Groq con modelli AI gratuiti. L'app si integra perfettamente nella quotidianità come un **overlay fluttuante sempre disponibile**, permettendoti di registrare audio, trascriverlo automaticamente e copiarlo negli appunti in modo semplice e immediato.
 
 
 ## ✨ Funzionalità principali
 
-*   **Trascrizione AI Rapida:** Utilizza le API di Groq per trascrivere messaggi vocali in testo, garantendo velocità e precisione.
+*   **Trascrizione AI Rapida e precisa:** Utilizza le API di Groq per trascrivere messaggi vocali in testo, garantendo velocità, precisione e punteggiatura.
 *   **Overlay Fluttuante:** Avvia e gestisci le registrazioni e le trascrizioni direttamente da un'interfaccia compatta e sempre accessibile.
 *   **Copia Veloce:** Trascrizione automatica copiata negli appunti di sistema per un utilizzo istantaneo in qualsiasi app.
-*   **Ricopia Ultima Trascrizione:** Un pulsante dedicato per ricopiare facilmente l'ultima trascrizione.
+*   **Ricopia Ultima Trascrizione:** Un pulsante dedicato per ricopiare facilmente l'ultima trascrizione nel caso non fosse più disponibile.
 *   **Rifinimento Trascrizione:** Funzionalità in sviluppo per migliorare punteggiatura e leggibilità del testo trascritto.
 
 
@@ -101,6 +101,7 @@ Il progetto è **open source** e aperto a collaborazioni.
 
 
 ## 📋 To-do list (Prossimi sviluppi)
+*   [ ] Permettere di creare automaticamente la chiave senza doverlo fare manualmente all'utente.
 *   [ ] Fornire l'APK compilato e allineato dell'applicazione.
 *   [ ] Implementare la possibilità di rifinire la trascrizione usando prompt personalizzati.
 *   [ ] Creare una versione stabile con APK firmato e caricarla nelle [GitHub Releases](https://github.com/Pasao/transcrify_clean_final/releases).
