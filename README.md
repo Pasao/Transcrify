@@ -101,9 +101,8 @@ Il progetto è **open source** e aperto a collaborazioni.
 
 
 ## 📋 To-do list (Prossimi sviluppi)
-*   [ ] Permettere di creare automaticamente la chiave senza doverlo fare manualmente all'utente.
-*   [ ] Fornire l'APK compilato e allineato dell'applicazione.
-*   [ ] Implementare la possibilità di rifinire la trascrizione usando prompt personalizzati.
+*   [ ] Permettere di creare automaticamente la chiave Groq senza doverlo fare manualmente all'utente.
+*   [ ] Implementare la possibilità di rifinire la trascrizione usando prompt personalizzati in-app.
 *   [ ] Creare una versione stabile con APK firmato e caricarla nelle [GitHub Releases](https://github.com/Pasao/transcrify_clean_final/releases).
 *   [ ] Aggiungere una dashboard grafica per il monitoraggio dei limiti API all'interno dell'app.
 *   [ ] Migliorare l’UI/UX dell’overlay e la gestione degli errori API.
