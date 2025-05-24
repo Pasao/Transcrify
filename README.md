@@ -23,11 +23,6 @@ Parlare è generalmente più veloce che scrivere a mano o con la tastiera. Trans
 
 Questa applicazione vuole quindi facilitare la scrittura, migliorare la comunicazione scritta e portare tecnologia AI accessibile e gratuita a dispositivi che non ne sono ancora dotati.
 
-## 🛠️ Tecnologie utilizzate
-
-*   **Kotlin**
-*   **Jetpack Compose** (per la UI)
-*   **API di Groq** (per modelli LLM di trascrizione)
 
 ## 📱 Sistema supportato
 
@@ -66,6 +61,22 @@ android {
 6.  **Usa l’overlay** per registrare audio e trascrivere in testo, che verrà copiato automaticamente negli appunti.
 
 ---
+
+
+## 🧩 Dipendenze e Personalizzazioni
+
+Questo progetto utilizza diverse librerie di terze parti per le sue funzionalità. In particolare, per la gestione dell'overlay fluttuante, è stata adottata e adattata una versione di una libreria esistente.
+
+Ho basato l'implementazione sulla libreria originale [luiisca/floating-views](https://github.com/luiisca/floating-views).
+
+La versione personalizzata e modificata, **[Pasao/floating-views-tify](https://github.com/Pasao/floating-views-tify)**, è stata sviluppata per soddisfare specifiche esigenze del progetto Transcrify. Questo fork include ottimizzazioni e adattamenti mirati per garantire la piena compatibilità e le funzionalità richieste dall'applicazione.
+
+## 🛠️ Tecnologie utilizzate
+
+*   **Kotlin**
+*   **Jetpack Compose** (per la UI)
+*   **API di Groq** (per modelli LLM di trascrizione)
+
 
 ## ⚠️ Gestione dei limiti API di Groq
 
