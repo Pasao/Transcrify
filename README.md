@@ -1,6 +1,6 @@
 Transcrify è un’app Android personale che sperimenta l’uso di speech-to-text e modelli LLM per trasformare note vocali in testo più leggibile e strutturato.
 
-L’app nasce dall’esigenza personale di convertire rapidamente messaggi vocali in testo, migliorandone la chiarezza tramite rielaborazione automatica.
+L’app nasce sia dall’esigenza personale di convertire rapidamente messaggi vocali in testo, migliorandone la chiarezza tramite rielaborazione automatica, sia dal desiderio di fornire uno strumento di accessibilità a chi ha difficoltà a scrivere con le mani.
 Il sistema è basato su un Android Accessibility Service con overlay fluttuante, che permette di avviare la registrazione in qualsiasi contesto e ottenere la trascrizione copiata direttamente negli appunti.
 
 Funzionalità principali
