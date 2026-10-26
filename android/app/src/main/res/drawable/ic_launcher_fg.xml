@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Transcri appoggiato a destra, come sul bordo dello schermo. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M64,31a7,7 0,0 1,7 7v32a7,7 0,0 1,-14 0v-32a7,7 0,0 1,7 -7z" />
+    <!-- Le gocce dello schizzo, da sinistra. -->
+    <path
+        android:fillColor="#E6FFFFFF"
+        android:pathData="M47,46m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    <path
+        android:fillColor="#B3FFFFFF"
+        android:pathData="M42,57m-2.8,0a2.8,2.8 0,1 1,5.6 0a2.8,2.8 0,1 1,-5.6 0" />
+    <path
+        android:fillColor="#80FFFFFF"
+        android:pathData="M45,66m-1.8,0a1.8,1.8 0,1 1,3.6 0a1.8,1.8 0,1 1,-3.6 0" />
+</vector>

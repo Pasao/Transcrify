@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La casa di Transcri sulla schermata home: un quadrato blu, grande come un'icona,
+     con la capsula in mezzo che respira (il ViewFlipper alterna capsula a riposo e gonfia). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:contentDescription="@string/widget_description">
+
+    <!-- La misura vera la calcola TranscriWidget dalla casella: qui solo quella di partenza. -->
+    <FrameLayout
+        android:id="@+id/widget_square"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_gravity="center"
+        android:background="@drawable/widget_bg">
+
+        <ViewFlipper
+            android:id="@+id/widget_breath"
+            android:layout_width="16dp"
+            android:layout_height="40dp"
+            android:layout_gravity="center"
+            android:autoStart="true"
+            android:flipInterval="1400"
+            android:inAnimation="@android:anim/fade_in"
+            android:outAnimation="@android:anim/fade_out"
+            android:importantForAccessibility="no">
+
+            <ImageView
+                android:layout_width="11dp"
+                android:layout_height="33dp"
+                android:layout_gravity="center"
+                android:src="@drawable/widget_home_in" />
+
+            <ImageView
+                android:layout_width="13dp"
+                android:layout_height="38dp"
+                android:layout_gravity="center"
+                android:src="@drawable/widget_home_glow" />
+        </ViewFlipper>
+
+        <ImageView
+            android:id="@+id/widget_away"
+            android:layout_width="11dp"
+            android:layout_height="33dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_home_out"
+            android:visibility="gone" />
+    </FrameLayout>
+</FrameLayout>
