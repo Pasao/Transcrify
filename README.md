@@ -35,8 +35,6 @@ Il piano gratuito di Groq trascrive fino a 2 ore di audio all'ora e 8 al giorno:
 
 Per compilarlo: `flutter build apk --release --split-per-abi`. La firma si legge da `android/key.properties`, che non è nel repo.
 
-Caratteri: Bricolage Grotesque, Inter e DM Mono, con licenza SIL Open Font License (in `assets/fonts`).
-
 ## Storia
 
 La prima versione (2025) era un prototipo in Kotlin, nel ramo `v1`. Questa è la riscrittura del 2026.
