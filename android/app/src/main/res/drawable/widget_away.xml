@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Il suo posto quando è fuori: la sua forma, sbiadita, con gli occhi chiusi. Si capisce che manca,
+     ma il widget resta colorato (l'ImageView la tiene trasparente). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="13dp" />
+            <gradient android:angle="270" android:startColor="@android:color/system_accent1_300" android:endColor="@android:color/system_accent3_300" />
+            <size android:width="34dp" android:height="30dp" />
+        </shape>
+    </item>
+    <item android:gravity="top|left" android:left="9.2dp" android:top="10.4dp" android:width="4dp" android:height="1.4dp">
+        <shape android:shape="rectangle"><corners android:radius="0.7dp" /><solid android:color="#FFFFFFFF" /></shape>
+    </item>
+    <item android:gravity="top|left" android:left="20.8dp" android:top="10.4dp" android:width="4dp" android:height="1.4dp">
+        <shape android:shape="rectangle"><corners android:radius="0.7dp" /><solid android:color="#FFFFFFFF" /></shape>
+    </item>
+</layer-list>

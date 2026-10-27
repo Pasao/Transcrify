@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transcri: i colori del telefono (gli stessi che ha in volo e nell'app), con gli occhi. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="13dp" />
+            <gradient android:angle="270" android:startColor="@android:color/system_accent1_300" android:endColor="@android:color/system_accent3_300" />
+            <size android:width="34dp" android:height="30dp" />
+        </shape>
+    </item>
+    <item android:gravity="top|left" android:left="9.9dp" android:top="9.2dp" android:width="2.6dp" android:height="3.1dp">
+        <shape android:shape="oval"><solid android:color="#FFFFFFFF" /></shape>
+    </item>
+    <item android:gravity="top|left" android:left="21.5dp" android:top="9.2dp" android:width="2.6dp" android:height="3.1dp">
+        <shape android:shape="oval"><solid android:color="#FFFFFFFF" /></shape>
+    </item>
+</layer-list>

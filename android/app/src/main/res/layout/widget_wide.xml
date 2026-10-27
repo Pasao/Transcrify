@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2 × 1: una pillola. A sinistra Transcri, grande, senza niente intorno; a destra cosa fa.
+     Le misure (margine 10 dp, posto da 56 dp) le usa anche WidgetTrampoline per sapere dov'è lui. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_phone"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="10dp"
+    android:paddingEnd="20dp"
+    android:contentDescription="@string/widget_description">
+
+    <FrameLayout
+        android:id="@+id/widget_circle"
+        android:layout_width="56dp"
+        android:layout_height="56dp">
+        <!-- Respira: il ViewFlipper alterna le pose con una dissolvenza (riposo, inspira, riposo, espira). -->
+        <ViewFlipper
+            android:id="@+id/widget_breath"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:autoStart="true"
+            android:flipInterval="1400"
+            android:inAnimation="@android:anim/fade_in"
+            android:outAnimation="@android:anim/fade_out"
+            android:importantForAccessibility="no">
+            <ImageView android:layout_width="52dp" android:layout_height="46dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
+            <ImageView android:layout_width="55dp" android:layout_height="49dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
+            <ImageView android:layout_width="52dp" android:layout_height="46dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
+            <ImageView android:layout_width="50dp" android:layout_height="44dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
+        </ViewFlipper>
+        <ImageView
+            android:id="@+id/widget_away"
+            android:layout_width="52dp"
+            android:layout_height="46dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:alpha="0.4"
+            android:src="@drawable/widget_away"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:text="Detta"
+            android:textColor="@color/widget_phone_text"
+            android:textSize="19sp" />
+        <TextView
+            android:id="@+id/widget_line"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:alpha="0.7"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:text="Tocca e parla, poi incolla dove vuoi"
+            android:textColor="@color/widget_phone_text"
+            android:textSize="12sp" />
+    </LinearLayout>
+</LinearLayout>
