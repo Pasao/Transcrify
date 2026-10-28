@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Lo stato che arriva dal nucleo nativo (Kotlin).
@@ -212,13 +213,70 @@ class Core {
     return true;
   }
 
-  static Future<CoreState> state() async => CoreState(await _ch.invokeMethod('state'));
+  // --- Le prove (solo nella versione di sviluppo) ---
 
-  static Future<List<Entry>> history() async => ((await _ch.invokeMethod('history')) as List).map((e) => Entry(e as Map)).toList();
+  /// L'app come la vede chi la apre la prima volta: niente chiave, niente note né trascrizioni,
+  /// l'introduzione da vedere. I dati veri non si toccano: spegnendo la prova tornano tutti.
+  static final preview = ValueNotifier<bool>(false);
 
-  static Future<List<Waiting>> waiting() async => ((await _ch.invokeMethod('pending')) as List).map((e) => Waiting(e as Map)).toList();
+  /// Nella prova: le note scritte e la chiave messa vivono solo in memoria.
+  static final _previewNotes = <Note>[];
+  static bool _previewIntro = false, _previewKey = false;
 
-  static Future<void> discardWaiting(String id) => _ch.invokeMethod('discardPending', {'id': id});
+  /// Due registrazioni «in attesa» finte, per vedere quella parte senza staccare la rete.
+  static final fakeWaiting = ValueNotifier<bool>(false);
+  static final _fake = <Waiting>[];
+
+  static void setPreview(bool on) {
+    _previewNotes.clear();
+    _previewIntro = false;
+    _previewKey = false;
+    preview.value = on;
+    refresh();
+  }
+
+  static void setFakeWaiting(bool on) {
+    final now = DateTime.now();
+    _fake
+      ..clear()
+      ..addAll([
+        if (on)
+          Waiting({
+            'id': 'prova-1',
+            'at': now.subtract(const Duration(minutes: 12)).millisecondsSinceEpoch,
+            'seconds': 40,
+            'mode': 'pulita',
+          }),
+        if (on)
+          Waiting({'id': 'prova-2', 'at': now.subtract(const Duration(hours: 3)).millisecondsSinceEpoch, 'seconds': 185, 'mode': null}),
+      ]);
+    fakeWaiting.value = on;
+    refresh();
+  }
+
+  static Future<CoreState> state() async {
+    final m = Map<String, Object?>.from(await _ch.invokeMethod('state') as Map);
+    if (preview.value) {
+      m['hasKey'] = _previewKey;
+      m['maskedKey'] = _previewKey ? 'gsk_••••••••prov' : null;
+      m['introSeen'] = _previewIntro;
+      m['words'] = <String>[];
+    }
+    return CoreState(m);
+  }
+
+  static Future<List<Entry>> history() async =>
+      preview.value ? [] : ((await _ch.invokeMethod('history')) as List).map((e) => Entry(e as Map)).toList();
+
+  static Future<List<Waiting>> waiting() async => [
+    ..._fake,
+    if (!preview.value) ...((await _ch.invokeMethod('pending')) as List).map((e) => Waiting(e as Map)),
+  ];
+
+  static Future<void> discardWaiting(String id) async {
+    if (_fake.any((w) => w.id == id)) return _fake.removeWhere((w) => w.id == id);
+    await _ch.invokeMethod('discardPending', {'id': id});
+  }
 
   /// Prova a trascrivere quello che aspetta. Senza rete non succede niente: resta lì.
   static Future<void> flushWaiting() async {
@@ -229,9 +287,17 @@ class Core {
     }
   }
 
-  static Future<void> deleteEntry(DateTime at) => _ch.invokeMethod('deleteHistory', {'at': at.millisecondsSinceEpoch});
+  static Future<void> deleteEntry(DateTime at) async {
+    if (!preview.value) await _ch.invokeMethod('deleteHistory', {'at': at.millisecondsSinceEpoch});
+  }
 
-  static Future<void> setIntroSeen() => _ch.invokeMethod('introSeen');
+  static Future<void> setIntroSeen() async {
+    if (preview.value) {
+      _previewIntro = true;
+    } else {
+      await _ch.invokeMethod('introSeen');
+    }
+  }
 
   static Future<List<TopicModelInfo>> topicModels() async =>
       ((await _ch.invokeMethod('topicModels')) as List).map((e) => TopicModelInfo(e as Map)).toList();
@@ -243,12 +309,22 @@ class Core {
 
   static Future<void> deleteTopicModel(String id) => _ch.invokeMethod('deleteTopicModel', {'id': id});
 
-  static Future<List<Note>> notes() async => ((await _ch.invokeMethod('notes')) as List).map((e) => Note.fromMap(e as Map)).toList();
+  static Future<List<Note>> notes() async => preview.value
+      ? ([..._previewNotes]..sort((a, b) => b.updated.compareTo(a.updated)))
+      : ((await _ch.invokeMethod('notes')) as List).map((e) => Note.fromMap(e as Map)).toList();
 
   /// Salva una nota nuova o aggiorna quella con lo stesso id.
-  static Future<void> saveNote(Note n) => _ch.invokeMethod('saveNote', n.toMap());
+  static Future<void> saveNote(Note n) async {
+    if (!preview.value) return _ch.invokeMethod('saveNote', n.toMap());
+    _previewNotes
+      ..removeWhere((x) => x.id == n.id)
+      ..add(n);
+  }
 
-  static Future<void> deleteNote(String id) => _ch.invokeMethod('deleteNote', {'id': id});
+  static Future<void> deleteNote(String id) async {
+    if (!preview.value) return _ch.invokeMethod('deleteNote', {'id': id});
+    _previewNotes.removeWhere((x) => x.id == id);
+  }
 
   /// Prova la chiave con Groq. Restituisce null se va bene, altrimenti il motivo.
   static Future<String?> checkKey(String key) async {
@@ -260,7 +336,15 @@ class Core {
     }
   }
 
-  static Future<void> setKey(String key) => _ch.invokeMethod('setKey', {'key': key});
+  static Future<void> setKey(String key) async {
+    // Nella prova la chiave si controlla davvero con Groq, ma non si salva: quella vera resta.
+    if (preview.value) {
+      _previewKey = true;
+    } else {
+      await _ch.invokeMethod('setKey', {'key': key});
+    }
+  }
+
   static Future<void> deleteKey() => _ch.invokeMethod('deleteKey');
 
   static Future<List<GroqModel>> models() async => ((await _ch.invokeMethod('models')) as List).map((e) => GroqModel(e as Map)).toList();

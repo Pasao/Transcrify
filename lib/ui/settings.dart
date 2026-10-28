@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -99,6 +100,26 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _open(Widget page) async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
     _load();
+  }
+
+  /// La prova «utente nuovo»: si chiudono le impostazioni e l'app riparte dall'introduzione.
+  void _setPreview(bool on) {
+    HapticFeedback.selectionClick();
+    Navigator.of(context).pop();
+    Core.setPreview(on);
+  }
+
+  Future<void> _setLimit(bool on) async {
+    HapticFeedback.selectionClick();
+    await Core.simulateLimit(on);
+    Core.refresh();
+    _load();
+  }
+
+  void _setFakeWaiting(bool on) {
+    HapticFeedback.selectionClick();
+    Core.setFakeWaiting(on);
+    setState(() {});
   }
 
   static String _short(String model) => model.substring(model.lastIndexOf('/') + 1);
@@ -239,12 +260,42 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       SettingsRow(
                         icon: Icons.school_rounded,
-                        color: Tokens.yellow,
+                        color: context.tk.muted,
                         title: 'Rivedi come funziona',
                         onTap: () => Navigator.of(context).pop('intro'),
                       ),
                     ],
                   ),
+                  if (kDebugMode)
+                    SettingsGroup(
+                      label: 'Prove',
+                      children: [
+                        SettingsRow(
+                          icon: Icons.person_outline_rounded,
+                          color: Tokens.blue,
+                          title: 'Come un utente nuovo',
+                          subtitle: 'Senza chiave né note, con l\'introduzione. I tuoi dati restano.',
+                          trailing: Switch(value: Core.preview.value, onChanged: _setPreview),
+                          onTap: () => _setPreview(!Core.preview.value),
+                        ),
+                        SettingsRow(
+                          icon: Icons.hourglass_bottom_rounded,
+                          color: Tokens.blue,
+                          title: 'Minuti finiti',
+                          subtitle: 'Transcri dorme come quando finisce il limite',
+                          trailing: Switch(value: st.simulateLimit, onChanged: _setLimit),
+                          onTap: () => _setLimit(!st.simulateLimit),
+                        ),
+                        SettingsRow(
+                          icon: Icons.cloud_off_rounded,
+                          color: Tokens.blue,
+                          title: 'Registrazioni in attesa',
+                          subtitle: 'Due finte, come se fosse mancata la rete',
+                          trailing: Switch(value: Core.fakeWaiting.value, onChanged: _setFakeWaiting),
+                          onTap: () => _setFakeWaiting(!Core.fakeWaiting.value),
+                        ),
+                      ],
+                    ),
                   SettingsGroup(
                     label: 'Zona sensibile',
                     danger: true,
@@ -1028,7 +1079,8 @@ class _Meter extends StatelessWidget {
             child: LinearProgressIndicator(
               value: fraction!.clamp(0, 1).toDouble(),
               minHeight: 5,
-              backgroundColor: tk.surface,
+              // La parte ancora libera si vede, anche sulla scheda bianca.
+              backgroundColor: tk.border,
               color: full ? Tokens.red : Tokens.blue,
             ),
           ),

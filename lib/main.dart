@@ -51,7 +51,15 @@ class _RootState extends State<_Root> {
   @override
   void initState() {
     super.initState();
+    // Accendere o spegnere la prova «utente nuovo» fa ripartire l'app dall'inizio.
+    Core.preview.addListener(_start);
     _start();
+  }
+
+  @override
+  void dispose() {
+    Core.preview.removeListener(_start);
+    super.dispose();
   }
 
   /// L'introduzione si vede la prima volta; dopo, solo se la chiedi dalle impostazioni.

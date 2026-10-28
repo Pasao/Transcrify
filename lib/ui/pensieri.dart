@@ -89,13 +89,81 @@ class _PensieriPageState extends State<PensieriPage> {
       children: [
         if (all.isNotEmpty) ...[SearchField(controller: _search, hint: 'Cerca quello che ricordi'), const SizedBox(height: 14)],
         if (all.isEmpty)
-          _Hint(top: 'Le tue note stanno qui.', bottom: 'Scrivine una con la matita, in basso.', color: tk.muted)
+          const _EmptyNotes()
         else if (shown.isEmpty)
           _Hint(top: 'Niente con «${_search.text.trim()}».', bottom: 'Prova con un\'altra parola.', color: tk.muted)
         else
           Masonry(
             children: [for (final n in shown) NoteCard(key: ValueKey(n.id), note: n, onOpen: () => openNote(context, n))],
           ),
+      ],
+    );
+  }
+}
+
+/// Nessuna nota ancora: le sagome di quattro schede su due colonne, che sfumano, e una frase.
+/// Dicono cosa arriverà senza fingere un contenuto, come le schede vuote di Trascrivi.
+class _EmptyNotes extends StatelessWidget {
+  const _EmptyNotes();
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    Widget ghost(double h, double opacity, List<double> lines) => Opacity(
+      opacity: opacity,
+      child: Container(
+        height: h,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: tk.surface, borderRadius: BorderRadius.circular(18)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final w in lines)
+              FractionallySizedBox(
+                widthFactor: w,
+                child: Container(
+                  height: 8,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(color: tk.border, borderRadius: BorderRadius.circular(4)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                children: [
+                  ghost(150, 1, [0.6, 0.9, 0.8, 0.5]),
+                  const SizedBox(height: 10),
+                  ghost(96, 0.5, [0.7, 0.4]),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                children: [
+                  ghost(100, 0.75, [0.5, 0.85]),
+                  const SizedBox(height: 10),
+                  ghost(130, 0.35, [0.8, 0.6, 0.3]),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 28),
+        Text(
+          'Le tue note stanno qui.\nScrivine una con la matita, in basso.',
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: tk.muted),
+        ),
       ],
     );
   }
