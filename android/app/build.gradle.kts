@@ -35,6 +35,9 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Solo telefoni a 64 bit (ARM): da Android 12 sono praticamente tutti. Il motore del modello
+        // degli argomenti pesa 34 MB per architettura: tenerne una sola toglie circa 65 MB all'app.
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     signingConfigs {
