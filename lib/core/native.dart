@@ -123,32 +123,52 @@ class Note {
   };
 }
 
-/// Gli argomenti di una nota: dove stanno le frasi (inizio e fine, in fila) e, per ogni grana,
-/// dopo quali frasi cambia argomento. Le grane fini contengono sempre i confini di quelle larghe.
+/// Gli argomenti di una nota: dove stanno le frasi (inizio e fine, in fila), dopo quali frasi
+/// cambia argomento alla grana larga e a quella media, e dove sono le parole chiave.
 class NoteTopics {
   NoteTopics(Map m)
     : spans = (m['spans'] as List).cast<int>(),
-      cuts = [(m['coarse'] as List).cast<int>(), (m['medium'] as List).cast<int>(), (m['fine'] as List).cast<int>()];
+      _cuts = [(m['wide'] as List).cast<int>(), (m['medium'] as List).cast<int>()],
+      keywords = (m['keywords'] as List).cast<int>();
 
   final List<int> spans;
+  final List<List<int>> _cuts;
 
-  /// [0] larga, [1] media, [2] fine.
-  final List<List<int>> cuts;
+  /// Le parole chiave: coppie inizio–fine.
+  final List<int> keywords;
 
   int get sentences => spans.length ~/ 2;
 
-  /// I pezzi del testo a una grana (1 larga … 3 fine), come intervalli di caratteri.
+  /// I pezzi del testo a una grana (1 larga, 2 media, 3 una frase per pezzo), come intervalli di caratteri.
   List<TextRange> pieces(int grain) {
     if (sentences == 0) return const [];
+    final cuts = grain >= 3 ? [for (var i = 0; i < sentences - 1; i++) i] : _cuts[grain - 1];
     final out = <TextRange>[];
     var from = 0;
-    for (final c in cuts[grain - 1]) {
+    for (final c in cuts) {
       out.add(TextRange(start: spans[2 * from], end: spans[2 * c + 1]));
       from = c + 1;
     }
     out.add(TextRange(start: spans[2 * from], end: spans[2 * (sentences - 1) + 1]));
     return out;
   }
+}
+
+/// Un album: un argomento che torna in più note, con un nome fatto delle sue parole chiave.
+class Album {
+  Album(Map m)
+    : id = (m['id'] as num).toInt(),
+      name = m['name'] as String,
+      pieces = [
+        for (final p in (m['pieces'] as List).cast<Map>())
+          (note: p['note'] as String, range: TextRange(start: p['start'] as int, end: p['end'] as int)),
+      ];
+
+  final int id;
+  final String name;
+  final List<({String note, TextRange range})> pieces;
+
+  int get notes => pieces.map((p) => p.note).toSet().length;
 }
 
 /// Un modello per gli argomenti: si chiama «più preciso» o «più leggero»; il nome vero è scritto piccolo.
@@ -159,6 +179,7 @@ class TopicModelInfo {
       name = m['name'] as String,
       approxMb = m['approxMb'] as int,
       chosen = m['chosen'] as bool,
+      ramGb = (m['ramGb'] as num?)?.toDouble() ?? 8,
       state = m['state'] as String,
       done = (m['done'] as num?)?.toInt(),
       total = (m['total'] as num?)?.toInt(),
@@ -167,6 +188,9 @@ class TopicModelInfo {
   final String id, label, name;
   final int approxMb;
   final bool chosen;
+
+  /// Quanta memoria ha il telefono (GB): sotto i 6 il più preciso può essere lento.
+  final double ramGb;
 
   /// "missing", "downloading", "ready" o "failed".
   final String state;
@@ -365,6 +389,12 @@ class Core {
     if (preview.value) return null;
     final m = await _ch.invokeMethod('noteTopics', {'id': id}) as Map?;
     return m == null ? null : NoteTopics(m);
+  }
+
+  /// Gli album: argomenti che tornano in più note.
+  static Future<List<Album>> albums() async {
+    if (preview.value) return [];
+    return ((await _ch.invokeMethod('albums')) as List).map((e) => Album(e as Map)).toList();
   }
 
   /// Nelle prove: il pizzico al contrario (stringere = più argomenti), per provare tutte e due le direzioni.

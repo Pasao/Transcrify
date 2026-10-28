@@ -1386,6 +1386,8 @@ class _TopicsSettingsState extends State<TopicsSettings> {
           for (final m in [...list]..sort((a, b) => a.approxMb.compareTo(b.approxMb)))
             _Choice(
               title: m.label,
+              // Il più preciso vuole memoria: sui telefoni che ne hanno poca lo diciamo prima.
+              hint: m.id == 'preciso' && m.ramGb < 6 ? 'Su questo telefono può essere lento.' : null,
               subtitle: '${m.name} · circa ${m.approxMb} MB',
               selected: m.chosen,
               onTap: () => _choose(m.id),

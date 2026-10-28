@@ -70,6 +70,8 @@ class MainActivity : FlutterActivity() {
                     mapOf(
                         "id" to m.id, "label" to m.label, "name" to m.modelName, "approxMb" to m.approxMb,
                         "chosen" to (topicModels.chosen == m),
+                        // Sotto i 6 GB il più preciso può essere lento: l'app lo dice sotto la scelta.
+                        "ramGb" to topics.ramGb,
                         "state" to when (st) {
                             TopicModels.Status.Missing -> "missing"
                             is TopicModels.Status.Downloading -> "downloading"
@@ -99,6 +101,7 @@ class MainActivity : FlutterActivity() {
                 }
                 "notes" -> result.success(store.notes().map { it.toMap() + ("topics" to topics.state(it.id, it.text)) })
                 "noteTopics" -> result.success(topics.topics(call.argument<String>("id")!!))
+                "albums" -> result.success(topics.albums())
                 "saveNote" -> {
                     val id = call.argument<String>("id")!!
                     store.saveNote(

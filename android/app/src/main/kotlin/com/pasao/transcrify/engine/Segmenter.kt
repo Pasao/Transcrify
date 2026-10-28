@@ -1,5 +1,6 @@
 package com.pasao.transcrify.engine
 
+
 /** Le tre grane dei Pensieri: dal largo al fine. Il pizzico passa dall'una all'altra. Le soglie stanno nel profilo del modello. */
 enum class Grain { COARSE, MEDIUM, FINE }
 
@@ -33,6 +34,25 @@ class Segmentation(val depth: ByteArray, val minLen: Int = 2) {
             }
         }
         out.copyOf(k)
+    }
+
+    /**
+     * Le grane che vedi pizzicando: 1 larga, 2 media, 3 una frase per pezzo.
+     * La media segue la soglia del modello: i cambi di argomento veri. La larga deve essere più
+     * larga della media: se la sua soglia darebbe lo stesso taglio (succede nelle note corte),
+     * si lascia via il confine meno netto, così due argomenti vicini si vedono insieme.
+     * Così ogni pizzico cambia qualcosa, senza inventare confini che non ci sono.
+     */
+    fun levelCuts(level: Int, profile: EngineProfile): IntArray {
+        val gaps = sentences - 1
+        if (gaps <= 0) return IntArray(0)
+        if (level >= 3) return IntArray(gaps) { it }
+        var medium = cutsAtLeast(profile.medium)
+        // Una nota lunga senza nessun confine sopra soglia ha almeno il suo confine più netto.
+        if (medium.isEmpty() && gaps >= 5) medium = cuts(2)
+        if (level == 2) return medium
+        val wide = cutsAtLeast(profile.coarse)
+        return if (wide.size < medium.size) wide else cuts(medium.size)
     }
 
     fun strength(gap: Int): Int = depth[gap].toInt() and 0xFF

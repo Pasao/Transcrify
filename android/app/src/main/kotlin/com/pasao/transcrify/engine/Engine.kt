@@ -32,10 +32,17 @@ class Engine(
     /** Le soglie del modello che dà il senso: ognuno ha la sua scala. */
     private val profile: EngineProfile,
     val topics: Topics = Topics(embedder.dim, profile.pair, profile.split),
+    /** Il senso delle frasi già capite (da disco, vedi [SentenceStore]). */
+    private val memory: MutableMap<Fingerprint, Int8Vec> = HashMap(),
+    /** Chiamato con le frasi appena capite: per scriverle su disco. */
+    private val learned: (Map<Fingerprint, Int8Vec>) -> Unit = {},
 ) {
-    /** Il senso di ogni frase già vista, per impronta. (Su disco: una tabella SQLite con le stesse chiavi.) */
-    private val memory = HashMap<Fingerprint, Int8Vec>()
     private val notePieces = HashMap<String, List<Long>>()
+
+    /** Di ogni pezzo negli album: la nota e le sue frasi. */
+    private val pieceAt = HashMap<Long, Pair<String, IntRange>>()
+
+    fun piece(id: Long): Pair<String, IntRange>? = pieceAt[id]
 
     val remembered get() = memory.size
 
@@ -46,16 +53,24 @@ class Engine(
         for (i in spans.indices) if (prints[i] !in memory) missing.putIfAbsent(prints[i], spans[i].of(text))
         if (missing.isNotEmpty()) {
             val vs = embedder.embed(missing.values.toList())
-            missing.keys.forEachIndexed { i, fp -> memory[fp] = Int8Vec.of(Vec.normalized(vs[i])) }
+            val fresh = LinkedHashMap<Fingerprint, Int8Vec>()
+            missing.keys.forEachIndexed { i, fp -> fresh[fp] = Int8Vec.of(Vec.normalized(vs[i])) }
+            memory.putAll(fresh)
+            learned(fresh)
         }
         val vectors = prints.map { memory.getValue(it).toFloats() }
         val seg = Segmenter.segment(vectors, profile.depthScale)
-        val ranges = seg.pieces(seg.cuts(Grain.MEDIUM, profile))
+        // I pezzi degli album sono quelli della grana media che vedi pizzicando.
+        val ranges = seg.pieces(seg.levelCuts(2, profile))
         val pieces = ranges.map { pieceId(noteId, prints, it) to it }
         val before = notePieces[noteId].orEmpty().toHashSet()
         val now = pieces.map { it.first }.toHashSet()
-        for (id in before) if (id !in now) topics.remove(id)
+        for (id in before) if (id !in now) {
+            topics.remove(id)
+            pieceAt.remove(id)
+        }
         for ((id, r) in pieces) {
+            pieceAt[id] = noteId to r
             if (id in before) continue
             val sum = FloatArray(embedder.dim)
             for (i in r) Vec.addTo(sum, vectors[i])
@@ -68,7 +83,10 @@ class Engine(
 
     /** La nota è stata eliminata: i suoi pezzi escono dagli album. Il senso delle frasi resta ricordato. */
     fun forget(noteId: String) {
-        for (id in notePieces.remove(noteId).orEmpty()) topics.remove(id)
+        for (id in notePieces.remove(noteId).orEmpty()) {
+            topics.remove(id)
+            pieceAt.remove(id)
+        }
     }
 
     /** L'id di un pezzo: dalla nota e dalle impronte delle sue frasi, in ordine. */
