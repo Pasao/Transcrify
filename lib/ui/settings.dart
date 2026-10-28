@@ -20,6 +20,22 @@ const _recommendedLlm = [
 ];
 const _recommendedStt = ['whisper-large-v3', 'whisper-large-v3-turbo'];
 
+/// Una scelta di modello col nome che si capisce; quello vero sta scritto piccolo sotto.
+class _Curated {
+  const _Curated(this.id, this.label, this.hint);
+
+  final String id, label, hint;
+}
+
+const _sttChoices = [
+  _Curated('whisper-large-v3', 'Più preciso', 'Sbaglia meno, anche coi nomi.'),
+  _Curated('whisper-large-v3-turbo', 'Più veloce', 'Il testo arriva prima.'),
+];
+const _llmChoices = [
+  _Curated('openai/gpt-oss-120b', 'Più preciso', 'Capisce meglio cosa volevi dire.'),
+  _Curated('openai/gpt-oss-20b', 'Più veloce', "Più svelto, un po' meno attento."),
+];
+
 /// Le impostazioni, a gruppi come in Revolut: Dettatura, Modelli, Aiuto, la zona sensibile.
 /// Ogni riga dice il suo valore e apre la sua pagina. Restituisce 'intro' per rivedere come funziona.
 class SettingsPage extends StatefulWidget {
@@ -75,6 +91,97 @@ class _SettingsPageState extends State<SettingsPage> {
 
   static String _short(String model) => model.substring(model.lastIndexOf('/') + 1);
 
+  /// Come si chiama la scelta nella riga: «Più preciso», «Più veloce»; il nome vero solo se è un altro modello.
+  static String _choiceName(String model, List<_Curated> choices) =>
+      choices.where((c) => c.id == model).map((c) => c.label).firstOrNull ?? _short(model);
+
+  /// La pagina di un modello: due scelte con un nome che si capisce (il nome vero piccolo sotto),
+  /// poi, per chi li conosce, tutti i modelli di Groq e quanto li hai usati.
+  List<Widget> _modelChoices(BuildContext context, CoreState st, VoidCallback reload, {required bool speech}) {
+    final t = Theme.of(context).textTheme;
+    final tk = context.tk;
+    final current = speech ? st.sttModel : st.llmModel;
+    return [
+      Text(
+        speech ? 'Chi ascolta la tua voce e la scrive.' : 'Chi rilegge quello che hai detto e lo pulisce.',
+        style: t.bodyMedium?.copyWith(color: tk.muted),
+      ),
+      const SizedBox(height: 20),
+      for (final c in speech ? _sttChoices : _llmChoices)
+        _Choice(
+          title: c.label,
+          hint: c.hint,
+          subtitle: _short(c.id),
+          selected: current == c.id,
+          onTap: () async {
+            HapticFeedback.selectionClick();
+            await Core.setModel(c.id, speech: speech);
+            reload();
+          },
+        ),
+      const SizedBox(height: 28),
+      Text(
+        'PER CHI LI CONOSCE',
+        style: TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w600, color: tk.muted),
+      ),
+      const SizedBox(height: 12),
+      speech
+          ? ModelPicker(
+              label: 'Modello',
+              current: st.sttModel,
+              speech: true,
+              recommended: _recommendedStt,
+              load: _models,
+              error: modelsError,
+              onSaved: reload,
+              usage: [
+                _Meter(
+                  label: 'Trascrizioni oggi',
+                  value: '${st.sttUses}',
+                  of: _requestLimit(st.sttLimits),
+                  fraction: _fraction(st.sttUses, _requestLimit(st.sttLimits)),
+                  resets: _midnight(),
+                ),
+                _Meter(
+                  label: "Audio quest'ora",
+                  value: '${(st.hourUsed / 60).round()}',
+                  of: '${(st.hourLimit / 60).round()} min',
+                  fraction: st.hourUsed / st.hourLimit,
+                  resets: st.hourEnd,
+                ),
+                _Meter(
+                  label: 'Audio oggi',
+                  value: '${(st.dayUsed / 60).round()}',
+                  of: '${(st.dayLimit / 60).round()} min',
+                  fraction: st.dayUsed / st.dayLimit,
+                  resets: st.dayEnd,
+                ),
+              ],
+              note:
+                  'Groq conta i minuti di audio, non il tempo che passa: '
+                  "in un'ora puoi mandargli fino a 120 minuti di parlato.",
+            )
+          : ModelPicker(
+              label: 'Modello',
+              current: st.llmModel,
+              speech: false,
+              recommended: _recommendedLlm,
+              load: _models,
+              error: modelsError,
+              onSaved: reload,
+              usage: [
+                _Meter(
+                  label: 'Pulizie oggi',
+                  value: '${st.llmUses}',
+                  of: _requestLimit(st.llmLimits),
+                  fraction: _fraction(st.llmUses, _requestLimit(st.llmLimits)),
+                  resets: _midnight(),
+                ),
+              ],
+            ),
+    ];
+  }
+
   static const _modeNames = {'fedele': 'Fedele', 'pulita': 'Pulita', 'riassunto': 'Riassunto'};
 
   @override
@@ -86,7 +193,8 @@ class _SettingsPageState extends State<SettingsPage> {
         body: st == null
             ? const SizedBox.shrink()
             : ListView(
-                padding: const EdgeInsets.only(bottom: 40),
+                // Sotto, anche lo spazio dei tasti di Android (i tre bottoni), se ci sono.
+                padding: EdgeInsets.only(bottom: 40 + MediaQuery.viewPaddingOf(context).bottom),
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
@@ -154,87 +262,24 @@ class _SettingsPageState extends State<SettingsPage> {
                         icon: Icons.graphic_eq_rounded,
                         color: Tokens.blue,
                         title: 'Trascrizione',
-                        value: _short(st.sttModel),
-                        onTap: () => _open(
-                          LiveSettings(
-                            title: 'Trascrizione',
-                            build: (context, st, reload) => [
-                              ModelPicker(
-                                label: 'Modello',
-                                current: st.sttModel,
-                                speech: true,
-                                recommended: _recommendedStt,
-                                load: _models,
-                                error: modelsError,
-                                onSaved: reload,
-                                usage: [
-                                  _Meter(
-                                    label: 'Trascrizioni oggi',
-                                    value: '${st.sttUses}',
-                                    of: _requestLimit(st.sttLimits),
-                                    fraction: _fraction(st.sttUses, _requestLimit(st.sttLimits)),
-                                    resets: _midnight(),
-                                  ),
-                                  _Meter(
-                                    label: 'Audio quest\'ora',
-                                    value: '${(st.hourUsed / 60).round()}',
-                                    of: '${(st.hourLimit / 60).round()} min',
-                                    fraction: st.hourUsed / st.hourLimit,
-                                    resets: st.hourEnd,
-                                  ),
-                                  _Meter(
-                                    label: 'Audio oggi',
-                                    value: '${(st.dayUsed / 60).round()}',
-                                    of: '${(st.dayLimit / 60).round()} min',
-                                    fraction: st.dayUsed / st.dayLimit,
-                                    resets: st.dayEnd,
-                                  ),
-                                ],
-                                note:
-                                    'Groq conta i minuti di audio, non il tempo che passa: '
-                                    'in un\'ora puoi mandargli fino a 120 minuti di parlato.',
-                              ),
-                            ],
-                          ),
-                        ),
+                        value: _choiceName(st.sttModel, _sttChoices),
+                        onTap: () => _open(LiveSettings(title: 'Trascrizione', build: (c, st, r) => _modelChoices(c, st, r, speech: true))),
                       ),
                       SettingsRow(
                         icon: Icons.auto_awesome_rounded,
                         color: Tokens.violet,
                         title: 'Pulizia del testo',
-                        value: _short(st.llmModel),
-                        onTap: () => _open(
-                          LiveSettings(
-                            title: 'Pulizia del testo',
-                            build: (context, st, reload) => [
-                              ModelPicker(
-                                label: 'Modello',
-                                current: st.llmModel,
-                                speech: false,
-                                recommended: _recommendedLlm,
-                                load: _models,
-                                error: modelsError,
-                                onSaved: reload,
-                                usage: [
-                                  _Meter(
-                                    label: 'Pulizie oggi',
-                                    value: '${st.llmUses}',
-                                    of: _requestLimit(st.llmLimits),
-                                    fraction: _fraction(st.llmUses, _requestLimit(st.llmLimits)),
-                                    resets: _midnight(),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
+                        value: _choiceName(st.llmModel, _llmChoices),
+                        onTap: () =>
+                            _open(LiveSettings(title: 'Pulizia del testo', build: (c, st, r) => _modelChoices(c, st, r, speech: false))),
                       ),
                       SettingsRow(
                         icon: Icons.bubble_chart_rounded,
                         color: Tokens.green,
                         title: 'Argomenti nelle note',
                         subtitle: 'Sul telefono, senza rete',
-                        value: topics,
+                        value: topicsOn ? topics : null,
+                        trailing: Switch(value: topicsOn, onChanged: _setTopics),
                         onTap: () => _open(const TopicsSettings()),
                       ),
                     ],
@@ -270,13 +315,26 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  /// Il riassunto degli argomenti per la riga: spenti, scelti, o quanto manca.
+  /// Il riassunto degli argomenti per la riga: il modello scelto, o quanto manca a scaricarlo.
   String? topics;
+  bool topicsOn = false;
+  List<TopicModelInfo> _topicModels = [];
+
+  /// L'interruttore della riga, come per la pulizia. Acceso: il modello già sul telefono, se c'è;
+  /// se no il più leggero, che si scarica.
+  Future<void> _setTopics(bool on) async {
+    HapticFeedback.selectionClick();
+    final ready = _topicModels.where((m) => m.state == 'ready').map((m) => m.id).firstOrNull;
+    await Core.chooseTopicModel(on ? ready ?? 'leggero' : null);
+    _loadTopics();
+  }
 
   Future<void> _loadTopics() async {
     final list = await Core.topicModels();
     final chosen = list.where((m) => m.chosen).firstOrNull;
     if (!mounted) return;
+    _topicModels = list;
+    topicsOn = chosen != null;
     setState(
       () => topics = chosen == null
           ? 'Spenti'
@@ -308,7 +366,12 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Rimuovi')),
+            // Quello che vuoi fare, rosso e pieno; tornare indietro resta lì, senza peso.
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Tokens.red, minimumSize: const Size(0, 40)),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Rimuovi'),
+            ),
           ],
         ),
       );
@@ -1103,7 +1166,7 @@ class SettingsPageFrame extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(),
         body: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 48),
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 48 + MediaQuery.viewPaddingOf(context).bottom),
           children: [
             Text(title, style: display(context, size: 28)),
             const SizedBox(height: 24),
@@ -1164,7 +1227,6 @@ class _TopicsSettingsState extends State<TopicsSettings> {
     final list = models;
     final t = Theme.of(context).textTheme;
     final tk = context.tk;
-    final off = list != null && list.every((m) => !m.chosen);
     return SettingsPageFrame(
       title: 'Argomenti nelle note',
       children: [
@@ -1175,7 +1237,6 @@ class _TopicsSettingsState extends State<TopicsSettings> {
         ),
         const SizedBox(height: 24),
         if (list != null) ...[
-          _Choice(title: 'Spenti', subtitle: 'Le note restano come le scrivi', selected: off, onTap: () => _choose(null)),
           // Prima il leggero: è la scelta più sobria.
           for (final m in [...list]..sort((a, b) => a.approxMb.compareTo(b.approxMb)))
             _Choice(
@@ -1192,9 +1253,12 @@ class _TopicsSettingsState extends State<TopicsSettings> {
 }
 
 class _Choice extends StatelessWidget {
-  const _Choice({required this.title, required this.subtitle, required this.selected, required this.onTap, this.below});
+  const _Choice({required this.title, required this.subtitle, required this.selected, required this.onTap, this.hint, this.below});
 
   final String title, subtitle;
+
+  /// Una riga che dice cosa cambia, sopra il nome vero.
+  final String? hint;
   final bool selected;
   final VoidCallback onTap;
   final Widget? below;
@@ -1228,6 +1292,7 @@ class _Choice extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(title, style: t.titleMedium),
+                          if (hint != null) ...[const SizedBox(height: 2), Text(hint!, style: t.bodySmall)],
                           const SizedBox(height: 2),
                           // Il nome del modello, piccolo: per chi lo conosce.
                           Text(subtitle, style: monoStyle(context, size: 11)),
