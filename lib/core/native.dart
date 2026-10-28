@@ -129,13 +129,20 @@ class NoteTopics {
   NoteTopics(Map m)
     : spans = (m['spans'] as List).cast<int>(),
       _cuts = [(m['wide'] as List).cast<int>(), (m['medium'] as List).cast<int>()],
+      keys = (m['keys'] as List).cast<int>(),
       keywords = (m['keywords'] as List).cast<int>();
 
   final List<int> spans;
   final List<List<int>> _cuts;
 
+  /// Le frasi chiave: per ogni pezzo medio, la frase che gli somiglia di più (indici di frase).
+  final List<int> keys;
+
   /// Le parole chiave: coppie inizio–fine.
   final List<int> keywords;
+
+  /// Le frasi chiave come intervalli di caratteri.
+  List<TextRange> get keyRanges => [for (final i in keys) TextRange(start: spans[2 * i], end: spans[2 * i + 1])];
 
   int get sentences => spans.length ~/ 2;
 

@@ -24,6 +24,9 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> with WidgetsBindingObserver {
   Power power = Power.trascrivi;
+
+  /// In Pensieri: 0 Note, 1 Argomenti.
+  int thoughts = 0;
   bool pillOn = false;
   bool hasKey = true;
   DateTime? limitedUntil;
@@ -122,7 +125,10 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     final status = Status(limitedUntil: limitedUntil, waiting: waiting, hasKey: hasKey);
     final page = switch (power) {
       Power.trascrivi => TrascriviPage(key: const ValueKey(Power.trascrivi), bottom: bottom),
-      Power.pensieri => PensieriPage(key: const ValueKey(Power.pensieri), bottom: bottom),
+      Power.pensieri =>
+        thoughts == 0
+            ? PensieriPage(key: const ValueKey('note'), bottom: bottom)
+            : ArgomentiPage(key: const ValueKey('argomenti'), bottom: bottom),
     };
     return Paper(
       child: Scaffold(
@@ -185,6 +191,11 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                   onSwitch: () => setState(() => switching = !switching),
                   onStep: (by) => _go(power.step(by)),
                   onWrite: power == Power.pensieri ? () => openNote(context) : null,
+                  pages: power == Power.pensieri
+                      ? const [(Icons.notes_rounded, 'Note'), (Icons.bubble_chart_rounded, 'Argomenti')]
+                      : const [],
+                  page: thoughts,
+                  onPage: (i) => setState(() => thoughts = i),
                   nest: TranscriNest(
                     on: pillOn,
                     limitedUntil: limitedUntil,

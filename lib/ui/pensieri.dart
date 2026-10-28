@@ -48,7 +48,6 @@ class PensieriPage extends StatefulWidget {
 
 class _PensieriPageState extends State<PensieriPage> {
   List<Note>? notes;
-  List<Album> albums = [];
   final _search = TextEditingController();
 
   @override
@@ -68,20 +67,8 @@ class _PensieriPageState extends State<PensieriPage> {
 
   Future<void> _load() async {
     final list = await Core.notes();
-    final a = await Core.albums();
-    if (mounted) {
-      setState(() {
-        notes = list;
-        albums = a;
-      });
-    }
+    if (mounted) setState(() => notes = list);
   }
-
-  void _openAlbum(Album a, List<Note> all) => Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => AlbumPage(album: a, notes: {for (final n in all) n.id: n}),
-    ),
-  );
 
   /// Le note che contengono tutte le parole cercate, nel titolo o nel testo, senza badare alle maiuscole.
   List<Note> _found(List<Note> all) {
@@ -111,11 +98,6 @@ class _PensieriPageState extends State<PensieriPage> {
       children: [
         SearchField(controller: _search, hint: 'Cerca quello che ricordi'),
         const SizedBox(height: 14),
-        // Gli argomenti che tornano in più note: si toccano e si vedono tutti i pezzi insieme.
-        if (albums.isNotEmpty && _search.text.isEmpty) ...[
-          AlbumStrip(albums: albums, onOpen: (a) => _openAlbum(a, all)),
-          const SizedBox(height: 16),
-        ],
         if (shown.isEmpty)
           _Hint(top: 'Niente con «${_search.text.trim()}».', bottom: 'Prova con un\'altra parola.', color: tk.muted)
         else
@@ -195,59 +177,108 @@ class _EmptyNotes extends StatelessWidget {
   }
 }
 
-/// La fila degli album, in cima alle note: scorre di lato. Ogni album dice il suo nome e in quante note torna.
-class AlbumStrip extends StatelessWidget {
-  const AlbumStrip({super.key, required this.albums, required this.onOpen});
+/// Argomenti: la seconda pagina dei Pensieri, nel Dock. Gli argomenti che tornano in più note,
+/// ognuno una scheda col suo nome e quanti pezzi raccoglie. Toccandola si vedono tutti i pezzi.
+class ArgomentiPage extends StatefulWidget {
+  const ArgomentiPage({super.key, required this.bottom});
 
-  final List<Album> albums;
-  final ValueChanged<Album> onOpen;
+  /// Lo spazio in fondo coperto dal Dock.
+  final double bottom;
+
+  @override
+  State<ArgomentiPage> createState() => _ArgomentiPageState();
+}
+
+class _ArgomentiPageState extends State<ArgomentiPage> {
+  List<Album>? albums;
+  Map<String, Note> notes = {};
+
+  @override
+  void initState() {
+    super.initState();
+    Core.addListener(_load);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    Core.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final a = await Core.albums();
+    final n = await Core.notes();
+    if (!mounted) return;
+    setState(() {
+      albums = a;
+      notes = {for (final x in n) x.id: x};
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final list = albums;
+    if (list == null) return const SizedBox.shrink();
     final tk = context.tk;
     final t = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            'ARGOMENTI',
-            style: TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w600, color: tk.muted),
-          ),
+    if (list.isEmpty) {
+      final ready = notes.values.where((n) => n.topics == 'ready').length;
+      return Padding(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, widget.bottom + 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GrainIcon(level: 2, size: 40, color: tk.faint),
+            const SizedBox(height: 16),
+            Text('Un argomento compare qui quando torna in almeno due note.', style: t.bodyLarge?.copyWith(color: tk.muted)),
+            const SizedBox(height: 6),
+            Text(
+              ready == 0
+                  ? 'Accendi «Dividi per argomento» nelle impostazioni.'
+                  : '$ready ${ready == 1 ? 'nota divisa' : 'note divise'} per ora: più ne scrivi, più ne trova.',
+              style: t.bodySmall,
+            ),
+          ],
         ),
-        SizedBox(
-          height: 72,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: albums.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (_, i) {
-              final a = albums[i];
-              return Material(
-                color: _topicColors[i % _topicColors.length].withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(18),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(18),
-                  onTap: () => onOpen(a),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(a.name, style: t.titleMedium),
-                        const SizedBox(height: 2),
-                        Text('${a.pieces.length} pezzi da ${a.notes} note', style: monoStyle(context)),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
+      );
+    }
+    return GridView.builder(
+      padding: EdgeInsets.fromLTRB(16, 8, 16, widget.bottom + 24),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 1.25,
+      ),
+      itemCount: list.length,
+      itemBuilder: (context, i) {
+        final a = list[i];
+        return Material(
+          color: _topicColors[i % _topicColors.length].withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(20),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => AlbumPage(album: a, notes: notes),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(a.name, style: t.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  const Spacer(),
+                  Text('${a.pieces.length} pezzi da ${a.notes} note', style: monoStyle(context)),
+                ],
+              ),
+            ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -485,7 +516,7 @@ class TopicTextController extends TextEditingController {
   /// Il testo per cui [topics] vale.
   String? topicsFor;
 
-  /// 0 spenti, 1 larghi, 2 medi, 3 una frase per volta, 4 parole chiave.
+  /// 0 spenti, 1 larghi, 2 medi, 3 frasi chiave, 4 parole chiave.
   int get level => _level;
   int _level = 0;
 
@@ -500,9 +531,39 @@ class TopicTextController extends TextEditingController {
 
   @override
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
-    if (level == 0 || !usable) return super.buildTextSpan(context: context, style: style, withComposing: withComposing);
-    return level == 4 ? _keywords(style) : _pieces(style, topics!.pieces(level));
+    // Mentre la tastiera sta componendo una parola si lascia fare a Flutter (la sottolineatura della parola).
+    if (withComposing && value.composing.isValid && !value.composing.isCollapsed) {
+      return super.buildTextSpan(context: context, style: style, withComposing: withComposing);
+    }
+    if (level == 0 || !usable) return _plain(style);
+    return switch (level) {
+      3 => _accents(style, topics!.keyRanges, bold: false),
+      4 => _accents(style, _pairs(topics!.keywords), bold: true),
+      _ => _pieces(style, topics!.pieces(level)),
+    };
   }
+
+  static final _link = RegExp(r'(https?://|www\.)[^\s]+');
+
+  /// Il testo normale, coi link riconoscibili: colore delle azioni e sottolineati.
+  TextSpan _plain(TextStyle? style) {
+    final children = <TextSpan>[];
+    var at = 0;
+    for (final m in _link.allMatches(text)) {
+      if (m.start > at) children.add(TextSpan(text: text.substring(at, m.start)));
+      children.add(
+        TextSpan(
+          text: m.group(0),
+          style: TextStyle(color: Tokens.blue, decoration: TextDecoration.underline, decorationColor: Tokens.blue),
+        ),
+      );
+      at = m.end;
+    }
+    if (at < text.length) children.add(TextSpan(text: text.substring(at)));
+    return TextSpan(style: style, children: children);
+  }
+
+  static List<TextRange> _pairs(List<int> k) => [for (var i = 0; i + 1 < k.length; i += 2) TextRange(start: k[i], end: k[i + 1])];
 
   Color _color(int i) => _topicColors[i % _topicColors.length];
 
@@ -524,9 +585,9 @@ class TopicTextController extends TextEditingController {
     return TextSpan(style: style, children: children);
   }
 
-  /// L'ultimo pizzico: il testo si fa leggero e restano accese le parole chiave, ognuna col colore
-  /// del suo argomento medio. Si legge di cosa parla la nota in un colpo d'occhio.
-  TextSpan _keywords(TextStyle? style) {
+  /// Le ultime due grane: il testo si fa leggero e restano accesi solo dei pezzi (le frasi chiave,
+  /// o le parole chiave), ognuno col colore del suo argomento medio. Si legge l'essenziale in un colpo d'occhio.
+  TextSpan _accents(TextStyle? style, List<TextRange> lit, {required bool bold}) {
     final faded = TextStyle(color: (style?.color ?? const Color(0xFF1E1E1E)).withValues(alpha: 0.28));
     final pieces = topics!.pieces(2);
     int pieceOf(int at) {
@@ -536,28 +597,27 @@ class TopicTextController extends TextEditingController {
       return pieces.length - 1;
     }
 
-    final k = topics!.keywords;
     final children = <TextSpan>[];
     var at = 0;
-    for (var i = 0; i + 1 < k.length; i += 2) {
-      if (k[i] < at) continue;
-      if (k[i] > at) children.add(TextSpan(text: text.substring(at, k[i]), style: faded));
+    for (final r in lit) {
+      if (r.start < at) continue;
+      if (r.start > at) children.add(TextSpan(text: text.substring(at, r.start), style: faded));
       children.add(
         TextSpan(
-          text: text.substring(k[i], k[i + 1]),
-          style: TextStyle(fontWeight: FontWeight.w600, backgroundColor: _color(pieceOf(k[i])).withValues(alpha: 0.32)),
+          text: text.substring(r.start, r.end),
+          style: TextStyle(fontWeight: bold ? FontWeight.w600 : null, backgroundColor: _color(pieceOf(r.start)).withValues(alpha: 0.3)),
         ),
       );
-      at = k[i + 1];
+      at = r.end;
     }
     if (at < text.length) children.add(TextSpan(text: text.substring(at), style: faded));
     return TextSpan(style: style, children: children);
   }
 }
 
-/// La grana in un'icona: tre cerchi uno dentro l'altro. Il più grande acceso = argomenti larghi,
-/// quello di mezzo = medi, il centro = una frase per volta, il centro pieno = parole chiave.
-/// Più vai verso il centro, più sei preciso. Spenti: tutti e tre appena accennati.
+/// La grana in un'icona, come un mirino: tre cerchi alla stessa distanza uno dall'altro.
+/// Acceso il più grande = argomenti larghi, quello di mezzo = medi, il piccolo = frasi chiave;
+/// il mirino (la croce) = parole chiave, il punto più preciso. Spenti: tutti appena accennati.
 class GrainIcon extends StatelessWidget {
   const GrainIcon({super.key, required this.level, this.size = 22, this.color});
 
@@ -579,15 +639,20 @@ class _GrainPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
-    final r = size.width / 2;
-    Paint ring(bool lit) => Paint()
+    final r = size.width / 2 - 1;
+    Paint pen(bool lit) => Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = lit ? 2.2 : 1.4
+      ..strokeWidth = lit ? 2 : 1.3
+      ..strokeCap = StrokeCap.round
       ..color = lit ? on : off;
-    canvas.drawCircle(c, r - 1.2, ring(level == 1));
-    canvas.drawCircle(c, r * 0.62, ring(level == 2));
-    final dot = Paint()..color = level >= 3 ? on : off;
-    canvas.drawCircle(c, level == 4 ? r * 0.34 : r * 0.2, dot);
+    for (var ring = 1; ring <= 3; ring++) {
+      canvas.drawCircle(c, r * (4 - ring) / 3, pen(level == ring));
+    }
+    if (level == 4) {
+      final p = pen(true);
+      canvas.drawLine(c - Offset(r, 0), c + Offset(r, 0), p);
+      canvas.drawLine(c - Offset(0, r), c + Offset(0, r), p);
+    }
   }
 
   @override
@@ -630,7 +695,7 @@ class _NoteEditorState extends State<NoteEditor> {
 
   // --- Gli argomenti: si accendono pizzicando (o col tasto nella barra) ---
 
-  static const _levels = ['Argomenti spenti', 'Argomenti larghi', 'Argomenti medi', 'Una frase per volta', 'Parole chiave'];
+  static const _levels = ['Argomenti spenti', 'Argomenti larghi', 'Argomenti medi', 'Frasi chiave', 'Parole chiave'];
 
   /// Il testo scorre col suo controller: mentre pizzichi resta fermo dov'era.
   final _scroll = ScrollController();

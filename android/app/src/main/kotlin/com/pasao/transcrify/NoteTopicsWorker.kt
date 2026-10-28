@@ -28,8 +28,8 @@ class NoteTopicsWorker private constructor(context: Context) {
     private val app = context.applicationContext
     private val store = Store(app)
     private val models = TopicModels(app)
-    // v2: con le grane relative e le parole chiave. I risultati di prima si rifanno.
-    private val file = File(app.filesDir, "note_topics_v2.json")
+    // v3: con le grane relative, le frasi chiave e le parole chiave. I risultati di prima si rifanno.
+    private val file = File(app.filesDir, "note_topics_v3.json")
     private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "argomenti").apply { priority = Thread.MIN_PRIORITY } }
 
     /** Le note in coda o in lavorazione. */
@@ -39,18 +39,27 @@ class NoteTopicsWorker private constructor(context: Context) {
     @Volatile var listener: (() -> Unit)? = null
 
     /** Il risultato di una nota: per quale testo e con quale modello, dove sono le frasi, le grane, le parole chiave. */
-    private class Result(val model: String, val hash: Long, val spans: IntArray, val wide: IntArray, val medium: IntArray, val keywords: IntArray) {
+    private class Result(
+        val model: String,
+        val hash: Long,
+        val spans: IntArray,
+        val wide: IntArray,
+        val medium: IntArray,
+        val keys: IntArray,
+        val keywords: IntArray,
+    ) {
         fun toJson(): JSONObject = JSONObject()
             .put("model", model).put("hash", hash)
             .put("spans", JSONArray(spans.toList()))
             .put("wide", JSONArray(wide.toList()))
             .put("medium", JSONArray(medium.toList()))
+            .put("keys", JSONArray(keys.toList()))
             .put("keywords", JSONArray(keywords.toList()))
 
         companion object {
             fun fromJson(j: JSONObject): Result {
                 fun ints(name: String) = j.optJSONArray(name)?.let { a -> IntArray(a.length()) { a.getInt(it) } } ?: IntArray(0)
-                return Result(j.getString("model"), j.getLong("hash"), ints("spans"), ints("wide"), ints("medium"), ints("keywords"))
+                return Result(j.getString("model"), j.getLong("hash"), ints("spans"), ints("wide"), ints("medium"), ints("keys"), ints("keywords"))
             }
         }
     }
@@ -94,7 +103,13 @@ class NoteTopicsWorker private constructor(context: Context) {
         val note = store.notes().firstOrNull { it.id == id } ?: return null
         if (state(id, note.text) != "ready") return null
         val r = results.getValue(id)
-        return mapOf("spans" to r.spans.toList(), "wide" to r.wide.toList(), "medium" to r.medium.toList(), "keywords" to r.keywords.toList())
+        return mapOf(
+            "spans" to r.spans.toList(),
+            "wide" to r.wide.toList(),
+            "medium" to r.medium.toList(),
+            "keys" to r.keys.toList(),
+            "keywords" to r.keywords.toList(),
+        )
     }
 
     /** Gli album: argomenti che tornano in più pezzi, con un nome fatto delle loro parole chiave. */
@@ -150,7 +165,8 @@ class NoteTopicsWorker private constructor(context: Context) {
             val t = engineFor(m).commit(id, note.text)
             keywords.update(id, note.text)
             val spans = IntArray(t.sentences.size * 2).also { a -> t.sentences.forEachIndexed { i, s -> a[2 * i] = s.start; a[2 * i + 1] = s.end } }
-            results[id] = Result(m.id, h, spans, t.segmentation.levelCuts(1, m.profile), t.segmentation.levelCuts(2, m.profile), keywords.ranges(note.text))
+            val medium = t.segmentation.levelCuts(2, m.profile)
+            results[id] = Result(m.id, h, spans, t.segmentation.levelCuts(1, m.profile), medium, t.keySentences(medium), keywords.ranges(note.text))
             save()
             snapshotAlbums()
         } catch (_: Throwable) {
@@ -220,7 +236,7 @@ class NoteTopicsWorker private constructor(context: Context) {
     private fun save() {
         val j = JSONObject()
         for ((id, r) in results) j.put(id, r.toJson())
-        val tmp = File(file.parentFile, "note_topics_v2.tmp")
+        val tmp = File(file.parentFile, "note_topics_v3.tmp")
         tmp.writeText(j.toString())
         tmp.renameTo(file)
     }

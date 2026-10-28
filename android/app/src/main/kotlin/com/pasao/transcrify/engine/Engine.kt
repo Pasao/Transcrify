@@ -14,7 +14,23 @@ class NoteTopics(
     val pieces: List<Pair<Long, IntRange>>,
     /** Quante frasi è servito mandare al modello: le altre erano già ricordate. */
     val embedded: Int,
-)
+    /** Il senso di ogni frase, nell'ordine del testo (lunghi 1). */
+    val vectors: List<FloatArray>,
+) {
+    /**
+     * Le frasi chiave: per ogni pezzo, la frase che gli somiglia di più (la più vicina alla direzione
+     * media del pezzo). È il riassunto che si può fare senza scrivere niente: le tue frasi, scelte.
+     * O(frasi · dim), senza modello.
+     */
+    fun keySentences(cuts: IntArray): IntArray {
+        if (vectors.isEmpty()) return IntArray(0)
+        return segmentation.pieces(cuts).map { r ->
+            val center = FloatArray(vectors[0].size)
+            for (i in r) Vec.addTo(center, vectors[i])
+            r.maxBy { Vec.dot(vectors[it], center) }
+        }.toIntArray()
+    }
+}
 
 /**
  * Il motore, al salvataggio di una nota: il tuo «commit».
@@ -78,7 +94,7 @@ class Engine(
         }
         notePieces[noteId] = pieces.map { it.first }
         if (spans.isEmpty()) notePieces.remove(noteId)
-        return NoteTopics(spans, seg, pieces, missing.size)
+        return NoteTopics(spans, seg, pieces, missing.size, vectors)
     }
 
     /** La nota è stata eliminata: i suoi pezzi escono dagli album. Il senso delle frasi resta ricordato. */

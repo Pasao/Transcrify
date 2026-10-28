@@ -21,7 +21,17 @@ enum Power {
 /// Il Dock, in fondo a ogni pagina. Due lati, due compiti:
 /// a sinistra dove sei (il potere, che cambi), a destra cosa crei (scrivi, e Transcri che detta).
 class Dock extends StatelessWidget {
-  const Dock({super.key, required this.power, required this.onSwitch, required this.onStep, required this.nest, this.onWrite});
+  const Dock({
+    super.key,
+    required this.power,
+    required this.onSwitch,
+    required this.onStep,
+    required this.nest,
+    this.onWrite,
+    this.pages = const [],
+    this.page = 0,
+    this.onPage,
+  });
 
   /// Quanto spazio prende, dal fondo: le pagine lasciano libero questo.
   static const height = dockIsland + 12;
@@ -40,6 +50,11 @@ class Dock extends StatelessWidget {
   /// Scrivere a mano, se il potere lo permette (in Pensieri sì).
   final VoidCallback? onWrite;
 
+  /// Le pagine del potere (in Pensieri: Note e Argomenti), in mezzo. Vuote se il potere ne ha una sola.
+  final List<(IconData, String)> pages;
+  final int page;
+  final ValueChanged<int>? onPage;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -49,6 +64,39 @@ class Dock extends StatelessWidget {
         children: [
           PowerButton(power: power, onTap: onSwitch, onStep: onStep),
           const Spacer(),
+          // Le pagine del potere in cui sei: icone sole, quella accesa nel colore delle azioni.
+          if (pages.length > 1) ...[
+            Island(
+              padding: const EdgeInsets.all((dockIsland - dockRound) / 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < pages.length; i++)
+                    Tooltip(
+                      message: pages[i].$2,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          onPage?.call(i);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 46,
+                          height: dockRound,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: i == page ? Tokens.blue.withValues(alpha: 0.16) : Colors.transparent,
+                          ),
+                          child: Icon(pages[i].$1, size: 22, color: i == page ? Tokens.blue : context.tk.muted),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const Spacer(),
+          ],
           Island(
             padding: const EdgeInsets.all((dockIsland - dockRound) / 2),
             child: Row(
