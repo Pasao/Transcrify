@@ -86,14 +86,15 @@ class Entry {
 
 /// Una nota: tua, da rileggere. Si scrive a mano (per ora); il titolo può restare vuoto.
 class Note {
-  Note({required this.id, this.title = '', this.text = '', required this.created, required this.updated});
+  Note({required this.id, this.title = '', this.text = '', required this.created, required this.updated, this.topics = 'off'});
 
   Note.fromMap(Map m)
     : id = m['id'] as String,
       title = m['title'] as String,
       text = m['text'] as String,
       created = DateTime.fromMillisecondsSinceEpoch(m['created'] as int),
-      updated = DateTime.fromMillisecondsSinceEpoch(m['updated'] as int);
+      updated = DateTime.fromMillisecondsSinceEpoch(m['updated'] as int),
+      topics = m['topics'] as String? ?? 'off';
 
   /// Una nota nuova, vuota, nata adesso.
   factory Note.blank() {
@@ -103,6 +104,10 @@ class Note {
 
   final String id, title, text;
   final DateTime created, updated;
+
+  /// Gli argomenti di questa nota: "off" (spenti o senza modello), "pending" (li sta facendo),
+  /// "ready" (pronti per questo testo) o "stale" (la nota è cambiata: si rifanno al prossimo salvataggio).
+  final String topics;
 
   bool get isEmpty => title.trim().isEmpty && text.trim().isEmpty;
 
@@ -116,6 +121,34 @@ class Note {
     'created': created.millisecondsSinceEpoch,
     'updated': updated.millisecondsSinceEpoch,
   };
+}
+
+/// Gli argomenti di una nota: dove stanno le frasi (inizio e fine, in fila) e, per ogni grana,
+/// dopo quali frasi cambia argomento. Le grane fini contengono sempre i confini di quelle larghe.
+class NoteTopics {
+  NoteTopics(Map m)
+    : spans = (m['spans'] as List).cast<int>(),
+      cuts = [(m['coarse'] as List).cast<int>(), (m['medium'] as List).cast<int>(), (m['fine'] as List).cast<int>()];
+
+  final List<int> spans;
+
+  /// [0] larga, [1] media, [2] fine.
+  final List<List<int>> cuts;
+
+  int get sentences => spans.length ~/ 2;
+
+  /// I pezzi del testo a una grana (1 larga … 3 fine), come intervalli di caratteri.
+  List<TextRange> pieces(int grain) {
+    if (sentences == 0) return const [];
+    final out = <TextRange>[];
+    var from = 0;
+    for (final c in cuts[grain - 1]) {
+      out.add(TextRange(start: spans[2 * from], end: spans[2 * c + 1]));
+      from = c + 1;
+    }
+    out.add(TextRange(start: spans[2 * from], end: spans[2 * (sentences - 1) + 1]));
+    return out;
+  }
 }
 
 /// Un modello per gli argomenti: si chiama «più preciso» o «più leggero»; il nome vero è scritto piccolo.
@@ -326,6 +359,16 @@ class Core {
       ..removeWhere((x) => x.id == n.id)
       ..add(n);
   }
+
+  /// Gli argomenti di una nota, se sono pronti per il testo che ha adesso.
+  static Future<NoteTopics?> noteTopics(String id) async {
+    if (preview.value) return null;
+    final m = await _ch.invokeMethod('noteTopics', {'id': id}) as Map?;
+    return m == null ? null : NoteTopics(m);
+  }
+
+  /// Nelle prove: il pizzico al contrario (stringere = più argomenti), per provare tutte e due le direzioni.
+  static final pinchReversed = ValueNotifier<bool>(false);
 
   static Future<void> deleteNote(String id) async {
     if (!preview.value) return _ch.invokeMethod('deleteNote', {'id': id});

@@ -22,6 +22,7 @@ class MainActivity : FlutterActivity() {
     private val queue get() = PillService.instance?.session?.queue ?: ownQueue
     private val ownQueue by lazy { Queue(this) }
     private val topicModels by lazy { TopicModels(this) }
+    private val topics by lazy { NoteTopicsWorker.get(this) }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -85,6 +86,7 @@ class MainActivity : FlutterActivity() {
                     val m = TopicModel.of(call.argument<String>("id"))
                     topicModels.chosen = m
                     if (m != null) topicModels.download(m)
+                    topics.requestAll()
                     result.success(null)
                 }
                 "cancelTopicModel" -> {
@@ -95,18 +97,23 @@ class MainActivity : FlutterActivity() {
                     TopicModel.of(call.argument<String>("id"))?.let(topicModels::delete)
                     result.success(null)
                 }
-                "notes" -> result.success(store.notes().map { it.toMap() })
+                "notes" -> result.success(store.notes().map { it.toMap() + ("topics" to topics.state(it.id, it.text)) })
+                "noteTopics" -> result.success(topics.topics(call.argument<String>("id")!!))
                 "saveNote" -> {
+                    val id = call.argument<String>("id")!!
                     store.saveNote(
                         Note(
-                            call.argument<String>("id")!!, call.argument<String>("title") ?: "", call.argument<String>("text") ?: "",
+                            id, call.argument<String>("title") ?: "", call.argument<String>("text") ?: "",
                             call.argument<Number>("created")!!.toLong(), call.argument<Number>("updated")!!.toLong(),
                         )
                     )
+                    // Il «commit»: salvata la nota, i suoi argomenti si rifanno in fondo (solo le frasi nuove).
+                    topics.request(id)
                     result.success(null)
                 }
                 "deleteNote" -> {
                     store.deleteNote(call.argument<String>("id")!!)
+                    topics.forget(call.argument<String>("id")!!)
                     result.success(null)
                 }
                 "checkKey" -> background(result) { Groq(call.argument<String>("key")!!.trim()).models().size }
@@ -226,6 +233,10 @@ class MainActivity : FlutterActivity() {
         // La pillola avvisa quando cambia qualcosa: Flutter rilegge.
         PillService.listener = { main.post { channel.invokeMethod("changed", null) } }
         PillService.hotListener = { hot -> main.post { channel.invokeMethod("nestHot", hot) } }
+        // Una nota ha i suoi argomenti: Flutter rilegge (l'indicatore nella lista, la nota aperta).
+        topics.listener = { main.post { channel.invokeMethod("changed", null) } }
+        // Le note scritte prima di scegliere il modello, o cambiate mentre l'app era chiusa.
+        topics.requestAll()
     }
 
     private var resumed = false

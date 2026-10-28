@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -301,12 +304,84 @@ class NoteCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               const SizedBox(height: 8),
-              Text(dayLabel(note.updated), style: monoStyle(context)),
+              Row(
+                children: [
+                  Expanded(child: Text(dayLabel(note.updated), style: monoStyle(context))),
+                  TopicsBadge(state: note.topics),
+                ],
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+/// Il segno degli argomenti su una nota: una piccola nuvola se sono pronti (si può pizzicare),
+/// un cerchio che gira mentre li sta facendo. Niente se sono spenti o se la nota è cambiata.
+class TopicsBadge extends StatelessWidget {
+  const TopicsBadge({super.key, required this.state});
+
+  final String state;
+
+  @override
+  Widget build(BuildContext context) => switch (state) {
+    'ready' => Tooltip(
+      message: 'Argomenti pronti: pizzica la nota',
+      child: Icon(Icons.bubble_chart_rounded, size: 15, color: Tokens.blue),
+    ),
+    'pending' => SizedBox(width: 11, height: 11, child: CircularProgressIndicator(strokeWidth: 1.5, color: context.tk.faint)),
+    _ => const SizedBox.shrink(),
+  };
+}
+
+/// I colori dei pezzi: tenui, uno dopo l'altro. Si leggono sia di giorno sia di notte.
+const _topicColors = [Color(0xFFE8875F), Color(0xFF8E7CC3), Color(0xFF5FA778), Color(0xFF5C93C9), Color(0xFFC9A24B), Color(0xFFC9668E)];
+
+/// Il testo della nota con gli argomenti illuminati dietro le lettere, alla grana scelta.
+/// Solo finché il testo è quello per cui sono stati fatti: appena scrivi, si spengono e tornano
+/// al prossimo salvataggio.
+class TopicTextController extends TextEditingController {
+  TopicTextController({super.text});
+
+  NoteTopics? topics;
+
+  /// Il testo per cui [topics] vale.
+  String? topicsFor;
+
+  /// 0 spenti, 1 larghi, 2 medi, 3 fini.
+  int get level => _level;
+  int _level = 0;
+
+  /// Cambia la grana e ridisegna il testo coi nuovi colori.
+  set level(int l) {
+    if (l == _level) return;
+    _level = l;
+    notifyListeners();
+  }
+
+  bool get usable => topics != null && text == topicsFor;
+
+  @override
+  TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
+    if (level == 0 || !usable) return super.buildTextSpan(context: context, style: style, withComposing: withComposing);
+    final children = <TextSpan>[];
+    var at = 0;
+    final pieces = topics!.pieces(level);
+    for (var i = 0; i < pieces.length; i++) {
+      final r = pieces[i];
+      if (r.start > at) children.add(TextSpan(text: text.substring(at, r.start)));
+      children.add(
+        TextSpan(
+          text: text.substring(r.start, r.end),
+          style: TextStyle(backgroundColor: _topicColors[i % _topicColors.length].withValues(alpha: 0.24)),
+        ),
+      );
+      at = r.end;
+    }
+    if (at < text.length) children.add(TextSpan(text: text.substring(at)));
+    return TextSpan(style: style, children: children);
   }
 }
 
@@ -323,7 +398,7 @@ class NoteEditor extends StatefulWidget {
 
 class _NoteEditorState extends State<NoteEditor> {
   late final _title = TextEditingController(text: widget.note.title);
-  late final _text = TextEditingController(text: widget.note.text);
+  late final _text = TopicTextController(text: widget.note.text);
   final _undo = UndoHistoryController();
 
   /// Il testo com'era un attimo fa: serve a capire se sei appena andato a capo dentro un elenco.
@@ -340,10 +415,87 @@ class _NoteEditorState extends State<NoteEditor> {
     super.initState();
     _text.addListener(_continueList);
     Core.addListener(_checkDictation);
+    Core.addListener(_loadTopics);
+    _loadTopics();
+  }
+
+  // --- Gli argomenti: si accendono pizzicando (o col tasto nella barra) ---
+
+  static const _levels = ['Argomenti spenti', 'Argomenti larghi', 'Argomenti medi', 'Argomenti fini'];
+
+  /// La scritta che compare per un attimo mentre pizzichi.
+  String? _label;
+  Timer? _labelTimer;
+
+  Future<void> _loadTopics() async {
+    if (widget.note.isEmpty) return;
+    final t = await Core.noteTopics(widget.note.id);
+    if (!mounted) return;
+    setState(() {
+      _text.topics = t;
+      _text.topicsFor = widget.note.text;
+    });
+  }
+
+  void _say(String s) {
+    _labelTimer?.cancel();
+    setState(() => _label = s);
+    _labelTimer = Timer(const Duration(milliseconds: 1100), () {
+      if (mounted) setState(() => _label = null);
+    });
+  }
+
+  void _setLevel(int level) {
+    if (!_text.usable) {
+      // Il motivo, invece di niente: gli argomenti si fanno quando salvi.
+      _say(widget.note.topics == 'pending' ? 'Sto dividendo per argomento…' : 'Gli argomenti arrivano quando salvi');
+      return;
+    }
+    final l = level.clamp(0, 3);
+    if (l == _text.level) return;
+    HapticFeedback.selectionClick();
+    setState(() => _text.level = l);
+    _say(_levels[l]);
+  }
+
+  // Il pizzico, letto direttamente dalle dita: non ruba né lo scorrimento né la selezione del testo.
+  final _fingers = <int, Offset>{};
+  double? _pinchFrom;
+  int _levelFrom = 0;
+
+  double get _spread {
+    final p = _fingers.values.toList();
+    return (p[0] - p[1]).distance;
+  }
+
+  void _down(PointerDownEvent e) {
+    _fingers[e.pointer] = e.position;
+    if (_fingers.length == 2) {
+      _pinchFrom = _spread;
+      _levelFrom = _text.level;
+    }
+  }
+
+  void _move(PointerMoveEvent e) {
+    if (!_fingers.containsKey(e.pointer)) return;
+    _fingers[e.pointer] = e.position;
+    final from = _pinchFrom;
+    if (_fingers.length != 2 || from == null || from == 0) return;
+    // Un gradino ogni volta che la distanza tra le dita cresce (o cala) di un terzo.
+    final steps = (math.log(_spread / from) / math.log(1.35)).truncate();
+    // Allargare = più dettaglio, come nelle mappe; nelle prove si può girare.
+    _setLevel(_levelFrom + (Core.pinchReversed.value ? -steps : steps));
+  }
+
+  void _up(PointerEvent e) {
+    _fingers.remove(e.pointer);
+    if (_fingers.length < 2) _pinchFrom = null;
   }
 
   @override
   void dispose() {
+    _labelTimer?.cancel();
+    Core.removeListener(_loadTopics);
     Core.removeListener(_checkDictation);
     _title.dispose();
     _text.dispose();
@@ -464,42 +616,83 @@ class _NoteEditorState extends State<NoteEditor> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                child: Listener(
+                  onPointerDown: _down,
+                  onPointerMove: _move,
+                  onPointerUp: _up,
+                  onPointerCancel: _up,
+                  child: Stack(
                     children: [
-                      TextField(
-                        controller: _title,
-                        style: display(context, size: 24),
-                        textCapitalization: TextCapitalization.sentences,
-                        textInputAction: TextInputAction.next,
-                        maxLines: null,
-                        decoration: plain.copyWith(
-                          hintText: 'Titolo',
-                          hintStyle: display(context, size: 24, color: tk.faint),
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              TextField(
+                                controller: _title,
+                                style: display(context, size: 24),
+                                textCapitalization: TextCapitalization.sentences,
+                                textInputAction: TextInputAction.next,
+                                maxLines: null,
+                                decoration: plain.copyWith(
+                                  hintText: 'Titolo',
+                                  hintStyle: display(context, size: 24, color: tk.faint),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: _text,
+                                  undoController: _undo,
+                                  autofocus: fresh,
+                                  style: Theme.of(context).textTheme.bodyLarge,
+                                  textCapitalization: TextCapitalization.sentences,
+                                  keyboardType: TextInputType.multiline,
+                                  maxLines: null,
+                                  expands: true,
+                                  textAlignVertical: TextAlignVertical.top,
+                                  decoration: plain.copyWith(hintText: 'Scrivi…'),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _text,
-                          undoController: _undo,
-                          autofocus: fresh,
-                          style: Theme.of(context).textTheme.bodyLarge,
-                          textCapitalization: TextCapitalization.sentences,
-                          keyboardType: TextInputType.multiline,
-                          maxLines: null,
-                          expands: true,
-                          textAlignVertical: TextAlignVertical.top,
-                          decoration: plain.copyWith(hintText: 'Scrivi…'),
+                      // La grana scelta, per un attimo, in alto.
+                      Positioned(
+                        top: 8,
+                        left: 0,
+                        right: 0,
+                        child: IgnorePointer(
+                          child: Center(
+                            child: AnimatedOpacity(
+                              opacity: _label == null ? 0 : 1,
+                              duration: const Duration(milliseconds: 160),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                decoration: BoxDecoration(color: const Color(0xFF242424), borderRadius: BorderRadius.circular(20)),
+                                child: Text(
+                                  _label ?? '',
+                                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-              NoteToolbar(undo: _undo, onList: _toggleList, dictation: _dictation, onPaste: _pasteDictation),
+              NoteToolbar(
+                undo: _undo,
+                onList: _toggleList,
+                dictation: _dictation,
+                onPaste: _pasteDictation,
+                topics: _text.usable ? _text.level : null,
+                onTopics: () => _setLevel(_text.level == 3 ? 0 : _text.level + 1),
+              ),
             ],
           ),
         ),
@@ -511,12 +704,24 @@ class _NoteEditorState extends State<NoteEditor> {
 /// La barra sotto la nota, sopra la tastiera: annulla e ripeti, l'elenco, e quando hai
 /// appena dettato qualcosa con Transcri, il tasto per incollarlo qui.
 class NoteToolbar extends StatelessWidget {
-  const NoteToolbar({super.key, required this.undo, required this.onList, required this.dictation, required this.onPaste});
+  const NoteToolbar({
+    super.key,
+    required this.undo,
+    required this.onList,
+    required this.dictation,
+    required this.onPaste,
+    required this.topics,
+    required this.onTopics,
+  });
 
   final UndoHistoryController undo;
   final VoidCallback onList;
   final Entry? dictation;
   final VoidCallback onPaste;
+
+  /// La grana degli argomenti (0–3), o null se non ci sono per questo testo: allora il tasto non c'è.
+  final int? topics;
+  final VoidCallback onTopics;
 
   @override
   Widget build(BuildContext context) {
@@ -541,6 +746,13 @@ class NoteToolbar extends StatelessWidget {
               icon: Icon(Icons.format_list_bulleted_rounded, color: tk.text),
               tooltip: 'Elenco',
             ),
+            // Gli argomenti: lo stesso del pizzico, per chi non lo conosce. Acceso = colorato.
+            if (topics != null)
+              IconButton(
+                onPressed: onTopics,
+                tooltip: 'Argomenti (o pizzica la nota)',
+                icon: Icon(Icons.bubble_chart_rounded, color: topics! > 0 ? Tokens.blue : tk.text),
+              ),
             const Spacer(),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 220),

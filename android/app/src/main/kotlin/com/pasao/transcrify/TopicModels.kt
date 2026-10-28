@@ -109,6 +109,7 @@ class TopicModels(context: Context) {
                     if (!out.exists()) fetch(m.url(name), out, job) { got -> job.status = Status.Downloading(before + got, total) }
                     before += sizes[i]
                 }
+                if (!job.cancelled && ready(m)) onReady?.invoke(m)
             } catch (e: Exception) {
                 failed[m] = Status.Failed(if (e is java.io.IOException) "Manca la rete, o si è interrotta. Riprova." else (e.message ?: "Qualcosa non va."))
             } finally {
@@ -200,5 +201,8 @@ class TopicModels(context: Context) {
         // Uno solo per processo: lo scaricamento continua anche se esci dalle impostazioni.
         private val running = java.util.concurrent.ConcurrentHashMap<TopicModel, Job>()
         private val failed = java.util.concurrent.ConcurrentHashMap<TopicModel, Status.Failed>()
+
+        /** Chi vuole sapere quando un modello è scaricato tutto (il lavoro degli argomenti, per partire). */
+        @Volatile var onReady: ((TopicModel) -> Unit)? = null
     }
 }

@@ -284,6 +284,17 @@ class _SettingsPageState extends State<SettingsPage> {
                           onTap: () => _setLimit(!st.simulateLimit),
                         ),
                         SettingsRow(
+                          icon: Icons.pinch_rounded,
+                          color: Tokens.blue,
+                          title: 'Pizzico al contrario',
+                          subtitle: 'Stringere le dita = più argomenti',
+                          trailing: Switch(
+                            value: Core.pinchReversed.value,
+                            onChanged: (on) => setState(() => Core.pinchReversed.value = on),
+                          ),
+                          onTap: () => setState(() => Core.pinchReversed.value = !Core.pinchReversed.value),
+                        ),
+                        SettingsRow(
                           icon: Icons.wifi_off_rounded,
                           color: Tokens.blue,
                           title: 'Senza rete',
