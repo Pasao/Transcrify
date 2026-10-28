@@ -180,7 +180,7 @@ class _PowerButtonState extends State<PowerButton> {
             AnimatedPositioned(
               duration: settle,
               curve: Curves.easeOutBack,
-              top: -14 - 12 * pull,
+              top: -10 - 12 * pull,
               child: AnimatedScale(
                 duration: settle,
                 scale: 0.82 + 0.1 * pull,
