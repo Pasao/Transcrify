@@ -204,11 +204,15 @@ Future<bool> undoable(BuildContext context, String label) async {
 }
 
 /// Il colore delle isole che galleggiano sopra la pagina (il Dock, la casa di Transcri):
-/// bianco di giorno, un grigio appena più chiaro del fondo di notte.
-Color islandColor(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? context.tk.surface : Colors.white;
+/// bianco di giorno; di notte un tono sopra il grigio delle schede delle note, o si confondono.
+Color islandColor(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? const Color(0xFF353533) : Colors.white;
 
-/// L'ombra morbida delle isole: si staccano dalla pagina senza linee.
-const islandShadow = [BoxShadow(color: Color(0x1F000000), blurRadius: 24, offset: Offset(0, 6))];
+/// L'ombra delle isole: una larga e morbida che le solleva, e una stretta che fa da bordo appena
+/// accennato, così si staccano anche quando sotto passa una scheda. Niente linee vere.
+const islandShadow = [
+  BoxShadow(color: Color(0x29000000), blurRadius: 24, offset: Offset(0, 6)),
+  BoxShadow(color: Color(0x1A000000), blurRadius: 2, spreadRadius: 0.5),
+];
 
 /// Le misure del Dock: ogni isola è alta [dockIsland] e dentro ogni cosa tonda è [dockRound],
 /// col suo margine uguale tutto intorno. Così la matita, Transcri e il potere sembrano grandi uguali.
