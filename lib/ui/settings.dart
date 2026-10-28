@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,33 +9,49 @@ import 'mode_icon.dart';
 import 'onboarding.dart';
 import 'theme.dart';
 
-// Modelli testuali consigliati per la pulizia, in ordine di preferenza.
-const _recommendedLlm = [
-  'openai/gpt-oss-120b',
-  'llama-3.3-70b-versatile',
-  'openai/gpt-oss-20b',
-  'moonshotai/kimi-k2-instruct',
-  'qwen/qwen3-32b',
-];
-const _recommendedStt = ['whisper-large-v3', 'whisper-large-v3-turbo'];
+/// Le due scelte che si capiscono, «più preciso» e «più veloce», ricavate dall'elenco dei modelli
+/// che Groq ha adesso: se Groq ne aggiunge o ne cambia, le scelte seguono senza aggiornare l'app.
+class ModelTiers {
+  const ModelTiers(this.precise, this.fast);
 
-/// Una scelta di modello col nome che si capisce; quello vero sta scritto piccolo sotto.
-class _Curated {
-  const _Curated(this.id, this.label, this.hint);
+  final String? precise, fast;
 
-  final String id, label, hint;
+  String? labelOf(String id) => id == precise
+      ? 'Più preciso'
+      : id == fast
+      ? 'Più veloce'
+      : null;
+
+  /// La voce: Whisper. Il più preciso è la versione più nuova senza «turbo», il più veloce la turbo.
+  static ModelTiers speech(Iterable<String> ids) {
+    final whisper = ids.where((id) => id.contains('whisper') && !id.contains('distil')).toList();
+    int version(String id) => int.tryParse(RegExp(r'v(\d+)').firstMatch(id)?.group(1) ?? '') ?? 0;
+    String? newest(Iterable<String> list) => list.isEmpty ? null : list.reduce((a, b) => version(b) > version(a) ? b : a);
+    final precise = newest(whisper.where((id) => !id.contains('turbo'))) ?? (ids.isEmpty ? null : ids.first);
+    return ModelTiers(precise, newest(whisper.where((id) => id.contains('turbo'))));
+  }
+
+  /// Il testo: una famiglia con più misure (es. 120b e 20b). Il più preciso è il più grande, il più veloce
+  /// il più piccolo. Si preferisce la famiglia del modello che usi già; se no quella col modello più grande.
+  static ModelTiers text(Iterable<String> ids, String current) {
+    final size = RegExp(r'(\d+(?:\.\d+)?)b\b');
+    final families = <String, Map<String, double>>{};
+    for (final id in ids) {
+      final m = size.firstMatch(id);
+      if (m == null) continue;
+      families.putIfAbsent(id.replaceFirst(m.group(0)!, '#'), () => {})[id] = double.parse(m.group(1)!);
+    }
+    final usable = families.entries.where((f) => f.value.length >= 2).toList();
+    if (usable.isEmpty) return ModelTiers(current, null);
+    final mine = usable.where((f) => f.value.containsKey(current)).firstOrNull;
+    double biggest(MapEntry<String, Map<String, double>> f) => f.value.values.reduce((a, b) => a > b ? a : b);
+    final family = (mine ?? usable.reduce((a, b) => biggest(b) > biggest(a) ? b : a)).value;
+    final sorted = family.keys.toList()..sort((a, b) => family[a]!.compareTo(family[b]!));
+    return ModelTiers(sorted.last, sorted.first);
+  }
 }
 
-const _sttChoices = [
-  _Curated('whisper-large-v3', 'Più preciso', 'Sbaglia meno, anche coi nomi.'),
-  _Curated('whisper-large-v3-turbo', 'Più veloce', 'Il testo arriva prima.'),
-];
-const _llmChoices = [
-  _Curated('openai/gpt-oss-120b', 'Più preciso', 'Capisce meglio cosa volevi dire.'),
-  _Curated('openai/gpt-oss-20b', 'Più veloce', "Più svelto, un po' meno attento."),
-];
-
-/// Le impostazioni, a gruppi come in Revolut: Dettatura, Modelli, Aiuto, la zona sensibile.
+/// Le impostazioni, a gruppi come in Revolut: Dettatura, Modelli, Utilizzo, Aiuto, la zona sensibile.
 /// Ogni riga dice il suo valore e apre la sua pagina. Restituisce 'intro' per rivedere come funziona.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -48,12 +63,12 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   CoreState? s;
   List<GroqModel>? models;
-  String? modelsError;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadModels();
   }
 
   Future<void> _load() async {
@@ -62,23 +77,18 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadTopics();
   }
 
-  /// I modelli si chiedono a Groq una volta sola, quando servono.
-  Future<List<GroqModel>?> _models() async {
-    if (models != null) return models;
+  /// L'elenco dei modelli di Groq (il telefono lo tiene un giorno): serve a dire «più preciso» o «più veloce».
+  Future<void> _loadModels() async {
     try {
       final list = await Core.models();
-      setState(() {
-        models = list;
-        modelsError = null;
-      });
-      return list;
-    } catch (e) {
-      setState(() => modelsError = 'Non riesco a leggere i modelli da Groq.');
-      return null;
+      if (mounted) setState(() => models = list);
+    } catch (_) {
+      // Senza rete la riga dice il nome del modello: va bene lo stesso.
     }
   }
 
   Future<void> _setPurify(bool on) async {
+    HapticFeedback.selectionClick();
     await Core.setPurify(on);
     _load();
   }
@@ -91,98 +101,15 @@ class _SettingsPageState extends State<SettingsPage> {
 
   static String _short(String model) => model.substring(model.lastIndexOf('/') + 1);
 
-  /// Come si chiama la scelta nella riga: «Più preciso», «Più veloce»; il nome vero solo se è un altro modello.
-  static String _choiceName(String model, List<_Curated> choices) =>
-      choices.where((c) => c.id == model).map((c) => c.label).firstOrNull ?? _short(model);
-
-  /// La pagina di un modello: due scelte con un nome che si capisce (il nome vero piccolo sotto),
-  /// poi, per chi li conosce, tutti i modelli di Groq e quanto li hai usati.
-  List<Widget> _modelChoices(BuildContext context, CoreState st, VoidCallback reload, {required bool speech}) {
-    final t = Theme.of(context).textTheme;
-    final tk = context.tk;
-    final current = speech ? st.sttModel : st.llmModel;
-    return [
-      Text(
-        speech ? 'Chi ascolta la tua voce e la scrive.' : 'Chi rilegge quello che hai detto e lo pulisce.',
-        style: t.bodyMedium?.copyWith(color: tk.muted),
-      ),
-      const SizedBox(height: 20),
-      for (final c in speech ? _sttChoices : _llmChoices)
-        _Choice(
-          title: c.label,
-          hint: c.hint,
-          subtitle: _short(c.id),
-          selected: current == c.id,
-          onTap: () async {
-            HapticFeedback.selectionClick();
-            await Core.setModel(c.id, speech: speech);
-            reload();
-          },
-        ),
-      const SizedBox(height: 28),
-      Text(
-        'PER CHI LI CONOSCE',
-        style: TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w600, color: tk.muted),
-      ),
-      const SizedBox(height: 12),
-      speech
-          ? ModelPicker(
-              label: 'Modello',
-              current: st.sttModel,
-              speech: true,
-              recommended: _recommendedStt,
-              load: _models,
-              error: modelsError,
-              onSaved: reload,
-              usage: [
-                _Meter(
-                  label: 'Trascrizioni oggi',
-                  value: '${st.sttUses}',
-                  of: _requestLimit(st.sttLimits),
-                  fraction: _fraction(st.sttUses, _requestLimit(st.sttLimits)),
-                  resets: _midnight(),
-                ),
-                _Meter(
-                  label: "Audio quest'ora",
-                  value: '${(st.hourUsed / 60).round()}',
-                  of: '${(st.hourLimit / 60).round()} min',
-                  fraction: st.hourUsed / st.hourLimit,
-                  resets: st.hourEnd,
-                ),
-                _Meter(
-                  label: 'Audio oggi',
-                  value: '${(st.dayUsed / 60).round()}',
-                  of: '${(st.dayLimit / 60).round()} min',
-                  fraction: st.dayUsed / st.dayLimit,
-                  resets: st.dayEnd,
-                ),
-              ],
-              note:
-                  'Groq conta i minuti di audio, non il tempo che passa: '
-                  "in un'ora puoi mandargli fino a 120 minuti di parlato.",
-            )
-          : ModelPicker(
-              label: 'Modello',
-              current: st.llmModel,
-              speech: false,
-              recommended: _recommendedLlm,
-              load: _models,
-              error: modelsError,
-              onSaved: reload,
-              usage: [
-                _Meter(
-                  label: 'Pulizie oggi',
-                  value: '${st.llmUses}',
-                  of: _requestLimit(st.llmLimits),
-                  fraction: _fraction(st.llmUses, _requestLimit(st.llmLimits)),
-                  resets: _midnight(),
-                ),
-              ],
-            ),
-    ];
-  }
-
   static const _modeNames = {'fedele': 'Fedele', 'pulita': 'Pulita', 'riassunto': 'Riassunto'};
+
+  String _modelValue(String current, {required bool speech}) {
+    final list = models;
+    if (list == null) return _short(current);
+    final ids = list.where((m) => m.speech == speech).map((m) => m.id);
+    final tiers = speech ? ModelTiers.speech(ids) : ModelTiers.text(ids, current);
+    return tiers.labelOf(current) ?? _short(current);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -193,7 +120,7 @@ class _SettingsPageState extends State<SettingsPage> {
         body: st == null
             ? const SizedBox.shrink()
             : ListView(
-                // Sotto, anche lo spazio dei tasti di Android (i tre bottoni), se ci sono.
+                // Sotto, lo spazio dei tasti di Android se ci sono (i tre bottoni), niente se non ci sono.
                 padding: EdgeInsets.only(bottom: 40 + MediaQuery.viewPaddingOf(context).bottom),
                 children: [
                   Padding(
@@ -211,47 +138,36 @@ class _SettingsPageState extends State<SettingsPage> {
                         trailing: Switch(value: st.purify, onChanged: _setPurify),
                         onTap: () => _setPurify(!st.purify),
                       ),
-                      SettingsRow(
-                        icon: Icons.tune_rounded,
-                        color: Tokens.violet,
-                        title: 'Come pulisce',
-                        value: st.purify ? _modeNames[st.mode] : 'Spenta',
-                        onTap: () => _open(
-                          LiveSettings(
-                            title: 'Come pulisce',
-                            build: (context, st, reload) => [
-                              _ModeChooser(
-                                mode: st.mode,
-                                enabled: st.purify,
-                                onChanged: (m) async {
-                                  await Core.setMode(m);
-                                  reload();
-                                },
+                      // Come pulisce e il vocabolario servono solo alla pulizia: ci sono solo quando è accesa.
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
+                        child: !st.purify
+                            ? const SizedBox(width: double.infinity)
+                            : Column(
+                                children: [
+                                  SettingsRow(
+                                    icon: Icons.tune_rounded,
+                                    color: Tokens.violet,
+                                    title: 'Come pulisce',
+                                    value: _modeNames[st.mode],
+                                    onTap: () => _open(LiveSettings(title: 'Come pulisce', build: _cleanPage)),
+                                  ),
+                                  SettingsRow(
+                                    icon: Icons.spellcheck_rounded,
+                                    color: Tokens.green,
+                                    title: 'Vocabolario',
+                                    value: st.words.isEmpty ? 'Vuoto' : '${st.words.length} ${st.words.length == 1 ? 'parola' : 'parole'}',
+                                    onTap: () => _open(
+                                      LiveSettings(
+                                        title: 'Vocabolario',
+                                        build: (context, st, reload) => [WordsEditor(words: st.words, onChanged: reload)],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 24),
-                              PromptEditor(
-                                key: ValueKey(st.mode),
-                                prompt: st.prompt,
-                                custom: st.customPrompt,
-                                defaultPrompt: st.defaultPrompt,
-                                enabled: st.purify,
-                                onChanged: reload,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SettingsRow(
-                        icon: Icons.spellcheck_rounded,
-                        color: Tokens.green,
-                        title: 'Vocabolario',
-                        value: st.words.isEmpty ? 'Vuoto' : '${st.words.length} ${st.words.length == 1 ? 'parola' : 'parole'}',
-                        onTap: () => _open(
-                          LiveSettings(
-                            title: 'Vocabolario',
-                            build: (context, st, reload) => [WordsEditor(words: st.words, onChanged: reload)],
-                          ),
-                        ),
                       ),
                     ],
                   ),
@@ -262,16 +178,15 @@ class _SettingsPageState extends State<SettingsPage> {
                         icon: Icons.graphic_eq_rounded,
                         color: Tokens.blue,
                         title: 'Trascrizione',
-                        value: _choiceName(st.sttModel, _sttChoices),
-                        onTap: () => _open(LiveSettings(title: 'Trascrizione', build: (c, st, r) => _modelChoices(c, st, r, speech: true))),
+                        value: _modelValue(st.sttModel, speech: true),
+                        onTap: () => _open(const ModelSettings(speech: true)),
                       ),
                       SettingsRow(
                         icon: Icons.auto_awesome_rounded,
                         color: Tokens.violet,
                         title: 'Pulizia del testo',
-                        value: _choiceName(st.llmModel, _llmChoices),
-                        onTap: () =>
-                            _open(LiveSettings(title: 'Pulizia del testo', build: (c, st, r) => _modelChoices(c, st, r, speech: false))),
+                        value: _modelValue(st.llmModel, speech: false),
+                        onTap: () => _open(const ModelSettings(speech: false)),
                       ),
                       SettingsRow(
                         icon: Icons.bubble_chart_rounded,
@@ -281,6 +196,29 @@ class _SettingsPageState extends State<SettingsPage> {
                         value: topicsOn ? topics : null,
                         trailing: Switch(value: topicsOn, onChanged: _setTopics),
                         onTap: () => _open(const TopicsSettings()),
+                      ),
+                    ],
+                  ),
+                  SettingsGroup(
+                    label: 'Utilizzo',
+                    children: [
+                      SettingsRow(
+                        icon: Icons.insights_rounded,
+                        color: Tokens.green,
+                        title: 'Quanto hai usato',
+                        value: '${(st.dayUsed / 60).round()} di ${(st.dayLimit / 60).round()} min oggi',
+                        onTap: () => _open(
+                          LiveSettings(
+                            title: 'Utilizzo',
+                            build: (context, st, reload) => [
+                              const UsageLabel('Trascrizione'),
+                              ...speechMeters(st),
+                              const SizedBox(height: 28),
+                              const UsageLabel('Pulizia del testo'),
+                              ...textMeters(st),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -315,6 +253,26 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  List<Widget> _cleanPage(BuildContext context, CoreState st, VoidCallback reload) => [
+    _ModeChooser(
+      mode: st.mode,
+      enabled: st.purify,
+      onChanged: (m) async {
+        await Core.setMode(m);
+        reload();
+      },
+    ),
+    const SizedBox(height: 24),
+    PromptEditor(
+      key: ValueKey(st.mode),
+      prompt: st.prompt,
+      custom: st.customPrompt,
+      defaultPrompt: st.defaultPrompt,
+      enabled: st.purify,
+      onChanged: reload,
+    ),
+  ];
+
   /// Il riassunto degli argomenti per la riga: il modello scelto, o quanto manca a scaricarlo.
   String? topics;
   bool topicsOn = false;
@@ -333,17 +291,18 @@ class _SettingsPageState extends State<SettingsPage> {
     final list = await Core.topicModels();
     final chosen = list.where((m) => m.chosen).firstOrNull;
     if (!mounted) return;
-    _topicModels = list;
-    topicsOn = chosen != null;
-    setState(
-      () => topics = chosen == null
-          ? 'Spenti'
+    setState(() {
+      _topicModels = list;
+      topicsOn = chosen != null;
+      topics = chosen == null
+          ? null
           : chosen.state == 'downloading'
           ? '${((chosen.progress ?? 0) * 100).round()}%'
-          : chosen.label,
-    );
+          : chosen.label;
+    });
   }
 
+  /// La chiave: un campo con la chiave nascosta e «Modifica»; rimuoverla sta in fondo, a parte.
   List<Widget> _keyPage(BuildContext context, CoreState st, VoidCallback reload) {
     final t = Theme.of(context).textTheme;
     final tk = context.tk;
@@ -362,7 +321,7 @@ class _SettingsPageState extends State<SettingsPage> {
         builder: (ctx) => AlertDialog(
           title: const Text('Rimuovere la chiave?'),
           content: const Text(
-            'Transcri si chiude e non potrà trascrivere finché non ne metti un\'altra. Le trascrizioni e le note restano.',
+            "Transcri si chiude e non potrà trascrivere finché non ne metti un'altra. Le trascrizioni e le note restano.",
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
@@ -381,200 +340,207 @@ class _SettingsPageState extends State<SettingsPage> {
       reload();
     }
 
+    final has = st.maskedKey != null;
     return [
       Text(
         'Dà accesso al tuo account Groq. Resta cifrata su questo telefono: non condividerla.',
         style: t.bodyMedium?.copyWith(color: tk.muted),
       ),
       const SizedBox(height: 20),
-      Text(st.maskedKey ?? 'Nessuna chiave', style: monoStyle(context, size: 15, color: tk.text)),
-      const SizedBox(height: 24),
-      if (st.maskedKey == null)
-        FilledButton(onPressed: change, child: const Text('Prendi la chiave'))
-      else ...[
-        OutlinedButton(onPressed: change, child: const Text('Cambia chiave')),
-        const SizedBox(height: 8),
-        TextButton(
-          style: TextButton.styleFrom(foregroundColor: Tokens.red),
-          onPressed: remove,
-          child: const Text('Rimuovi la chiave'),
+      // Come un campo: la chiave (nascosta) e a destra Modifica, che apre la pagina per incollarne una o crearne una nuova.
+      Material(
+        color: islandColor(context),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: change,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    st.maskedKey ?? 'Nessuna chiave',
+                    style: has ? monoStyle(context, size: 15, color: tk.text) : t.bodyLarge?.copyWith(color: tk.faint),
+                  ),
+                ),
+                TextButton(onPressed: change, child: Text(has ? 'Modifica' : 'Aggiungi')),
+              ],
+            ),
+          ),
+        ),
+      ),
+      if (has) ...[
+        const SizedBox(height: 48),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: Tokens.red, padding: EdgeInsets.zero),
+            onPressed: remove,
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            label: const Text('Rimuovi la chiave'),
+          ),
         ),
       ],
     ];
   }
-
-  /// Le richieste al giorno, se Groq ce le ha dette nell'ultima risposta.
-  static String? _requestLimit(Map<String, String> limits) => int.tryParse(limits['requests'] ?? '') == null ? null : limits['requests'];
-
-  static double? _fraction(int used, String? limit) {
-    final l = int.tryParse(limit ?? '');
-    return l == null || l == 0 ? null : used / l;
-  }
 }
 
-/// Campo bloccato col modello scelto; toccandolo si apre una rotella per cambiarlo.
-/// Sotto, nello stesso riquadro, quanto l'hai usato.
-class ModelPicker extends StatefulWidget {
-  const ModelPicker({
-    super.key,
-    required this.label,
-    required this.current,
-    required this.speech,
-    required this.recommended,
-    required this.load,
-    required this.error,
-    required this.onSaved,
-    required this.usage,
-    this.note,
-  });
+/// I contatori della trascrizione: quante oggi e i minuti di audio, con quando si azzerano.
+List<Widget> speechMeters(CoreState st) => [
+  _Meter(
+    label: 'Trascrizioni oggi',
+    value: '${st.sttUses}',
+    of: _requestLimit(st.sttLimits),
+    fraction: _fraction(st.sttUses, _requestLimit(st.sttLimits)),
+    resets: _midnight(),
+  ),
+  _Meter(
+    label: "Audio quest'ora",
+    value: '${(st.hourUsed / 60).round()}',
+    of: '${(st.hourLimit / 60).round()} min',
+    fraction: st.hourUsed / st.hourLimit,
+    resets: st.hourEnd,
+  ),
+  _Meter(
+    label: 'Audio oggi',
+    value: '${(st.dayUsed / 60).round()}',
+    of: '${(st.dayLimit / 60).round()} min',
+    fraction: st.dayUsed / st.dayLimit,
+    resets: st.dayEnd,
+  ),
+  const _Note("Groq conta i minuti di audio, non il tempo che passa: in un'ora puoi mandargli fino a 120 minuti di parlato."),
+];
 
-  final String label, current;
-  final bool speech;
-  final List<String> recommended;
-  final Future<List<GroqModel>?> Function() load;
-  final String? error;
-  final VoidCallback onSaved;
-  final List<Widget> usage;
-  final String? note;
+/// I contatori della pulizia del testo.
+List<Widget> textMeters(CoreState st) => [
+  _Meter(
+    label: 'Pulizie oggi',
+    value: '${st.llmUses}',
+    of: _requestLimit(st.llmLimits),
+    fraction: _fraction(st.llmUses, _requestLimit(st.llmLimits)),
+    resets: _midnight(),
+  ),
+];
+
+/// Le richieste al giorno, se Groq ce le ha dette nell'ultima risposta.
+String? _requestLimit(Map<String, String> limits) => int.tryParse(limits['requests'] ?? '') == null ? null : limits['requests'];
+
+double? _fraction(int used, String? limit) {
+  final l = int.tryParse(limit ?? '');
+  return l == null || l == 0 ? null : used / l;
+}
+
+class _Note extends StatelessWidget {
+  const _Note(this.text);
+
+  final String text;
 
   @override
-  State<ModelPicker> createState() => _ModelPickerState();
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 4),
+    child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+  );
 }
 
-class _ModelPickerState extends State<ModelPicker> {
-  bool editing = false;
-  bool loading = false;
-  List<String> options = [];
-  int index = 0;
+/// L'etichetta piccola sopra un gruppo di contatori.
+class UsageLabel extends StatelessWidget {
+  const UsageLabel(this.text, {super.key});
 
-  Future<void> _edit() async {
-    setState(() => loading = true);
-    final all = await widget.load();
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Text(
+      text.toUpperCase(),
+      style: TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w600, color: context.tk.muted),
+    ),
+  );
+}
+
+/// La scelta di un modello: «Più preciso» o «Più veloce», con una riga su cosa cambia e il nome vero
+/// piccolo sotto. Le due scelte vengono dall'elenco di Groq di adesso. Sotto, quanto l'hai usato oggi.
+class ModelSettings extends StatefulWidget {
+  const ModelSettings({super.key, required this.speech});
+
+  final bool speech;
+
+  @override
+  State<ModelSettings> createState() => _ModelSettingsState();
+}
+
+class _ModelSettingsState extends State<ModelSettings> {
+  CoreState? st;
+  List<GroqModel>? models;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final s = await Core.state();
+    List<GroqModel>? list;
+    String? problem;
+    try {
+      list = await Core.models();
+    } catch (_) {
+      problem = 'Non riesco a leggere i modelli da Groq. Serve la rete.';
+    }
     if (!mounted) return;
-    if (all == null) return setState(() => loading = false);
-    final ids = all.where((m) => m.speech == widget.speech).map((m) => m.id).toList();
-    // Prima i consigliati, poi gli altri.
-    final rec = widget.recommended.where(ids.contains).toList();
-    final rest = ids.where((id) => !rec.contains(id)).toList();
-    options = [...rec, ...rest];
-    if (!options.contains(widget.current)) options.insert(0, widget.current);
-    index = options.indexOf(widget.current);
     setState(() {
-      loading = false;
-      editing = true;
+      st = s;
+      models = list ?? models;
+      error = problem;
     });
   }
 
-  Future<void> _save() async {
-    await Core.setModel(options[index], speech: widget.speech);
-    setState(() => editing = false);
-    widget.onSaved();
+  Future<void> _pick(String id) async {
+    HapticFeedback.selectionClick();
+    await Core.setModel(id, speech: widget.speech);
+    _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
+    final s = st;
     final t = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: tk.surface, borderRadius: BorderRadius.circular(24)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-            child: Text(widget.label, style: t.titleMedium),
-          ),
-          const SizedBox(height: 10),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: editing ? _wheel(context) : _locked(context),
-          ),
-          if (widget.error != null) ...[const SizedBox(height: 8), Text(widget.error!, style: t.bodySmall?.copyWith(color: Tokens.red))],
-          const SizedBox(height: 18),
-          for (final (i, m) in widget.usage.indexed) ...[if (i > 0) const SizedBox(height: 14), m],
-          if (widget.note != null) ...[const SizedBox(height: 12), Text(widget.note!, style: t.bodySmall?.copyWith(color: tk.faint))],
-        ],
-      ),
-    );
-  }
-
-  Widget _locked(BuildContext context) {
     final tk = context.tk;
-    return Material(
-      color: tk.bg,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: loading ? null : _edit,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          child: Row(
-            children: [
-              Expanded(child: Text(widget.current, style: monoStyle(context, size: 13))),
-              loading
-                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 1.5))
-                  : Icon(Icons.unfold_more_rounded, size: 18, color: tk.faint),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _wheel(BuildContext context) {
-    final tk = context.tk;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final speech = widget.speech;
+    final current = s == null ? '' : (speech ? s.sttModel : s.llmModel);
+    final ids = models?.where((m) => m.speech == speech).map((m) => m.id);
+    final tiers = ids == null ? null : (speech ? ModelTiers.speech(ids) : ModelTiers.text(ids, current));
+    final choices = [
+      if (tiers?.precise != null)
+        (tiers!.precise!, 'Più preciso', speech ? 'Sbaglia meno, anche coi nomi.' : 'Capisce meglio cosa volevi dire.'),
+      if (tiers?.fast != null) (tiers!.fast!, 'Più veloce', speech ? 'Il testo arriva prima.' : "Più svelto, un po' meno attento."),
+    ];
+    return SettingsPageFrame(
+      title: speech ? 'Trascrizione' : 'Pulizia del testo',
       children: [
-        Container(
-          height: 180,
-          decoration: BoxDecoration(color: tk.bg, borderRadius: BorderRadius.circular(12)),
-          child: CupertinoPicker(
-            itemExtent: 38,
-            scrollController: FixedExtentScrollController(initialItem: index),
-            selectionOverlay: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(color: Tokens.blue.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-            ),
-            onSelectedItemChanged: (i) => index = i,
-            children: [
-              for (final id in options)
-                Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          id,
-                          style: monoStyle(context, size: 13, color: tk.text),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (widget.recommended.take(3).contains(id)) ...[
-                        const SizedBox(width: 6),
-                        Icon(Icons.star_rounded, size: 14, color: Tokens.blue),
-                      ],
-                    ],
-                  ),
-                ),
-            ],
+        Text(
+          speech ? 'Chi ascolta la tua voce e la scrive.' : 'Chi rilegge quello che hai detto e lo pulisce.',
+          style: t.bodyMedium?.copyWith(color: tk.muted),
+        ),
+        const SizedBox(height: 20),
+        if (error != null) Text(error!, style: t.bodySmall?.copyWith(color: Tokens.red)),
+        if (models == null && error == null)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
           ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            FilledButton(onPressed: _save, child: const Text('Salva')),
-            const SizedBox(width: 8),
-            TextButton(onPressed: () => setState(() => editing = false), child: const Text('Annulla')),
-            const Spacer(),
-            Icon(Icons.star_rounded, size: 12, color: tk.faint),
-            const SizedBox(width: 3),
-            Text('consigliati', style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
+        for (final (id, label, hint) in choices)
+          _Choice(
+            title: label,
+            hint: hint,
+            subtitle: id.substring(id.lastIndexOf('/') + 1),
+            selected: current == id,
+            onTap: () => _pick(id),
+          ),
+        if (s != null) ...[const SizedBox(height: 28), const UsageLabel('Oggi'), ...(speech ? speechMeters(s) : textMeters(s))],
       ],
     );
   }
