@@ -46,8 +46,40 @@ Primo setaccio sui codici binari (popcount dello XOR), poi il coseno vero sui po
 - Memoria per pezzo: 32 byte di codice + dim byte di vettore (256 con EmbeddingGemma ridotto) + qualche numero. Un milione di pezzi ≈ 300 MB su disco, 32 MB di codici in memoria per la ricerca.
 - Oltre qualche milione: la scansione si divide in liste (IVF, √N liste) e se ne guardano poche; l'interfaccia di `HammingIndex` non cambia.
 
+## Il modello sul telefono
+
+`OnnxEmbedder` (ONNX Runtime 1.31.1 sulla CPU) con i file scaricati da `TopicModels`. Il testo diventa numeri col nostro tokenizer in Kotlin (`engine/tokenize/`), che legge il `tokenizer.json` di Hugging Face: Unigram per e5, BPE con ripiego sui byte per Gemma. Dà gli stessi id della libreria ufficiale su 8000 testi a caso e 72 scelti a mano (accenti, apostrofi, emoji, a-capo, «<mask>»…).
+
+| | Più preciso (EmbeddingGemma 300M, 4 bit) | Più leggero (multilingual-e5-small, 8 bit) |
+|---|---|---|
+| prefisso | `task: sentence similarity \| query: ` | `query: ` |
+| vettore | `sentence_embedding`, primi 256 numeri su 768 (Matryoshka) | media di `last_hidden_state` sui pezzi veri, 384 |
+| a gruppi | sì, 16 frasi (stesso vettore che da sola) | no: quantizza al volo con una scala per tutto il gruppo |
+| una frase, PC (Ryzen 5 9600X, 4 thread) | 12–17 ms (9–13 a gruppi) | 2–3 ms |
+| una frase, Galaxy S25+ | ~27 ms (16 a gruppi) | ~8 ms |
+| caricamento sul telefono | ~1,1 s | ~0,5 s |
+
+Il prefisso di Gemma è quello che separa meglio gli argomenti nelle nostre note di prova: «clustering» schiaccia tutte le somiglianze tra 0,8 e 0,9 e separa meno.
+
+ONNX Runtime porterebbe dati d'uso verso Microsoft e un avvio automatico a ogni apertura dell'app: sono tolti (manifest e `setTelemetry(false)`). R8 deve lasciare intatte le sue classi (`proguard-rules.pro`). Pesa: +34 MB nell'APK per arm64 (le librerie native stanno non compresse), +99 MB con le tre architetture che l'APK porta oggi.
+
+## Le soglie per modello (`EngineProfile`)
+
+Ogni modello ha la sua scala, quindi ogni `TopicModel` ha il suo profilo. Tarato da `CalibrationTest` su `calibrazione-note.txt` (10 note dettate, 82 frasi, 11 argomenti che tornano in note diverse):
+
+| | Più preciso | Più leggero |
+|---|---|---|
+| pezzi dello stesso argomento / di argomenti diversi (mediana) | 0,81 / 0,72 | 0,94 / 0,92 |
+| `depthScale` | 4 | 10 |
+| grane `coarse` / `medium` / `fine` | 59 / 19 / 1 | 59 / 5 / 1 |
+| confini alla grana media: precisione, richiamo | 0,65, 0,63 | 0,76, 0,67 |
+| `pair` / `split` | 0,80 / 0,72 | 0,94 / 0,90 |
+| album sui pezzi veri (ARI) | 0,55 | 0,58 |
+
+Sono pochi dati: le curve dei confini sono piatte (la soglia conta poco, decidono `minLen` e la finestra) e il `pair` di e5 è stretto (0,93 e 0,95 vanno molto peggio). Da ritarare sulle note vere.
+
 ## Ancora da fare
 
-- Il modello sul telefono (ONNX Runtime), scaricato solo se attivi «Argomenti nelle note»: *Più preciso* (EmbeddingGemma) o *Più leggero* (multilingual-e5-small), col nome del modello scritto piccolo sotto.
 - Salvare tutto su disco (SQLite: frasi per impronta, spazi per nota, pezzi, album) e la manutenzione con WorkManager quando è in carica.
-- Tarare le soglie (`pair`, `split`, le grane) per ogni modello sulle note vere.
+- Ritarare i profili sulle note vere, con più note.
+- Il peso di ONNX Runtime: un APK per architettura (o solo arm64), oppure una build ridotta ai soli operatori dei due modelli.

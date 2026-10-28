@@ -107,7 +107,7 @@ class EngineTest {
         val vs = (0 until 6).flatMap { t -> List(3 + t % 3) { f.sentence(t) } }
         val seg = Segmenter.segment(vs)
         for (k in 2..6) assertTrue(seg.cuts(k).toSet().containsAll(seg.cuts(k - 1).toSet()))
-        assertTrue(seg.cuts(Grain.FINE).toSet().containsAll(seg.cuts(Grain.COARSE).toSet()))
+        assertTrue(seg.cuts(Grain.FINE, EngineProfile.DEFAULT).toSet().containsAll(seg.cuts(Grain.COARSE, EngineProfile.DEFAULT).toSet()))
         // Nessun pezzo più corto di due frasi.
         assertTrue(seg.pieces(seg.cuts(20)).all { it.count() >= 2 })
     }
@@ -184,7 +184,7 @@ class EngineTest {
     @Test
     fun aCommitOnlyEmbedsWhatChanged() {
         val emb = FakeEmbedder(Fake(256, 3, 10))
-        val engine = Engine(emb)
+        val engine = Engine(emb, EngineProfile.DEFAULT)
         val text = buildString {
             for (i in 1..4) append("Il Dock numero $i va più basso. ")
             for (i in 1..4) append("La promessa numero $i è il minimo. ")

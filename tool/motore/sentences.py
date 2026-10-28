@@ -1,0 +1,46 @@
+"""Frasi di prova per i tokenizer: italiano e inglese, casi difficili."""
+
+SENTENCES = [
+    "Domani finisco la pagina About.",
+    "Poi sistemo i video, ecc. ecc. come dice il dott. Rossi!",
+    "L'idea è quella di un'app che trascrive mentre parli.",
+    "Perché non l'hai detto prima? Così avrei comprato più caffè.",
+    "• Comprare il pane",
+    "• Chiamare A. Bianchi alle 15:30",
+    "Transcri trascrive, Transcrify riassume: TRANSCRIFY.",
+    "Ho speso 1.234,56 € il 12/03/2026 — troppo!",
+    "Il precipitevolissimevolmente è la parola più lunga dell'italiano.",
+    "Ciao 😀 come va? 👍🏽 tutto ok 🇮🇹",
+    "Famiglia: 👨‍👩‍👧‍👦 e cuore ❤️",
+    "  spazi   doppi    e tabulazioni\tqui  ",
+    "Città, perché, così, più, già, però, sì, né, è, É, À.",
+    "é composta e é già composta",
+    "ﬁne della ligatura ﬀ e numeri ①②③ e Ｆｕｌｌｗｉｄｔｈ",
+    "spazio non separabile e zero​width",
+    "Riunione con il team alle 9 per il rilascio della versione 2.0.1",
+    "I need to call the dentist tomorrow morning, don't forget.",
+    "The quick brown fox jumps over the lazy dog's back.",
+    "C'è un problema con l'aggiornamento dell'app sull'iPhone 15 Pro.",
+    "Devo ricordarmi di prenotare il treno Roma–Milano per venerdì",
+    "allora praticamente volevo dire che la palestra apre alle sette e poi dopo vado al lavoro",
+    "«Virgolette» “curve” 'semplici' \"doppie\" (parentesi) [quadre] {graffe}",
+    "Email: francesco@example.com, sito https://transcrify.app/note?id=42",
+    "Ελληνικά, русский, 日本語, 한국어, العربية",
+    "   ",
+    "",
+    "a",
+    "1234567890",
+    "<table> e <mask> e <s> nel testo </s>",
+    "Riga uno\nriga due\n\nriga quattro",
+    "Questo è un appunto dettato senza punteggiatura che va avanti e avanti parlando di tante cose diverse come la spesa il lavoro e le vacanze",
+    "Ma̍ccheroni con diacritici ṡtrani e ǅ digrafo",
+    "Qualità/prezzo ottima; voto 9½ su 10…",
+    "#todo @marco !!! ??? ...",
+    "Ho visto 3 film: Inception, Interstellar e Oppenheimer.",
+]
+
+# I prefissi che l'app mette davanti a ogni frase.
+PROMPTS = {
+    "preciso": "task: sentence similarity | query: ",
+    "leggero": "query: ",
+}

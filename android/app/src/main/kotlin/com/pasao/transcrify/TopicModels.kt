@@ -1,6 +1,9 @@
 package com.pasao.transcrify
 
 import android.content.Context
+import com.pasao.transcrify.engine.EmbeddingSpec
+import com.pasao.transcrify.engine.EngineProfile
+import com.pasao.transcrify.engine.Pooling
 import java.io.File
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
@@ -21,20 +24,44 @@ enum class TopicModel(
     private val repo: String,
     /** I file da scaricare, col loro nome: il modello ONNX cerca i suoi dati esterni proprio con quel nome. */
     val files: List<String>,
+    /** Come si usa: prefisso, uscita, quanti numeri. */
+    val embedding: EmbeddingSpec,
+    /** Le soglie del motore tarate su questo modello. */
+    val profile: EngineProfile,
 ) {
     PRECISE(
         "preciso", "Più preciso", "EmbeddingGemma 300M", 218, "onnx-community/embeddinggemma-300m-ONNX",
         listOf("onnx/model_q4.onnx", "onnx/model_q4.onnx_data", "tokenizer.json"),
+        // Tra i prefissi di Google, «sentence similarity» è quello che separa meglio gli argomenti
+        // nelle nostre note dettate (più di «clustering», che schiaccia tutte le somiglianze tra 0,8 e 0,9).
+        // 256 numeri su 768 (Matryoshka): perde poco, e ogni frase pesa un terzo.
+        // Il modello è quantizzato solo nei pesi: una frase dà lo stesso vettore da sola o in gruppo.
+        EmbeddingSpec("task: sentence similarity | query: ", Pooling.READY, dim = 256, maxBatch = 16),
+        // Tarato da CalibrationTest sulle note di prova: pezzi dello stesso argomento ≈ 0,81, diversi ≈ 0,72.
+        EngineProfile(depthScale = 4f, coarse = 59, medium = 19, fine = 1, pair = 0.80f, split = 0.72f),
     ),
     LIGHT(
         "leggero", "Più leggero", "multilingual-e5-small", 136, "Xenova/multilingual-e5-small",
         listOf("onnx/model_quantized.onnx", "tokenizer.json"),
+        // «query: » è la convenzione di e5 quando i due lati sono dello stesso tipo (nota con nota).
+        // Una frase per volta: il modello quantizza al volo con una scala per tutto il gruppo,
+        // quindi in gruppo il vettore di una frase cambierebbe un po' secondo le vicine.
+        EmbeddingSpec("query: ", Pooling.MEAN, dim = 384, maxBatch = 1),
+        // Tarato da CalibrationTest: e5 vede quasi tutto simile (stesso argomento ≈ 0,94, diversi ≈ 0,92),
+        // quindi soglie alte e strette, e i confini si allargano di più per usare tutti i gradini.
+        EngineProfile(depthScale = 10f, coarse = 59, medium = 5, fine = 1, pair = 0.94f, split = 0.90f),
     );
 
     fun url(file: String) = "https://huggingface.co/$repo/resolve/main/$file"
 
+    /** Il modello ONNX, col nome che ha sul telefono. */
+    val onnxFile: String get() = localName(files.first { it.endsWith(".onnx") })
+
     companion object {
         fun of(id: String?) = entries.firstOrNull { it.id == id }
+
+        /** Sul telefono i file stanno tutti nella cartella del modello, senza le sottocartelle del repo. */
+        fun localName(file: String) = file.substringAfterLast('/')
     }
 }
 
@@ -60,7 +87,7 @@ class TopicModels(context: Context) {
         set(v) = prefs.edit().putString("topics_model", v?.id).apply()
 
     fun dir(m: TopicModel) = File(root, m.id)
-    fun file(m: TopicModel, name: String) = File(dir(m), name.substringAfterLast('/'))
+    fun file(m: TopicModel, name: String) = File(dir(m), TopicModel.localName(name))
 
     fun status(m: TopicModel): Status = running[m]?.status ?: if (ready(m)) Status.Ready else failed[m] ?: Status.Missing
 

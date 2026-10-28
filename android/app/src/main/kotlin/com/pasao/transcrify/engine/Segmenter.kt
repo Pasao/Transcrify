@@ -1,10 +1,7 @@
 package com.pasao.transcrify.engine
 
-/** Le tre grane dei Pensieri: dal largo al fine. Il pizzico passa dall'una all'altra. */
-enum class Grain(val threshold: Int) {
-    // Soglie sulla profondità del confine (in byte, 0–255). Da tarare sul modello vero.
-    COARSE(90), MEDIUM(50), FINE(24)
-}
+/** Le tre grane dei Pensieri: dal largo al fine. Il pizzico passa dall'una all'altra. Le soglie stanno nel profilo del modello. */
+enum class Grain { COARSE, MEDIUM, FINE }
 
 /**
  * Dove cambia argomento, dentro un testo: per ogni spazio tra due frasi, un byte che dice quanto
@@ -43,8 +40,11 @@ class Segmentation(val depth: ByteArray, val minLen: Int = 2) {
     /** I primi [k]−1 confini: il testo in [k] pezzi (o meno, se è corto). */
     fun cuts(k: Int): IntArray = order.copyOf((k - 1).coerceIn(0, order.size)).sortedArray()
 
-    /** I confini abbastanza profondi per una grana. */
-    fun cuts(grain: Grain): IntArray = order.takeWhile { strength(it) >= grain.threshold }.toIntArray().sortedArray()
+    /** I confini abbastanza profondi per una grana, con le soglie del modello. */
+    fun cuts(grain: Grain, profile: EngineProfile): IntArray = cutsAtLeast(profile.threshold(grain))
+
+    /** I confini profondi almeno [depth] (0–255), presi nell'ordine di sempre. */
+    fun cutsAtLeast(depth: Int): IntArray = order.takeWhile { strength(it) >= depth }.toIntArray().sortedArray()
 
     /** I pezzi come intervalli di frasi [da, a), dati i confini. */
     fun pieces(cuts: IntArray): List<IntRange> {
@@ -68,12 +68,14 @@ class Segmentation(val depth: ByteArray, val minLen: Int = 2) {
  * 2. Nei testi lunghi la coesione si liscia appena (media su tre), per non vedere confini nel rumore.
  * 3. La profondità di un avvallamento = quanto si scende dalla cima a sinistra + quanto dalla cima
  *    a destra. Le cime si trovano in un passaggio per lato: tutto O(n · dim).
+ * 4. La profondità si salva in un byte dopo averla allargata di [scale] (dal profilo del modello):
+ *    un modello che vede tutto simile ha avvallamenti bassi, e senza allargarli userebbe pochi gradini.
  *
  * È così economico che si rifà intero a ogni salvataggio: la parte cara (il senso delle frasi) è
  * già ricordata frase per frase dall'impronta.
  */
 object Segmenter {
-    fun segment(vectors: List<FloatArray>, window: Int? = null, minLen: Int = 2, smooth: Boolean? = null): Segmentation {
+    fun segment(vectors: List<FloatArray>, scale: Float = 1f, window: Int? = null, minLen: Int = 2, smooth: Boolean? = null): Segmentation {
         val n = vectors.size
         // Una finestra larga in un testo corto scavalca due confini insieme e li confonde:
         // si allarga con il testo, da 1 a 3 frasi. Lisciare serve solo nei testi lunghi (le lezioni).
@@ -116,8 +118,8 @@ object Segmenter {
         val peakRight = FloatArray(gaps)
         for (g in gaps - 1 downTo 0) peakRight[g] = if (g < gaps - 1 && smoothed[g + 1] >= smoothed[g]) peakRight[g + 1] else smoothed[g]
         val depth = ByteArray(gaps) { g ->
-            val dep = (peakLeft[g] - smoothed[g]) + (peakRight[g] - smoothed[g])
-            // Una profondità di 1 (da coesione piena a nessuna) è già un cambio netto: oltre si satura.
+            val dep = ((peakLeft[g] - smoothed[g]) + (peakRight[g] - smoothed[g])) * scale
+            // Una profondità di 1 / scale è già un cambio netto per questo modello: oltre si satura.
             (dep.coerceIn(0f, 1f) * 255f + 0.5f).toInt().toByte()
         }
         return Segmentation(depth, minLen)
