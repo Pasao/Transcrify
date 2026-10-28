@@ -11,17 +11,20 @@ final _keyPattern = RegExp(r'^gsk_[A-Za-z0-9]{20,}$');
 
 /// La chiave Groq con il minimo sforzo: apri Groq, crei, copi, torni.
 /// Al ritorno la chiave si trova da sola negli appunti.
+///
+/// È la stessa pagina ovunque: nell'introduzione (con la freccia per tornare alla prima pagina)
+/// e dalle impostazioni per cambiarla. In alto a destra la X chiude senza toccare niente:
+/// la prima volta vuol dire «salta», e la chiave si potrà mettere quando serve.
 class KeyPage extends StatefulWidget {
-  const KeyPage({super.key, required this.onSaved, this.replacing = false, this.onBack, this.onKeep});
+  const KeyPage({super.key, required this.onSaved, required this.onClose, this.onBack});
 
   final VoidCallback onSaved;
-  final bool replacing;
 
-  /// Torna alla prima pagina dell'introduzione (freccia in alto e gesto indietro).
+  /// La X: chiude senza cambiare niente.
+  final VoidCallback onClose;
+
+  /// Solo nell'introduzione: torna alla prima pagina (freccia in alto e gesto indietro).
   final VoidCallback? onBack;
-
-  /// Se una chiave c'è già (introduzione rivista da "Come funziona"): tienila e torna all'app.
-  final VoidCallback? onKeep;
 
   @override
   State<KeyPage> createState() => _KeyPageState();
@@ -99,7 +102,7 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Ultima cosa: una chiave Groq.', style: display(context, size: 24)),
+          Text('Una chiave Groq.', style: display(context, size: 24)),
           const SizedBox(height: 6),
           Text('È gratis. Tre passi, il terzo lo facciamo noi.', style: t.bodyMedium?.copyWith(color: context.tk.muted)),
           const SizedBox(height: 22),
@@ -126,8 +129,7 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
                   ),
           ),
           if (problem != null) ...[const SizedBox(height: 12), Text(problem!, style: t.bodySmall?.copyWith(color: Tokens.red))],
-          // Gerarchia: il primario sopra (Apri Groq / Usa questa chiave), poi il secondario
-          // con il bordo, poi il terziario solo testo. Chi ha già una chiave la tiene come secondaria.
+          // Gerarchia: il primario sopra (Apri Groq / Usa questa chiave), poi il secondario con il bordo.
           if (manual) ...[
             const SizedBox(height: 12),
             TextField(
@@ -144,14 +146,7 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
             OutlinedButton(onPressed: checking ? null : () => _use(field.text.trim()), child: const Text('Usa questa chiave')),
           ] else ...[
             const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: widget.onKeep ?? () => setState(() => manual = true),
-              child: Text(widget.onKeep != null ? 'Tieni quella che hai' : 'Ho già una chiave, la incollo io'),
-            ),
-            if (widget.onKeep != null) ...[
-              const SizedBox(height: 4),
-              TextButton(onPressed: () => setState(() => manual = true), child: const Text('Incollane un’altra')),
-            ],
+            OutlinedButton(onPressed: () => setState(() => manual = true), child: const Text('Ho già una chiave, la incollo io')),
           ],
           const SizedBox(height: 20),
           Text('La chiave resta cifrata su questo telefono e parla solo con Groq.', style: t.bodySmall, textAlign: TextAlign.center),
@@ -159,29 +154,24 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
       ),
     );
 
-    if (widget.replacing) {
-      return Paper(
-        child: Scaffold(
-          appBar: AppBar(),
-          body: SafeArea(child: ListView(children: [steps])),
-        ),
-      );
-    }
-    // Seconda pagina dell'introduzione: solo la chiave, e si può tornare indietro.
+    final close = IconButton(icon: const Icon(Icons.close_rounded), tooltip: 'Chiudi', onPressed: widget.onClose);
     return PopScope(
-      canPop: widget.onBack == null,
+      // Nell'introduzione il gesto indietro torna alla prima pagina; altrove chiude.
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) widget.onBack?.call();
+        if (!didPop) (widget.onBack ?? widget.onClose)();
       },
       child: Paper(
         child: Scaffold(
-          appBar: widget.onBack == null
-              ? null
-              : AppBar(
-                  leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: widget.onBack),
-                ),
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            leading: widget.onBack == null
+                ? null
+                : IconButton(icon: const Icon(Icons.arrow_back_rounded), tooltip: 'Indietro', onPressed: widget.onBack),
+            actions: [close, const SizedBox(width: 8)],
+          ),
           body: SafeArea(child: ListView(children: [steps])),
-          bottomNavigationBar: const PageCount('2 di 2'),
+          bottomNavigationBar: widget.onBack == null ? null : const PageCount('2 di 2'),
         ),
       ),
     );
@@ -387,47 +377,67 @@ class PageCount extends StatelessWidget {
 
 /// Prima pagina del primo avvio: cos'è e come si usa, in tre righe. Poi la chiave.
 class IntroPage extends StatelessWidget {
-  const IntroPage({super.key, required this.onNext});
+  const IntroPage({super.key, required this.onNext, required this.onClose});
 
   final VoidCallback onNext;
+
+  /// La X in alto: salta l'introduzione (o la chiude, se la stai rivedendo).
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     return Paper(
       child: Scaffold(
         bottomNavigationBar: const PageCount('1 di 2'),
-        body: ListView(
-          padding: EdgeInsets.zero,
+        body: Stack(
           children: [
-            const _Hero(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Come funziona', style: display(context, size: 24)),
-                  const SizedBox(height: 18),
-                  _How(
-                    icon: Icons.bubble_chart_rounded,
-                    color: Tokens.blue,
-                    title: 'Fai uscire Transcri',
-                    text: 'Dal bottone dell’app vola sul bordo dello schermo e resta lì, sopra tutto.',
+            ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                const _Hero(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Come funziona', style: display(context, size: 24)),
+                      const SizedBox(height: 18),
+                      _How(
+                        icon: Icons.bubble_chart_rounded,
+                        color: Tokens.blue,
+                        title: 'Fai uscire Transcri',
+                        text: 'Dal bottone dell’app vola sul bordo dello schermo e resta lì, sopra tutto.',
+                      ),
+                      _How(
+                        icon: Icons.mic_rounded,
+                        color: Tokens.violet,
+                        title: 'Toccalo e parla',
+                        text: 'Da WhatsApp, dalle note, dalla mail: ovunque tu stia scrivendo.',
+                      ),
+                      const _How(
+                        icon: Icons.content_paste_rounded,
+                        color: Tokens.green,
+                        title: 'Incolla',
+                        text: 'Il testo è già negli appunti, anche ripulito da esitazioni e ripetizioni se vuoi.',
+                      ),
+                      const SizedBox(height: 28),
+                      FilledButton(onPressed: onNext, child: const Text('Avanti')),
+                    ],
                   ),
-                  _How(
-                    icon: Icons.mic_rounded,
-                    color: Tokens.violet,
-                    title: 'Toccala e parla',
-                    text: 'Da WhatsApp, dalle note, dalla mail: ovunque tu stia scrivendo.',
+                ),
+              ],
+            ),
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: IconButton(
+                    icon: const Icon(Icons.close_rounded, color: Colors.white),
+                    tooltip: 'Chiudi',
+                    onPressed: onClose,
                   ),
-                  const _How(
-                    icon: Icons.content_paste_rounded,
-                    color: Tokens.green,
-                    title: 'Incolla',
-                    text: 'Il testo è già negli appunti, anche ripulito da esitazioni e ripetizioni se vuoi.',
-                  ),
-                  const SizedBox(height: 28),
-                  FilledButton(onPressed: onNext, child: const Text('Avanti')),
-                ],
+                ),
               ),
             ),
           ],

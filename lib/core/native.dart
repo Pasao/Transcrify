@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 class CoreState {
   CoreState(Map m)
     : hasKey = m['hasKey'] as bool,
+      introSeen = m['introSeen'] as bool,
       maskedKey = m['maskedKey'] as String?,
       pillOn = m['pillOn'] as bool,
       purify = m['purify'] as bool,
@@ -33,6 +34,9 @@ class CoreState {
       dayLimit = m['dayLimit'] as int;
 
   final bool hasKey, pillOn, purify, customPrompt, simulateLimit;
+
+  /// L'introduzione è già stata vista o saltata.
+  final bool introSeen;
 
   /// "fedele", "pulita" o "riassunto".
   final String mode;
@@ -105,6 +109,31 @@ class Note {
     'created': created.millisecondsSinceEpoch,
     'updated': updated.millisecondsSinceEpoch,
   };
+}
+
+/// Un modello per gli argomenti: si chiama «più preciso» o «più leggero»; il nome vero è scritto piccolo.
+class TopicModelInfo {
+  TopicModelInfo(Map m)
+    : id = m['id'] as String,
+      label = m['label'] as String,
+      name = m['name'] as String,
+      approxMb = m['approxMb'] as int,
+      chosen = m['chosen'] as bool,
+      state = m['state'] as String,
+      done = (m['done'] as num?)?.toInt(),
+      total = (m['total'] as num?)?.toInt(),
+      error = m['error'] as String?;
+
+  final String id, label, name;
+  final int approxMb;
+  final bool chosen;
+
+  /// "missing", "downloading", "ready" o "failed".
+  final String state;
+  final int? done, total;
+  final String? error;
+
+  double? get progress => total == null || total == 0 ? null : done! / total!;
 }
 
 /// Una registrazione che aspetta di essere trascritta (di solito: mancava la rete).
@@ -201,6 +230,18 @@ class Core {
   }
 
   static Future<void> deleteEntry(DateTime at) => _ch.invokeMethod('deleteHistory', {'at': at.millisecondsSinceEpoch});
+
+  static Future<void> setIntroSeen() => _ch.invokeMethod('introSeen');
+
+  static Future<List<TopicModelInfo>> topicModels() async =>
+      ((await _ch.invokeMethod('topicModels')) as List).map((e) => TopicModelInfo(e as Map)).toList();
+
+  /// Sceglie il modello per gli argomenti (e lo scarica se manca). null = argomenti spenti.
+  static Future<void> chooseTopicModel(String? id) => _ch.invokeMethod('chooseTopicModel', {'id': id});
+
+  static Future<void> cancelTopicModel(String id) => _ch.invokeMethod('cancelTopicModel', {'id': id});
+
+  static Future<void> deleteTopicModel(String id) => _ch.invokeMethod('deleteTopicModel', {'id': id});
 
   static Future<List<Note>> notes() async => ((await _ch.invokeMethod('notes')) as List).map((e) => Note.fromMap(e as Map)).toList();
 

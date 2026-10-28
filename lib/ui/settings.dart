@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/native.dart';
+import 'common.dart';
 import 'mode_icon.dart';
 import 'onboarding.dart';
 import 'theme.dart';
@@ -16,8 +20,8 @@ const _recommendedLlm = [
 ];
 const _recommendedStt = ['whisper-large-v3', 'whisper-large-v3-turbo'];
 
-/// Le impostazioni in una pagina: modelli (ognuno con quanto l'hai usato), testo, chiave.
-/// Restituisce 'removed' se la chiave è stata rimossa, 'intro' per rivedere come funziona.
+/// Le impostazioni, a gruppi come in Revolut: Dettatura, Modelli, Aiuto, la zona sensibile.
+/// Ogni riga dice il suo valore e apre la sua pagina. Restituisce 'intro' per rivedere come funziona.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -39,6 +43,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _load() async {
     final state = await Core.state();
     if (mounted) setState(() => s = state);
+    _loadTopics();
   }
 
   /// I modelli si chiedono a Groq una volta sola, quando servono.
@@ -57,221 +62,282 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _replaceKey() async {
-    await Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => KeyPage(replacing: true, onSaved: () => Navigator.of(ctx).pop())));
-    _load();
-  }
-
-  Future<void> _removeKey() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rimuovere la chiave?'),
-        content: const Text('Transcri si chiude. Le trascrizioni restano.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Rimuovi')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await Core.deleteKey();
-    if (mounted) Navigator.of(context).pop('removed');
-  }
-
   Future<void> _setPurify(bool on) async {
     await Core.setPurify(on);
     _load();
   }
 
+  /// Apre una pagina delle impostazioni; al ritorno si rilegge tutto.
+  Future<void> _open(Widget page) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+    _load();
+  }
+
+  static String _short(String model) => model.substring(model.lastIndexOf('/') + 1);
+
+  static const _modeNames = {'fedele': 'Fedele', 'pulita': 'Pulita', 'riassunto': 'Riassunto'};
+
   @override
   Widget build(BuildContext context) {
     final st = s;
-    final t = Theme.of(context).textTheme;
-    final tk = context.tk;
     return Paper(
       child: Scaffold(
         appBar: AppBar(),
         body: st == null
             ? const SizedBox.shrink()
             : ListView(
+                padding: const EdgeInsets.only(bottom: 40),
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 36),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                     child: Text('Impostazioni', style: display(context)),
                   ),
-                  Section(
-                    label: 'Modelli',
+                  SettingsGroup(
+                    label: 'Dettatura',
                     children: [
-                      ModelPicker(
-                        label: 'Trascrizione',
-                        current: st.sttModel,
-                        speech: true,
-                        recommended: _recommendedStt,
-                        load: _models,
-                        error: modelsError,
-                        onSaved: _load,
-                        usage: [
-                          _Meter(
-                            label: 'Trascrizioni oggi',
-                            value: '${st.sttUses}',
-                            of: _requestLimit(st.sttLimits),
-                            fraction: _fraction(st.sttUses, _requestLimit(st.sttLimits)),
-                            resets: _midnight(),
-                          ),
-                          _Meter(
-                            label: 'Audio quest\'ora',
-                            value: '${(st.hourUsed / 60).round()}',
-                            of: '${(st.hourLimit / 60).round()} min',
-                            fraction: st.hourUsed / st.hourLimit,
-                            resets: st.hourEnd,
-                          ),
-                          _Meter(
-                            label: 'Audio oggi',
-                            value: '${(st.dayUsed / 60).round()}',
-                            of: '${(st.dayLimit / 60).round()} min',
-                            fraction: st.dayUsed / st.dayLimit,
-                            resets: st.dayEnd,
-                          ),
-                        ],
-                        note:
-                            'Groq conta i minuti di audio, non il tempo che passa: '
-                            'in un\'ora puoi mandargli fino a 120 minuti di parlato.',
+                      SettingsRow(
+                        icon: Icons.auto_fix_high_rounded,
+                        color: Tokens.blue,
+                        title: 'Pulisci il testo',
+                        subtitle: 'Toglie esitazioni e ripetizioni, mette la punteggiatura',
+                        trailing: Switch(value: st.purify, onChanged: _setPurify),
+                        onTap: () => _setPurify(!st.purify),
                       ),
-                      const SizedBox(height: 32),
-                      ModelPicker(
-                        label: 'Pulizia del testo',
-                        current: st.llmModel,
-                        speech: false,
-                        recommended: _recommendedLlm,
-                        load: _models,
-                        error: modelsError,
-                        onSaved: _load,
-                        usage: [
-                          _Meter(
-                            label: 'Pulizie oggi',
-                            value: '${st.llmUses}',
-                            of: _requestLimit(st.llmLimits),
-                            fraction: _fraction(st.llmUses, _requestLimit(st.llmLimits)),
-                            resets: _midnight(),
+                      SettingsRow(
+                        icon: Icons.tune_rounded,
+                        color: Tokens.violet,
+                        title: 'Come pulisce',
+                        value: st.purify ? _modeNames[st.mode] : 'Spenta',
+                        onTap: () => _open(
+                          LiveSettings(
+                            title: 'Come pulisce',
+                            build: (context, st, reload) => [
+                              _ModeChooser(
+                                mode: st.mode,
+                                enabled: st.purify,
+                                onChanged: (m) async {
+                                  await Core.setMode(m);
+                                  reload();
+                                },
+                              ),
+                              const SizedBox(height: 24),
+                              PromptEditor(
+                                key: ValueKey(st.mode),
+                                prompt: st.prompt,
+                                custom: st.customPrompt,
+                                defaultPrompt: st.defaultPrompt,
+                                enabled: st.purify,
+                                onChanged: reload,
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    ],
-                  ),
-                  Section(
-                    label: 'Testo',
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Pulisci il testo', style: t.titleMedium),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Toglie esitazioni e ripetizioni, mette punteggiatura e paragrafi. '
-                                  'Si sceglie anche da Transcri, mentre detti.',
-                                  style: t.bodySmall,
-                                ),
-                              ],
-                            ),
+                      SettingsRow(
+                        icon: Icons.spellcheck_rounded,
+                        color: Tokens.green,
+                        title: 'Vocabolario',
+                        value: st.words.isEmpty ? 'Vuoto' : '${st.words.length} ${st.words.length == 1 ? 'parola' : 'parole'}',
+                        onTap: () => _open(
+                          LiveSettings(
+                            title: 'Vocabolario',
+                            build: (context, st, reload) => [WordsEditor(words: st.words, onChanged: reload)],
                           ),
-                          const SizedBox(width: 12),
-                          Switch(value: st.purify, onChanged: _setPurify),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      _ModeChooser(
-                        mode: st.mode,
-                        enabled: st.purify,
-                        onChanged: (m) async {
-                          await Core.setMode(m);
-                          _load();
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      PromptEditor(
-                        key: ValueKey(st.mode),
-                        prompt: st.prompt,
-                        custom: st.customPrompt,
-                        defaultPrompt: st.defaultPrompt,
-                        enabled: st.purify,
-                        onChanged: _load,
-                      ),
-                      const SizedBox(height: 28),
-                      WordsEditor(words: st.words, onChanged: _load),
-                    ],
-                  ),
-                  Section(
-                    label: 'Altro',
-                    children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton(
-                          style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                          onPressed: () => Navigator.of(context).pop('intro'),
-                          child: const Text('Rivedi come funziona'),
                         ),
                       ),
                     ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 48),
-                    child: Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: Tokens.red.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Tokens.red.withValues(alpha: 0.45)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.key_rounded, size: 18, color: Tokens.red),
-                              SizedBox(width: 8),
-                              Text(
-                                'ZONA SENSIBILE',
-                                style: TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w700, color: Tokens.red),
+                  SettingsGroup(
+                    label: 'Modelli',
+                    children: [
+                      SettingsRow(
+                        icon: Icons.graphic_eq_rounded,
+                        color: Tokens.blue,
+                        title: 'Trascrizione',
+                        value: _short(st.sttModel),
+                        onTap: () => _open(
+                          LiveSettings(
+                            title: 'Trascrizione',
+                            build: (context, st, reload) => [
+                              ModelPicker(
+                                label: 'Modello',
+                                current: st.sttModel,
+                                speech: true,
+                                recommended: _recommendedStt,
+                                load: _models,
+                                error: modelsError,
+                                onSaved: reload,
+                                usage: [
+                                  _Meter(
+                                    label: 'Trascrizioni oggi',
+                                    value: '${st.sttUses}',
+                                    of: _requestLimit(st.sttLimits),
+                                    fraction: _fraction(st.sttUses, _requestLimit(st.sttLimits)),
+                                    resets: _midnight(),
+                                  ),
+                                  _Meter(
+                                    label: 'Audio quest\'ora',
+                                    value: '${(st.hourUsed / 60).round()}',
+                                    of: '${(st.hourLimit / 60).round()} min',
+                                    fraction: st.hourUsed / st.hourLimit,
+                                    resets: st.hourEnd,
+                                  ),
+                                  _Meter(
+                                    label: 'Audio oggi',
+                                    value: '${(st.dayUsed / 60).round()}',
+                                    of: '${(st.dayLimit / 60).round()} min',
+                                    fraction: st.dayUsed / st.dayLimit,
+                                    resets: st.dayEnd,
+                                  ),
+                                ],
+                                note:
+                                    'Groq conta i minuti di audio, non il tempo che passa: '
+                                    'in un\'ora puoi mandargli fino a 120 minuti di parlato.',
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          Text('Chiave Groq', style: t.titleMedium),
-                          const SizedBox(height: 2),
-                          Text('Dà accesso al tuo account Groq. Non condividerla.', style: t.bodySmall),
-                          const SizedBox(height: 12),
-                          Text(st.maskedKey ?? '—', style: monoStyle(context, size: 14, color: tk.text)),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Tokens.red,
-                                  side: BorderSide(color: Tokens.red.withValues(alpha: 0.5)),
-                                ),
-                                onPressed: _replaceKey,
-                                child: const Text('Cambia chiave'),
-                              ),
-                              const SizedBox(width: 8),
-                              FilledButton(
-                                style: FilledButton.styleFrom(backgroundColor: Tokens.red, minimumSize: const Size(0, 40)),
-                                onPressed: _removeKey,
-                                child: const Text('Rimuovi'),
+                        ),
+                      ),
+                      SettingsRow(
+                        icon: Icons.auto_awesome_rounded,
+                        color: Tokens.violet,
+                        title: 'Pulizia del testo',
+                        value: _short(st.llmModel),
+                        onTap: () => _open(
+                          LiveSettings(
+                            title: 'Pulizia del testo',
+                            build: (context, st, reload) => [
+                              ModelPicker(
+                                label: 'Modello',
+                                current: st.llmModel,
+                                speech: false,
+                                recommended: _recommendedLlm,
+                                load: _models,
+                                error: modelsError,
+                                onSaved: reload,
+                                usage: [
+                                  _Meter(
+                                    label: 'Pulizie oggi',
+                                    value: '${st.llmUses}',
+                                    of: _requestLimit(st.llmLimits),
+                                    fraction: _fraction(st.llmUses, _requestLimit(st.llmLimits)),
+                                    resets: _midnight(),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                      SettingsRow(
+                        icon: Icons.bubble_chart_rounded,
+                        color: Tokens.green,
+                        title: 'Argomenti nelle note',
+                        subtitle: 'Sul telefono, senza rete',
+                        value: topics,
+                        onTap: () => _open(const TopicsSettings()),
+                      ),
+                    ],
+                  ),
+                  SettingsGroup(
+                    label: 'Aiuto',
+                    children: [
+                      SettingsRow(
+                        icon: Icons.school_rounded,
+                        color: Tokens.yellow,
+                        title: 'Rivedi come funziona',
+                        onTap: () => Navigator.of(context).pop('intro'),
+                      ),
+                    ],
+                  ),
+                  SettingsGroup(
+                    label: 'Zona sensibile',
+                    danger: true,
+                    children: [
+                      SettingsRow(
+                        icon: Icons.key_rounded,
+                        color: Tokens.red,
+                        title: 'Chiave Groq',
+                        value: st.maskedKey ?? 'Nessuna',
+                        mono: st.maskedKey != null,
+                        onTap: () => _open(LiveSettings(title: 'Chiave Groq', build: _keyPage)),
+                      ),
+                    ],
                   ),
                 ],
               ),
       ),
     );
+  }
+
+  /// Il riassunto degli argomenti per la riga: spenti, scelti, o quanto manca.
+  String? topics;
+
+  Future<void> _loadTopics() async {
+    final list = await Core.topicModels();
+    final chosen = list.where((m) => m.chosen).firstOrNull;
+    if (!mounted) return;
+    setState(
+      () => topics = chosen == null
+          ? 'Spenti'
+          : chosen.state == 'downloading'
+          ? '${((chosen.progress ?? 0) * 100).round()}%'
+          : chosen.label,
+    );
+  }
+
+  List<Widget> _keyPage(BuildContext context, CoreState st, VoidCallback reload) {
+    final t = Theme.of(context).textTheme;
+    final tk = context.tk;
+    Future<void> change() async {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (ctx) => KeyPage(onSaved: () => Navigator.of(ctx).pop(), onClose: () => Navigator.of(ctx).pop()),
+        ),
+      );
+      reload();
+    }
+
+    Future<void> remove() async {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Rimuovere la chiave?'),
+          content: const Text(
+            'Transcri si chiude e non potrà trascrivere finché non ne metti un\'altra. Le trascrizioni e le note restano.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Rimuovi')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      await Core.deleteKey();
+      Core.refresh();
+      reload();
+    }
+
+    return [
+      Text(
+        'Dà accesso al tuo account Groq. Resta cifrata su questo telefono: non condividerla.',
+        style: t.bodyMedium?.copyWith(color: tk.muted),
+      ),
+      const SizedBox(height: 20),
+      Text(st.maskedKey ?? 'Nessuna chiave', style: monoStyle(context, size: 15, color: tk.text)),
+      const SizedBox(height: 24),
+      if (st.maskedKey == null)
+        FilledButton(onPressed: change, child: const Text('Prendi la chiave'))
+      else ...[
+        OutlinedButton(onPressed: change, child: const Text('Cambia chiave')),
+        const SizedBox(height: 8),
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: Tokens.red),
+          onPressed: remove,
+          child: const Text('Rimuovi la chiave'),
+        ),
+      ],
+    ];
   }
 
   /// Le richieste al giorno, se Groq ce le ha dette nell'ultima risposta.
@@ -872,6 +938,404 @@ class _Meter extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Un gruppo di impostazioni, come in Revolut: un'etichetta piccola e una scheda con le sue righe.
+/// Si vede subito dove finisce un gruppo e comincia l'altro, senza linee.
+class SettingsGroup extends StatelessWidget {
+  const SettingsGroup({super.key, required this.label, required this.children, this.danger = false});
+
+  final String label;
+  final List<Widget> children;
+
+  /// La zona sensibile: la scheda ha un filo rosso.
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Text(
+              label.toUpperCase(),
+              style: TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w600, color: danger ? Tokens.red : tk.muted),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: islandColor(context),
+              borderRadius: BorderRadius.circular(24),
+              border: danger ? Border.all(color: Tokens.red.withValues(alpha: 0.35)) : null,
+            ),
+            child: Column(children: children),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Una riga: l'icona nel suo tondo colorato, il nome (e una riga di spiegazione), a destra il valore
+/// e la freccia se apre una pagina, o un interruttore.
+class SettingsRow extends StatelessWidget {
+  const SettingsRow({
+    super.key,
+    required this.icon,
+    required this.color,
+    required this.title,
+    this.subtitle,
+    this.value,
+    this.trailing,
+    this.onTap,
+    this.mono = false,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String? subtitle, value;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+
+  /// Il valore è un codice (la chiave): in DM Mono.
+  final bool mono;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final t = Theme.of(context).textTheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: color.withValues(alpha: 0.14)),
+              child: Icon(icon, size: 20, color: color),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: t.titleMedium),
+                  if (subtitle != null) ...[const SizedBox(height: 2), Text(subtitle!, style: t.bodySmall)],
+                ],
+              ),
+            ),
+            if (value != null) ...[
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 150),
+                child: Text(
+                  value!,
+                  overflow: TextOverflow.ellipsis,
+                  style: mono ? monoStyle(context, size: 12) : t.bodyMedium?.copyWith(color: tk.muted),
+                ),
+              ),
+            ],
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              trailing!,
+            ] else if (onTap != null)
+              Icon(Icons.chevron_right_rounded, color: tk.faint),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Una pagina delle impostazioni che si tiene aggiornata da sola: legge lo stato e lo rilegge
+/// dopo ogni cambio, così quello che vedi è sempre quello che c'è.
+class LiveSettings extends StatefulWidget {
+  const LiveSettings({super.key, required this.title, required this.build});
+
+  final String title;
+  final List<Widget> Function(BuildContext context, CoreState st, VoidCallback reload) build;
+
+  @override
+  State<LiveSettings> createState() => _LiveSettingsState();
+}
+
+class _LiveSettingsState extends State<LiveSettings> {
+  CoreState? st;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final s = await Core.state();
+    if (mounted) setState(() => st = s);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = st;
+    return SettingsPageFrame(title: widget.title, children: s == null ? const [] : widget.build(context, s, _load));
+  }
+}
+
+/// La cornice di una pagina delle impostazioni: freccia indietro, titolo grande, il contenuto.
+class SettingsPageFrame extends StatelessWidget {
+  const SettingsPageFrame({super.key, required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Paper(
+      child: Scaffold(
+        appBar: AppBar(),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 48),
+          children: [
+            Text(title, style: display(context, size: 28)),
+            const SizedBox(height: 24),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Gli argomenti nelle note: spenti, oppure un modello sul telefono, più leggero o più preciso.
+/// Sceglierlo vuol dire scaricarlo, una volta; poi lavora senza rete e senza costi.
+class TopicsSettings extends StatefulWidget {
+  const TopicsSettings({super.key});
+
+  @override
+  State<TopicsSettings> createState() => _TopicsSettingsState();
+}
+
+class _TopicsSettingsState extends State<TopicsSettings> {
+  List<TopicModelInfo>? models;
+  Timer? _poll;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final list = await Core.topicModels();
+    if (!mounted) return;
+    setState(() => models = list);
+    // Mentre scarica si guarda a che punto è, due volte al secondo; poi si smette.
+    final busy = list.any((m) => m.state == 'downloading');
+    if (busy && _poll == null) _poll = Timer.periodic(const Duration(milliseconds: 500), (_) => _load());
+    if (!busy) {
+      _poll?.cancel();
+      _poll = null;
+    }
+  }
+
+  Future<void> _choose(String? id) async {
+    HapticFeedback.selectionClick();
+    await Core.chooseTopicModel(id);
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final list = models;
+    final t = Theme.of(context).textTheme;
+    final tk = context.tk;
+    final off = list != null && list.every((m) => !m.chosen);
+    return SettingsPageFrame(
+      title: 'Argomenti nelle note',
+      children: [
+        Text(
+          'Transcrify divide le note per argomento e le raggruppa da solo. Lo fa un modello che gira sul telefono: '
+          'si scarica una volta, poi lavora senza rete e senza costi. Meglio col Wi-Fi.',
+          style: t.bodyMedium?.copyWith(color: tk.muted),
+        ),
+        const SizedBox(height: 24),
+        if (list != null) ...[
+          _Choice(title: 'Spenti', subtitle: 'Le note restano come le scrivi', selected: off, onTap: () => _choose(null)),
+          // Prima il leggero: è la scelta più sobria.
+          for (final m in [...list]..sort((a, b) => a.approxMb.compareTo(b.approxMb)))
+            _Choice(
+              title: m.label,
+              subtitle: '${m.name} · circa ${m.approxMb} MB',
+              selected: m.chosen,
+              onTap: () => _choose(m.id),
+              below: m.chosen || m.state != 'missing' ? _ModelState(model: m, onRefresh: _load) : null,
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _Choice extends StatelessWidget {
+  const _Choice({required this.title, required this.subtitle, required this.selected, required this.onTap, this.below});
+
+  final String title, subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+  final Widget? below;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    final t = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: islandColor(context),
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: selected ? Tokens.blue : Colors.transparent, width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(title, style: t.titleMedium),
+                          const SizedBox(height: 2),
+                          // Il nome del modello, piccolo: per chi lo conosce.
+                          Text(subtitle, style: monoStyle(context, size: 11)),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                      color: selected ? Tokens.blue : tk.faint,
+                    ),
+                  ],
+                ),
+                ?below,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Sotto un modello: quanto manca, o se è pronto, o cosa è andato storto.
+class _ModelState extends StatelessWidget {
+  const _ModelState({required this.model, required this.onRefresh});
+
+  final TopicModelInfo model;
+  final VoidCallback onRefresh;
+
+  static String _mb(int bytes) => (bytes / 1e6).toStringAsFixed(0);
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final m = model;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: switch (m.state) {
+        'downloading' => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(value: m.progress, minHeight: 6),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    m.total == null || m.total == 0 ? 'Comincio…' : 'Scarico: ${_mb(m.done!)} di ${_mb(m.total!)} MB',
+                    style: t.bodySmall,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    await Core.cancelTopicModel(m.id);
+                    onRefresh();
+                  },
+                  child: const Text('Ferma'),
+                ),
+              ],
+            ),
+          ],
+        ),
+        'ready' => Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, size: 18, color: Tokens.green),
+            const SizedBox(width: 6),
+            Expanded(child: Text('Sul telefono', style: t.bodySmall)),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: Tokens.red),
+              onPressed: () async {
+                await Core.deleteTopicModel(m.id);
+                onRefresh();
+              },
+              child: const Text('Elimina'),
+            ),
+          ],
+        ),
+        'failed' => Row(
+          children: [
+            Expanded(
+              child: Text(m.error ?? 'Non è andata.', style: t.bodySmall?.copyWith(color: Tokens.red)),
+            ),
+            TextButton(
+              onPressed: () async {
+                await Core.chooseTopicModel(m.id);
+                onRefresh();
+              },
+              child: const Text('Riprova'),
+            ),
+          ],
+        ),
+        // Scelto ma fermato a metà: riprende da dove era arrivato.
+        _ => Row(
+          children: [
+            Expanded(child: Text('Fermo a metà', style: t.bodySmall)),
+            TextButton(
+              onPressed: () async {
+                await Core.chooseTopicModel(m.id);
+                onRefresh();
+              },
+              child: const Text('Riprendi'),
+            ),
+          ],
+        ),
+      },
     );
   }
 }

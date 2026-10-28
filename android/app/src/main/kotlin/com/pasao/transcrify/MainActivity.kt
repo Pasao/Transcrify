@@ -21,6 +21,7 @@ class MainActivity : FlutterActivity() {
     private val ownStore by lazy { Store(this) }
     private val queue get() = PillService.instance?.session?.queue ?: ownQueue
     private val ownQueue by lazy { Queue(this) }
+    private val topicModels by lazy { TopicModels(this) }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -57,6 +58,41 @@ class MainActivity : FlutterActivity() {
                 }
                 "deleteHistory" -> {
                     store.removeFromHistory(call.argument<Number>("at")!!.toLong())
+                    result.success(null)
+                }
+                "introSeen" -> {
+                    store.introSeen = true
+                    result.success(null)
+                }
+                "topicModels" -> result.success(TopicModel.entries.map { m ->
+                    val st = topicModels.status(m)
+                    mapOf(
+                        "id" to m.id, "label" to m.label, "name" to m.modelName, "approxMb" to m.approxMb,
+                        "chosen" to (topicModels.chosen == m),
+                        "state" to when (st) {
+                            TopicModels.Status.Missing -> "missing"
+                            is TopicModels.Status.Downloading -> "downloading"
+                            TopicModels.Status.Ready -> "ready"
+                            is TopicModels.Status.Failed -> "failed"
+                        },
+                        "done" to (st as? TopicModels.Status.Downloading)?.done,
+                        "total" to (st as? TopicModels.Status.Downloading)?.total,
+                        "error" to (st as? TopicModels.Status.Failed)?.reason,
+                    )
+                })
+                "chooseTopicModel" -> {
+                    // Sceglierlo vuol dire anche scaricarlo, se non c'è ancora. null = argomenti spenti.
+                    val m = TopicModel.of(call.argument<String>("id"))
+                    topicModels.chosen = m
+                    if (m != null) topicModels.download(m)
+                    result.success(null)
+                }
+                "cancelTopicModel" -> {
+                    TopicModel.of(call.argument<String>("id"))?.let(topicModels::cancel)
+                    result.success(null)
+                }
+                "deleteTopicModel" -> {
+                    TopicModel.of(call.argument<String>("id"))?.let(topicModels::delete)
                     result.success(null)
                 }
                 "notes" -> result.success(store.notes().map { it.toMap() })
@@ -201,6 +237,7 @@ class MainActivity : FlutterActivity() {
         val (hourEnd, dayEnd) = store.windowsEnd()
         return mapOf(
             "hasKey" to (store.apiKey != null),
+            "introSeen" to store.introSeen,
             "maskedKey" to store.maskedKey,
             "pillOn" to PillService.running,
             "purify" to store.purify,

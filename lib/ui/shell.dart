@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/native.dart';
 import 'common.dart';
 import 'dock.dart';
+import 'onboarding.dart';
 import 'pensieri.dart';
 import 'settings.dart';
 import 'theme.dart';
@@ -12,9 +13,8 @@ import 'trascrivi.dart';
 /// L'app: in cima il nome del potere in cui sei e le impostazioni, in mezzo la sua pagina,
 /// in fondo il Dock. Transcri ha la sua casa nel Dock, uguale in ogni potere.
 class Shell extends StatefulWidget {
-  const Shell({super.key, required this.onKeyRemoved, required this.onReplayIntro});
+  const Shell({super.key, required this.onReplayIntro});
 
-  final VoidCallback onKeyRemoved;
   final VoidCallback onReplayIntro;
 
   @override
@@ -24,6 +24,7 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> with WidgetsBindingObserver {
   Power power = Power.trascrivi;
   bool pillOn = false;
+  bool hasKey = true;
   DateTime? limitedUntil;
 
   /// La colonna dei poteri è aperta.
@@ -62,6 +63,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     if (!mounted || n != _loads) return;
     setState(() {
       pillOn = s.pillOn;
+      hasKey = s.hasKey;
       transcriColors = [s.accentA, s.accentB];
       if (s.accentMain != Tokens.blue) Tokens.useAccent(s.accentMain, s.accentSecond);
       limitedUntil = s.limited == null ? null : s.resetAt;
@@ -70,8 +72,38 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   Future<void> _openSettings() async {
     final result = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const SettingsPage()));
-    if (result == 'removed') widget.onKeyRemoved();
     if (result == 'intro') widget.onReplayIntro();
+    Core.refresh();
+  }
+
+  /// Senza chiave Transcri non può trascrivere: lo dice, e la chiave si mette da qui.
+  Future<void> _needKey() async {
+    final add = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (sheet) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Prima, una chiave Groq', style: display(context, size: 22)),
+            const SizedBox(height: 8),
+            Text(
+              'Transcri trascrive con Groq. La chiave è gratis e si prende in due minuti.',
+              style: Theme.of(sheet).textTheme.bodyMedium?.copyWith(color: context.tk.muted),
+            ),
+            const SizedBox(height: 20),
+            FilledButton(onPressed: () => Navigator.pop(sheet, true), child: const Text('Prendi la chiave')),
+          ],
+        ),
+      ),
+    );
+    if (add != true || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (ctx) => KeyPage(onSaved: () => Navigator.of(ctx).pop(), onClose: () => Navigator.of(ctx).pop()),
+      ),
+    );
     Core.refresh();
   }
 
@@ -137,7 +169,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                   onSwitch: () => setState(() => switching = !switching),
                   onStep: (by) => _go(power.step(by)),
                   onWrite: power == Power.pensieri ? () => openNote(context) : null,
-                  nest: TranscriNest(on: pillOn, limitedUntil: limitedUntil, onChanged: Core.refresh),
+                  nest: TranscriNest(on: pillOn, limitedUntil: limitedUntil, onChanged: Core.refresh, onNeedKey: hasKey ? null : _needKey),
                 ),
               ),
             ),

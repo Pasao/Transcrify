@@ -91,6 +91,11 @@ class Store(context: Context) {
 
     // --- Scelte ---
 
+    /** L'introduzione è già stata vista (o saltata): non si ripropone a ogni avvio. */
+    var introSeen: Boolean
+        get() = prefs.getBoolean("intro_seen", false)
+        set(v) = prefs.edit().putBoolean("intro_seen", v).apply()
+
     var purify: Boolean
         get() = prefs.getBoolean("purify", false)
         set(v) = prefs.edit().putBoolean("purify", v).apply()
