@@ -22,8 +22,6 @@ class TrascriviPage extends StatefulWidget {
 class _TrascriviPageState extends State<TrascriviPage> {
   final Set<String> openDays = {};
   List<Entry>? entries;
-  List<Waiting> waiting = [];
-  bool flushing = false;
 
   @override
   void initState() {
@@ -38,29 +36,14 @@ class _TrascriviPageState extends State<TrascriviPage> {
     super.dispose();
   }
 
-  /// "Riprova ora": trascrive quello che è rimasto indietro.
-  Future<void> _flush() async {
-    final w = await Core.waiting();
-    if (w.isEmpty || flushing) return;
-    setState(() => flushing = true);
-    await Core.flushWaiting();
-    if (!mounted) return;
-    setState(() => flushing = false);
-    _load();
-  }
-
   /// Le letture si possono accavallare: vale solo l'ultima.
   int _loads = 0;
 
   Future<void> _load() async {
     final n = ++_loads;
     final list = await Core.history();
-    final w = await Core.waiting();
     if (!mounted || n != _loads) return;
-    setState(() {
-      entries = list.where((x) => !_deleting.contains(x.at)).toList();
-      waiting = w;
-    });
+    setState(() => entries = list.where((x) => !_deleting.contains(x.at)).toList());
   }
 
   /// Le trascrizioni appena cancellate: spariscono subito, ma per qualche secondo si possono riavere.
@@ -111,7 +94,7 @@ class _TrascriviPageState extends State<TrascriviPage> {
     final list = entries;
     return list == null
         ? const SizedBox.shrink()
-        : list.isEmpty && waiting.isEmpty
+        : list.isEmpty
         // Da vuota la pagina non scorre: non c'è niente sotto.
         ? _Empty(bottom: widget.bottom)
         // Le schede stanno in basso, dove arriva il pollice; se sono tante, si scorre.
@@ -194,16 +177,6 @@ class _TrascriviPageState extends State<TrascriviPage> {
                               ),
                       ),
                     ],
-                    if (waiting.isNotEmpty)
-                      _WaitingList(
-                        items: waiting,
-                        busy: flushing,
-                        onRetry: _flush,
-                        onDiscard: (w) async {
-                          await Core.discardWaiting(w.id);
-                          _load();
-                        },
-                      ),
                     SizedBox(height: widget.bottom + 24),
                   ],
                 ),
@@ -211,64 +184,6 @@ class _TrascriviPageState extends State<TrascriviPage> {
             ),
           );
   }
-}
-
-/// Registrazioni salvate ma non ancora trascritte: aspettano la rete. Non si perdono.
-class _WaitingList extends StatelessWidget {
-  const _WaitingList({required this.items, required this.busy, required this.onRetry, required this.onDiscard});
-
-  final List<Waiting> items;
-  final bool busy;
-  final VoidCallback onRetry;
-  final ValueChanged<Waiting> onDiscard;
-
-  @override
-  Widget build(BuildContext context) {
-    final tk = context.tk;
-    final t = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
-        decoration: BoxDecoration(
-          color: Tokens.yellow.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Tokens.yellow.withValues(alpha: 0.35)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text('In attesa', style: display(context, size: 20))),
-                busy
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      )
-                    : TextButton(onPressed: onRetry, child: const Text('Riprova ora')),
-              ],
-            ),
-            Text('Registrazioni salvate che non sono riuscite a partire. Riprova quando hai rete.', style: t.bodySmall),
-            const SizedBox(height: 6),
-            for (final w in items)
-              Row(
-                children: [
-                  const Icon(Icons.graphic_eq_rounded, size: 18, color: Tokens.yellow),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text('${dayLabel(w.at)}, ${hm(w.at)} · ${_duration(w.seconds)}', style: t.bodyMedium?.copyWith(color: tk.text)),
-                  ),
-                  DeleteButton(onDelete: () => onDiscard(w)),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static String _duration(int s) => s < 60 ? '$s s' : '${s ~/ 60} min ${s % 60 > 0 ? '${s % 60} s' : ''}'.trim();
 }
 
 /// Stato vuoto: un giorno ancora senza schede e una frase. Sta in basso, vicino al bottone.

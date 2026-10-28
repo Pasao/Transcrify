@@ -116,6 +116,12 @@ class _SettingsPageState extends State<SettingsPage> {
     _load();
   }
 
+  Future<void> _simulate(String what, bool on) async {
+    HapticFeedback.selectionClick();
+    await Core.simulate(what, on);
+    _load();
+  }
+
   void _setFakeWaiting(bool on) {
     HapticFeedback.selectionClick();
     Core.setFakeWaiting(on);
@@ -241,17 +247,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         icon: Icons.insights_rounded,
                         color: Tokens.green,
                         title: 'Utilizzo',
-                        value: '${(st.dayUsed / 60).round()} di ${(st.dayLimit / 60).round()} min oggi',
-                        onTap: () => _open(
-                          LiveSettings(
-                            title: 'Utilizzo',
-                            build: (context, st, reload) => [
-                              UsageCard(label: 'Trascrizione', children: speechMeters(st)),
-                              const SizedBox(height: 20),
-                              UsageCard(label: 'Pulizia del testo', children: textMeters(st)),
-                            ],
-                          ),
-                        ),
+                        value: '${(_dayUsed(st) / 60).round()} di ${(st.dayLimit / 60).round()} min oggi',
+                        onTap: () => _open(const UsagePage()),
                       ),
                     ],
                   ),
@@ -285,6 +282,30 @@ class _SettingsPageState extends State<SettingsPage> {
                           subtitle: 'Transcri dorme come quando finisce il limite',
                           trailing: Switch(value: st.simulateLimit, onChanged: _setLimit),
                           onTap: () => _setLimit(!st.simulateLimit),
+                        ),
+                        SettingsRow(
+                          icon: Icons.wifi_off_rounded,
+                          color: Tokens.blue,
+                          title: 'Senza rete',
+                          subtitle: 'Groq non risponde: le registrazioni vanno in attesa',
+                          trailing: Switch(value: st.simOffline, onChanged: (on) => _simulate('offline', on)),
+                          onTap: () => _simulate('offline', !st.simOffline),
+                        ),
+                        SettingsRow(
+                          icon: Icons.key_off_rounded,
+                          color: Tokens.blue,
+                          title: 'Chiave rifiutata',
+                          subtitle: 'Groq dice che la chiave non è valida',
+                          trailing: Switch(value: st.simBadKey, onChanged: (on) => _simulate('badKey', on)),
+                          onTap: () => _simulate('badKey', !st.simBadKey),
+                        ),
+                        SettingsRow(
+                          icon: Icons.mic_off_rounded,
+                          color: Tokens.blue,
+                          title: 'Microfono negato',
+                          subtitle: 'Come se non avessi dato il permesso',
+                          trailing: Switch(value: st.simNoMic, onChanged: (on) => _simulate('noMic', on)),
+                          onTap: () => _simulate('noMic', !st.simNoMic),
                         ),
                         SettingsRow(
                           icon: Icons.cloud_off_rounded,
@@ -465,6 +486,26 @@ class _Unfold extends StatelessWidget {
   );
 }
 
+/// La pagina dell'utilizzo: tutti i contatori, ognuno nella sua scheda.
+class UsagePage extends StatelessWidget {
+  const UsagePage({super.key});
+
+  @override
+  Widget build(BuildContext context) => LiveSettings(
+    title: 'Utilizzo',
+    build: (context, st, reload) => [
+      UsageCard(label: 'Trascrizione', children: speechMeters(st)),
+      const SizedBox(height: 20),
+      UsageCard(label: 'Pulizia del testo', children: textMeters(st)),
+    ],
+  );
+}
+
+/// I minuti usati come li vedi: se i minuti sono finiti (anche per finta, nelle prove) il contatore è pieno,
+/// così quello che leggi qui e quello che fa Transcri dicono la stessa cosa.
+int _hourUsed(CoreState st) => st.limited == 'hourly' ? st.hourLimit : st.hourUsed;
+int _dayUsed(CoreState st) => st.limited == 'daily' ? st.dayLimit : st.dayUsed;
+
 /// I contatori della trascrizione: quante oggi e i minuti di audio, con quando si azzerano.
 List<Widget> speechMeters(CoreState st) => [
   _Meter(
@@ -476,17 +517,17 @@ List<Widget> speechMeters(CoreState st) => [
   ),
   _Meter(
     label: "Audio quest'ora",
-    value: '${(st.hourUsed / 60).round()}',
+    value: '${(_hourUsed(st) / 60).round()}',
     of: '${(st.hourLimit / 60).round()} min',
-    fraction: st.hourUsed / st.hourLimit,
-    resets: st.hourEnd,
+    fraction: _hourUsed(st) / st.hourLimit,
+    resets: st.limited == 'hourly' ? st.resetAt : st.hourEnd,
   ),
   _Meter(
     label: 'Audio oggi',
-    value: '${(st.dayUsed / 60).round()}',
+    value: '${(_dayUsed(st) / 60).round()}',
     of: '${(st.dayLimit / 60).round()} min',
-    fraction: st.dayUsed / st.dayLimit,
-    resets: st.dayEnd,
+    fraction: _dayUsed(st) / st.dayLimit,
+    resets: st.limited == 'daily' ? st.resetAt : st.dayEnd,
   ),
   const _Note("Groq conta i minuti di audio, non il tempo che passa: in un'ora puoi mandargli fino a 120 minuti di parlato."),
 ];

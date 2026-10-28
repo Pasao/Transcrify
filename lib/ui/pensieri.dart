@@ -83,14 +83,19 @@ class _PensieriPageState extends State<PensieriPage> {
     if (all == null) return const SizedBox.shrink();
     final tk = context.tk;
     final shown = _found(all);
+    if (all.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, widget.bottom + 24),
+        child: const Column(mainAxisAlignment: MainAxisAlignment.end, children: [_EmptyNotes()]),
+      );
+    }
     return ListView(
       padding: EdgeInsets.fromLTRB(16, 8, 16, widget.bottom + 24),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       children: [
-        if (all.isNotEmpty) ...[SearchField(controller: _search, hint: 'Cerca quello che ricordi'), const SizedBox(height: 14)],
-        if (all.isEmpty)
-          const _EmptyNotes()
-        else if (shown.isEmpty)
+        SearchField(controller: _search, hint: 'Cerca quello che ricordi'),
+        const SizedBox(height: 14),
+        if (shown.isEmpty)
           _Hint(top: 'Niente con «${_search.text.trim()}».', bottom: 'Prova con un\'altra parola.', color: tk.muted)
         else
           Masonry(

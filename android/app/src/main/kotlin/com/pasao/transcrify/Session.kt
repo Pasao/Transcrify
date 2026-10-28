@@ -133,7 +133,7 @@ class Session(private val context: Context, private val store: Store, private va
         if (phase == Phase.RECORDING || phase == Phase.PROCESSING) return
         refreshLimits()
         if (phase == Phase.LIMITED) return
-        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+        if (Simulated.noMic || context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             return fail("Microfono non consentito", Fix.SETTINGS)
         }
         try {

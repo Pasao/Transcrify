@@ -17,6 +17,9 @@ class CoreState {
       limited = m['limited'] as String?,
       resetAt = m['resetAt'] == null ? null : DateTime.fromMillisecondsSinceEpoch(m['resetAt'] as int),
       simulateLimit = m['simulateLimit'] as bool,
+      simOffline = m['simOffline'] as bool,
+      simBadKey = m['simBadKey'] as bool,
+      simNoMic = m['simNoMic'] as bool,
       sttModel = m['sttModel'] as String,
       llmModel = m['llmModel'] as String,
       sttLimits = (m['sttLimits'] as Map).cast<String, String>(),
@@ -35,6 +38,9 @@ class CoreState {
       dayLimit = m['dayLimit'] as int;
 
   final bool hasKey, pillOn, purify, customPrompt, simulateLimit;
+
+  /// I guasti finti delle prove: niente rete, chiave rifiutata, microfono negato.
+  final bool simOffline, simBadKey, simNoMic;
 
   /// L'introduzione è già stata vista o saltata.
   final bool introSeen;
@@ -366,6 +372,10 @@ class Core {
   static Future<void> setPrompt(String? prompt) => _ch.invokeMethod('setPrompt', {'prompt': prompt});
 
   static Future<void> setMode(String mode) => _ch.invokeMethod('setMode', {'mode': mode});
+
+  /// Un guasto finto delle prove: 'offline', 'badKey' o 'noMic'.
+  static Future<void> simulate(String what, bool on) => _ch.invokeMethod('simulate', {'what': what, 'on': on});
+
   static Future<void> simulateLimit(bool on) => _ch.invokeMethod('simulateLimit', {'on': on});
 
   static Future<void> setPurify(bool on) => _ch.invokeMethod('setPurify', {'on': on});

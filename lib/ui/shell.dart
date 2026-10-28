@@ -6,6 +6,7 @@ import 'dock.dart';
 import 'onboarding.dart';
 import 'pensieri.dart';
 import 'settings.dart';
+import 'status.dart';
 import 'theme.dart';
 import 'transcri.dart';
 import 'trascrivi.dart';
@@ -26,6 +27,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   bool pillOn = false;
   bool hasKey = true;
   DateTime? limitedUntil;
+  int waiting = 0;
 
   /// La colonna dei poteri è aperta.
   bool switching = false;
@@ -60,8 +62,10 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   Future<void> _load() async {
     final n = ++_loads;
     final s = await Core.state();
+    final w = await Core.waiting();
     if (!mounted || n != _loads) return;
     setState(() {
+      waiting = w.length;
       pillOn = s.pillOn;
       hasKey = s.hasKey;
       transcriColors = [s.accentA, s.accentB];
@@ -115,6 +119,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final bottom = Dock.height + MediaQuery.paddingOf(context).bottom;
+    final status = Status(limitedUntil: limitedUntil, waiting: waiting, hasKey: hasKey);
     final page = switch (power) {
       Power.trascrivi => TrascriviPage(key: const ValueKey(Power.trascrivi), bottom: bottom),
       Power.pensieri => PensieriPage(key: const ValueKey(Power.pensieri), bottom: bottom),
@@ -138,6 +143,17 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                             layoutBuilder: (current, previous) => Stack(alignment: Alignment.centerLeft, children: [...previous, ?current]),
                             child: Text(power.label, key: ValueKey(power), style: display(context, size: 26)),
                           ),
+                        ),
+                        // Se qualcosa non va o aspetta, lo dice qui, accanto alle impostazioni.
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          child: status.any
+                              ? Padding(
+                                  key: ValueKey(status.short),
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: StatusChip(status: status, onTap: () => showStatus(context)),
+                                )
+                              : const SizedBox.shrink(),
                         ),
                         IconButton(onPressed: _openSettings, icon: const Icon(Icons.settings_rounded), tooltip: 'Impostazioni'),
                       ],
@@ -169,7 +185,13 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                   onSwitch: () => setState(() => switching = !switching),
                   onStep: (by) => _go(power.step(by)),
                   onWrite: power == Power.pensieri ? () => openNote(context) : null,
-                  nest: TranscriNest(on: pillOn, limitedUntil: limitedUntil, onChanged: Core.refresh, onNeedKey: hasKey ? null : _needKey),
+                  nest: TranscriNest(
+                    on: pillOn,
+                    limitedUntil: limitedUntil,
+                    onChanged: Core.refresh,
+                    onNeedKey: hasKey ? null : _needKey,
+                    onAsleep: () => showStatus(context),
+                  ),
                 ),
               ),
             ),

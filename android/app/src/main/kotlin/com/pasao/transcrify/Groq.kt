@@ -134,6 +134,9 @@ class Groq(private val key: String) {
     }
 
     private fun request(path: String, setup: (HttpURLConnection) -> Unit): String {
+        // Le prove: la rete che manca, la chiave rifiutata.
+        if (Simulated.offline) throw GroqError("Nessuna connessione", offline = true)
+        if (Simulated.badKey) throw GroqError("Chiave non valida")
         val c = URL(BASE + path).openConnection() as HttpURLConnection
         try {
             c.connectTimeout = 20_000

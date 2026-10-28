@@ -12,7 +12,10 @@ import 'theme.dart';
 /// sbatte gli occhi e si guarda intorno. Toccando il nido esce e vola al bordo; toccandolo di
 /// nuovo torna, atterra con un sobbalzo e il nido si illumina. Quando è fuori resta il suo contorno.
 class TranscriNest extends StatefulWidget {
-  const TranscriNest({super.key, required this.on, required this.limitedUntil, required this.onChanged, this.onNeedKey});
+  const TranscriNest({super.key, required this.on, required this.limitedUntil, required this.onChanged, this.onNeedKey, this.onAsleep});
+
+  /// Se dorme (minuti finiti): toccarlo dice perché e quando torna.
+  final VoidCallback? onAsleep;
 
   /// Se manca la chiave Groq: toccarlo la chiede invece di farlo uscire.
   final VoidCallback? onNeedKey;
@@ -128,7 +131,10 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
   /// Il rilascio: il nido rimbalza e, nel rimbalzo, Transcri parte (o torna).
   /// Funziona anche a metà di un volo: il nuovo parte da dove si trova la bolla.
   void _release() {
-    if (_blocked) return;
+    if (_blocked) {
+      HapticFeedback.selectionClick();
+      return widget.onAsleep?.call();
+    }
     if (widget.onNeedKey != null) {
       _press.animateBack(0, duration: const Duration(milliseconds: 520), curve: Curves.elasticOut);
       return widget.onNeedKey!();

@@ -137,6 +137,10 @@ class MainActivity : FlutterActivity() {
                     PillService.instance?.session?.reloadSettings()
                     result.success(null)
                 }
+                "simulate" -> {
+                    Simulated.set(call.argument<String>("what")!!, call.argument<Boolean>("on")!!)
+                    result.success(null)
+                }
                 "simulateLimit" -> {
                     store.simulateLimit = call.argument<Boolean>("on")!!
                     PillService.instance?.session?.clearError()
@@ -266,6 +270,9 @@ class MainActivity : FlutterActivity() {
             },
             "resetAt" to store.resetAt(),
             "simulateLimit" to store.simulateLimit,
+            "simOffline" to Simulated.offline,
+            "simBadKey" to Simulated.badKey,
+            "simNoMic" to Simulated.noMic,
             "sttModel" to store.transcriptionModel,
             "llmModel" to store.cleanupModel,
             "sttLimits" to store.modelLimits(store.transcriptionModel),

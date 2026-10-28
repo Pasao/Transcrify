@@ -127,6 +127,10 @@ class Store(context: Context) {
         set(v) = prefs.edit().putString("models_cache", v).putLong("models_cache_at", System.currentTimeMillis()).apply()
 
     /** Solo per provare: fa finta che i minuti del giorno siano finiti. */
+    init {
+        Simulated.load(prefs)
+    }
+
     var simulateLimit: Boolean
         get() = prefs.getBoolean("simulate_limit", false)
         set(v) = prefs.edit().putBoolean("simulate_limit", v).apply()
