@@ -220,11 +220,9 @@ fun PillBar(svc: PillService) {
         }
     }
     val jump = kotlin.math.sin(hop.value * Math.PI.toFloat()) * 8f
-    // Mentre trascrive si allarga verso il centro dello schermo e respira piano, sempre con la sua forma
-    // di pillola: niente onde nel fianco, che lo facevano sembrare ammaccato.
+    // Mentre trascrive dal fianco verso il centro escono onde; il lato sul bordo resta fermo.
     val working by animateFloatAsState(if (phase == Phase.PROCESSING) 1f else 0f, tween(300), label = "working")
-    val breathe = 0.8f + 0.2f * kotlin.math.sin(shift * 2f * Math.PI.toFloat())
-    val shape = CircleShape
+    val shape = if (working > 0f) OutwardWave(svc.pillRight, shift, working) else CircleShape
     Box(
         Modifier
             .fillMaxSize()
@@ -241,7 +239,7 @@ fun PillBar(svc: PillService) {
                     // Mentre ascolta si ingrossa con la voce: la forma resta, cambia quanto è grande.
                     // Cresce solo verso il centro dello schermo: il lato sul bordo resta dov'è.
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (svc.pillRight) 1f else 0f, 0.5f)
-                    scaleX = 1f + voice * 0.45f + hold.coerceAtLeast(0f) * 0.9f + awake * 0.08f + working * WORK_GROW * breathe
+                    scaleX = 1f + voice * 0.45f + hold.coerceAtLeast(0f) * 0.9f + awake * 0.08f + working * WORK_GROW
                     scaleY = 1f + voice * 0.08f + hold.coerceAtLeast(0f) * 0.14f
                     alpha = if (phase == Phase.LIMITED) 0.5f else lerp(Palette.SMOKE_ALPHA, 1f, awake)
                 }
@@ -267,6 +265,60 @@ fun PillBar(svc: PillService) {
                 }
                 .border(1.dp, Palette.IdleStroke, shape)
         )
+    }
+}
+
+/**
+ * La pillola mentre trascrive: resta una pillola della sua larghezza normale, attaccata al bordo,
+ * e dal fianco verso il centro dello schermo escono onde che scorrono dall'alto in basso.
+ * Le onde vanno solo verso fuori, mai dentro: nessuna ammaccatura. Agli estremi si spengono,
+ * così le punte restano tonde e il fianco si unisce alle punte senza scalini.
+ *
+ * Il riquadro è già allargato di [WORK_GROW] (vedi scaleX): la parte in più, dal lato del centro,
+ * è lo spazio dove l'onda può uscire.
+ */
+private class OutwardWave(val right: Boolean, val phase: Float, val amount: Float) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: androidx.compose.ui.geometry.Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density,
+    ): androidx.compose.ui.graphics.Outline {
+        val w = size.width
+        val h = size.height
+        // Quanto del riquadro è "in più": una volta allargato, la pillola di base torna larga com'era.
+        val extra = w * (1f - 1f / (1f + WORK_GROW * amount))
+        val r = (w - extra) / 2
+        // Di quanto esce l'onda all'altezza y: da 0 (il fianco della pillola) a tutta la parte in più.
+        fun bulge(y: Float): Float {
+            val t = ((y - r) / (h - 2 * r)).coerceIn(0f, 1f)
+            val taper = kotlin.math.sin(t * Math.PI.toFloat())
+            return extra * taper * (0.5f + 0.5f * kotlin.math.sin((t * 1.5f - phase) * 2f * Math.PI.toFloat()))
+        }
+        val path = androidx.compose.ui.graphics.Path()
+        val steps = 32
+        if (right) {
+            // Bordo a destra: la pillola sta in [extra, w], l'onda esce verso sinistra.
+            path.moveTo(extra, r)
+            path.arcTo(Rect(extra, 0f, w, 2 * r), 180f, 180f, false)
+            path.lineTo(w, h - r)
+            path.arcTo(Rect(extra, h - 2 * r, w, h), 0f, 180f, false)
+            for (i in steps downTo 0) {
+                val y = r + (h - 2 * r) * i / steps
+                path.lineTo(extra - bulge(y), y)
+            }
+        } else {
+            // Bordo a sinistra: la pillola sta in [0, w - extra], l'onda esce verso destra.
+            val inner = w - extra
+            path.moveTo(0f, r)
+            path.arcTo(Rect(0f, 0f, inner, 2 * r), 180f, 180f, false)
+            for (i in 0..steps) {
+                val y = r + (h - 2 * r) * i / steps
+                path.lineTo(inner + bulge(y), y)
+            }
+            path.arcTo(Rect(0f, h - 2 * r, inner, h), 0f, 180f, false)
+        }
+        path.close()
+        return androidx.compose.ui.graphics.Outline.Generic(path)
     }
 }
 
@@ -993,7 +1045,7 @@ private fun SmallButton(icon: ImageVector, label: String, tint: Color, onClick: 
 /** Durata del ritorno: l'app aspetta questo tempo prima di riattaccare la bolla al bottone. */
 const val OUTRO_MS = 640
 
-/** Mentre trascrive la pillola si allarga verso il centro di questa frazione, respirando appena. */
+/** Mentre trascrive il riquadro si allarga verso il centro di questa frazione: lì escono le onde. */
 const val WORK_GROW = 0.45f
 
 /** Gli angoli di Transcri a casa (nel nido dell'app e nel widget), in proporzione al lato corto. */
