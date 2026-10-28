@@ -407,6 +407,9 @@ class Core {
   /// Nelle prove: il pizzico al contrario (stringere = più argomenti), per provare tutte e due le direzioni.
   static final pinchReversed = ValueNotifier<bool>(false);
 
+  /// Apre il «Condividi» di Android col testo.
+  static Future<void> share(String text) => _ch.invokeMethod('share', {'text': text});
+
   static Future<void> deleteNote(String id) async {
     if (!preview.value) return _ch.invokeMethod('deleteNote', {'id': id});
     _previewNotes.removeWhere((x) => x.id == id);

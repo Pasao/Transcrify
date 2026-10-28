@@ -102,6 +102,13 @@ class MainActivity : FlutterActivity() {
                 "notes" -> result.success(store.notes().map { it.toMap() + ("topics" to topics.state(it.id, it.text)) })
                 "noteTopics" -> result.success(topics.topics(call.argument<String>("id")!!))
                 "albums" -> result.success(topics.albums())
+                "share" -> {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                        .setType("text/plain")
+                        .putExtra(android.content.Intent.EXTRA_TEXT, call.argument<String>("text")!!)
+                    startActivity(android.content.Intent.createChooser(send, null))
+                    result.success(null)
+                }
                 "saveNote" -> {
                     val id = call.argument<String>("id")!!
                     store.saveNote(

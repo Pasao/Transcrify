@@ -50,6 +50,46 @@ class _PensieriPageState extends State<PensieriPage> {
   List<Note>? notes;
   final _search = TextEditingController();
 
+  /// Le note scelte tenendole premute. Finché ce n'è almeno una, toccare una nota la sceglie invece di aprirla.
+  final selected = <String>{};
+
+  void _toggle(String id) => setState(() => selected.contains(id) ? selected.remove(id) : selected.add(id));
+
+  List<Note> get _chosen => [
+    for (final n in notes ?? <Note>[])
+      if (selected.contains(n.id)) n,
+  ];
+
+  String _textOf(List<Note> list) => list.map((n) => [n.title, n.text].where((s) => s.trim().isNotEmpty).join('\n\n')).join('\n\n———\n\n');
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: _textOf(_chosen)));
+    HapticFeedback.mediumImpact();
+    setState(selected.clear);
+  }
+
+  Future<void> _share() async {
+    await Core.share(_textOf(_chosen));
+    setState(selected.clear);
+  }
+
+  /// Eliminare: le note spariscono subito, «Annulla» le rimette tutte.
+  Future<void> _delete() async {
+    final gone = _chosen;
+    setState(selected.clear);
+    for (final n in gone) {
+      await Core.deleteNote(n.id);
+    }
+    Core.refresh();
+    if (!mounted) return;
+    if (await undoable(context, gone.length == 1 ? 'Nota eliminata' : '${gone.length} note eliminate')) {
+      for (final n in gone) {
+        await Core.saveNote(n);
+      }
+      Core.refresh();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -92,7 +132,7 @@ class _PensieriPageState extends State<PensieriPage> {
         child: const Column(mainAxisAlignment: MainAxisAlignment.end, children: [_EmptyNotes()]),
       );
     }
-    return ListView(
+    final list = ListView(
       padding: EdgeInsets.fromLTRB(16, 8, 16, widget.bottom + 24),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       children: [
@@ -102,8 +142,38 @@ class _PensieriPageState extends State<PensieriPage> {
           _Hint(top: 'Niente con «${_search.text.trim()}».', bottom: 'Prova con un\'altra parola.', color: tk.muted)
         else
           Masonry(
-            children: [for (final n in shown) NoteCard(key: ValueKey(n.id), note: n, onOpen: () => openNote(context, n))],
+            children: [
+              for (final n in shown)
+                NoteCard(
+                  key: ValueKey(n.id),
+                  note: n,
+                  selected: selected.contains(n.id),
+                  onOpen: selected.isEmpty ? () => openNote(context, n) : () => _toggle(n.id),
+                  onSelect: () => _toggle(n.id),
+                ),
+            ],
           ),
+      ],
+    );
+    if (selected.isEmpty) return list;
+    // Le azioni sulle note scelte, in fondo, sopra il Dock.
+    return Stack(
+      children: [
+        list,
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: widget.bottom + 8,
+          child: SelectionBar(
+            count: selected.length,
+            onClose: () => setState(selected.clear),
+            actions: [
+              (Icons.content_copy_rounded, 'Copia', _copy),
+              (Icons.share_rounded, 'Condividi', _share),
+              (Icons.delete_outline_rounded, 'Elimina', _delete),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -224,21 +294,59 @@ class _ArgomentiPageState extends State<ArgomentiPage> {
     final t = Theme.of(context).textTheme;
     if (list.isEmpty) {
       final ready = notes.values.where((n) => n.topics == 'ready').length;
+      Widget ghost(double opacity) => Opacity(
+        opacity: opacity,
+        child: Container(
+          decoration: BoxDecoration(color: tk.surface, borderRadius: BorderRadius.circular(20)),
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FractionallySizedBox(
+                widthFactor: 0.6,
+                child: Container(
+                  height: 10,
+                  decoration: BoxDecoration(color: tk.border, borderRadius: BorderRadius.circular(5)),
+                ),
+              ),
+              const Spacer(),
+              FractionallySizedBox(
+                widthFactor: 0.4,
+                child: Container(
+                  height: 8,
+                  decoration: BoxDecoration(color: tk.border, borderRadius: BorderRadius.circular(4)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
       return Padding(
-        padding: EdgeInsets.fromLTRB(20, 0, 20, widget.bottom + 24),
+        padding: EdgeInsets.fromLTRB(16, 0, 16, widget.bottom + 24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            GrainIcon(level: 2, size: 40, color: tk.faint),
-            const SizedBox(height: 16),
-            Text('Un argomento compare qui quando torna in almeno due note.', style: t.bodyLarge?.copyWith(color: tk.muted)),
-            const SizedBox(height: 6),
-            Text(
-              ready == 0
-                  ? 'Accendi «Dividi per argomento» nelle impostazioni.'
-                  : '$ready ${ready == 1 ? 'nota divisa' : 'note divise'} per ora: più ne scrivi, più ne trova.',
-              style: t.bodySmall,
+            SizedBox(
+              height: 230,
+              child: GridView.count(
+                crossAxisCount: 2,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 1.25,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [ghost(1), ghost(0.7), ghost(0.45), ghost(0.25)],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                ready == 0
+                    ? 'Gli argomenti di cui parli più spesso stanno qui.\nAccendi «Dividi per argomento» nelle impostazioni.'
+                    : 'Gli argomenti di cui parli più spesso stanno qui.\nUno compare quando torna almeno tre volte.',
+                style: t.bodyLarge?.copyWith(color: tk.muted),
+              ),
             ),
           ],
         ),
@@ -358,6 +466,47 @@ class _Hint extends StatelessWidget {
   }
 }
 
+/// La barra delle note scelte: quante sono, e cosa farne. Come in Samsung Note, fuori dalla nota.
+class SelectionBar extends StatelessWidget {
+  const SelectionBar({super.key, required this.count, required this.onClose, required this.actions});
+
+  final int count;
+  final VoidCallback onClose;
+  final List<(IconData, String, VoidCallback)> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
+      decoration: BoxDecoration(color: const Color(0xFF242424), borderRadius: BorderRadius.circular(32), boxShadow: islandShadow),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onClose,
+            icon: const Icon(Icons.close_rounded, color: Colors.white),
+            tooltip: 'Annulla',
+          ),
+          Expanded(
+            child: Text(
+              count == 1 ? '1 nota' : '$count note',
+              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+          for (final (icon, label, onTap) in actions)
+            IconButton(
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                onTap();
+              },
+              tooltip: label,
+              icon: Icon(icon, color: label == 'Elimina' ? const Color(0xFFFF8A70) : Colors.white),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// La barra per cercare: tonda, in cima alla pagina.
 class SearchField extends StatelessWidget {
   const SearchField({super.key, required this.controller, required this.hint});
@@ -427,10 +576,14 @@ class Masonry extends StatelessWidget {
 /// Una nota nella lista: il titolo, se c'è, poi l'inizio del testo e quando l'hai toccata l'ultima volta.
 /// Tenendola premuta la copi, come le trascrizioni.
 class NoteCard extends StatelessWidget {
-  const NoteCard({super.key, required this.note, required this.onOpen});
+  const NoteCard({super.key, required this.note, required this.onOpen, required this.onSelect, this.selected = false});
 
   final Note note;
   final VoidCallback onOpen;
+
+  /// Tenerla premuta la sceglie, come in Samsung Note: poi in fondo compaiono le azioni.
+  final VoidCallback onSelect;
+  final bool selected;
 
   static const _maxLines = 9;
 
@@ -443,15 +596,17 @@ class NoteCard extends StatelessWidget {
     final tk = context.tk;
     final t = Theme.of(context).textTheme;
     return Material(
-      color: tk.surface,
-      borderRadius: BorderRadius.circular(18),
+      color: selected ? Tokens.blue.withValues(alpha: 0.14) : tk.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: selected ? Tokens.blue : Colors.transparent, width: 1.5),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: onOpen,
-        onLongPress: () async {
-          await Clipboard.setData(ClipboardData(text: [note.title, note.text].where((s) => s.trim().isNotEmpty).join('\n\n')));
-          // Il messaggio "copiato" lo mostra già Android: qui basta la vibrazione.
+        onLongPress: () {
           HapticFeedback.mediumImpact();
+          onSelect();
         },
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -484,7 +639,7 @@ class NoteCard extends StatelessWidget {
   }
 }
 
-/// Il segno degli argomenti su una nota: una piccola nuvola se sono pronti (si può pizzicare),
+/// Il segno degli argomenti su una nota: il mirino se sono pronti (si può pizzicare),
 /// un cerchio che gira mentre li sta facendo. Niente se sono spenti o se la nota è cambiata.
 class TopicsBadge extends StatelessWidget {
   const TopicsBadge({super.key, required this.state});
@@ -493,10 +648,7 @@ class TopicsBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (state) {
-    'ready' => Tooltip(
-      message: 'Argomenti pronti: pizzica la nota',
-      child: Icon(Icons.bubble_chart_rounded, size: 15, color: Tokens.blue),
-    ),
+    'ready' => const Tooltip(message: 'Divisa per argomento: pizzica la nota', child: GrainIcon(level: 1, size: 14)),
     'pending' => SizedBox(width: 11, height: 11, child: CircularProgressIndicator(strokeWidth: 1.5, color: context.tk.faint)),
     _ => const SizedBox.shrink(),
   };
@@ -516,7 +668,7 @@ class TopicTextController extends TextEditingController {
   /// Il testo per cui [topics] vale.
   String? topicsFor;
 
-  /// 0 spenti, 1 larghi, 2 medi, 3 frasi chiave, 4 parole chiave.
+  /// 0 spento, 1 argomenti, 2 argomenti specifici, 3 frasi chiave, 4 parole chiave.
   int get level => _level;
   int _level = 0;
 
@@ -695,7 +847,7 @@ class _NoteEditorState extends State<NoteEditor> {
 
   // --- Gli argomenti: si accendono pizzicando (o col tasto nella barra) ---
 
-  static const _levels = ['Argomenti spenti', 'Argomenti larghi', 'Argomenti medi', 'Frasi chiave', 'Parole chiave'];
+  static const _levels = ['Spento', 'Argomenti', 'Argomenti specifici', 'Frasi chiave', 'Parole chiave'];
 
   /// Il testo scorre col suo controller: mentre pizzichi resta fermo dov'era.
   final _scroll = ScrollController();
@@ -893,7 +1045,6 @@ class _NoteEditorState extends State<NoteEditor> {
               onPressed: () => Navigator.of(context).pop(_current),
             ),
             actions: [
-              if (!fresh) DeleteButton(onDelete: () => Navigator.of(context).pop(null)),
               TextButton(onPressed: () => Navigator.of(context).pop(_current), child: const Text('Fatto')),
               const SizedBox(width: 8),
             ],

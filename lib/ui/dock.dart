@@ -62,15 +62,21 @@ class Dock extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          PowerButton(power: power, onTap: onSwitch, onStep: onStep),
-          const Spacer(),
-          // Le pagine del potere in cui sei: icone sole, quella accesa nel colore delle azioni.
-          if (pages.length > 1) ...[
-            Island(
-              padding: const EdgeInsets.all((dockIsland - dockRound) / 2),
+          // Il potere e le sue pagine sono un pezzo solo: si capisce che le pagine sono sue,
+          // e il potere si tira su lo stesso per cambiarlo.
+          if (pages.length > 1)
+            Container(
+              height: dockIsland,
+              padding: const EdgeInsets.only(right: (dockIsland - dockRound) / 2),
+              decoration: BoxDecoration(
+                color: islandColor(context),
+                borderRadius: BorderRadius.circular(dockIsland / 2),
+                boxShadow: islandShadow,
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  PowerButton(power: power, onTap: onSwitch, onStep: onStep),
                   for (var i = 0; i < pages.length; i++)
                     Tooltip(
                       message: pages[i].$2,
@@ -82,8 +88,8 @@ class Dock extends StatelessWidget {
                         },
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
-                          width: 46,
-                          height: dockRound,
+                          width: dockRound - 4,
+                          height: dockRound - 4,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: i == page ? Tokens.blue.withValues(alpha: 0.16) : Colors.transparent,
@@ -94,9 +100,10 @@ class Dock extends StatelessWidget {
                     ),
                 ],
               ),
-            ),
-            const Spacer(),
-          ],
+            )
+          else
+            PowerButton(power: power, onTap: onSwitch, onStep: onStep),
+          const Spacer(),
           Island(
             padding: const EdgeInsets.all((dockIsland - dockRound) / 2),
             child: Row(

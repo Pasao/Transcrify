@@ -128,6 +128,35 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {});
   }
 
+  /// Una nota che mostra tutto quello che c'è: argomenti diversi, una parola chiave di due parole,
+  /// un elenco, dei link. Si può riscrivere quando vuoi; le tue note non si toccano.
+  Future<void> _demoNote() async {
+    HapticFeedback.selectionClick();
+    final now = DateTime.now();
+    await Core.saveNote(
+      Note(
+        id: 'nota-di-prova',
+        title: 'Nota di prova',
+        created: now,
+        updated: now,
+        text: [
+          'Questa nota serve a provare tutto quello che abbiamo aggiunto. Pizzicala, o usa il mirino nella barra in basso.',
+          'Sono un product designer e il portfolio deve raccontarlo bene. Nel portfolio voglio tre casi: Zero, Transcrify e il redesign del sito. '
+              'Ogni caso del portfolio parte da un problema vero, non da una bella schermata. Un product designer mostra come pensa.',
+          'Le promesse della settimana sono il minimo: palestra lunedì, mercoledì e venerdì, e un quiz della patente al giorno. '
+              'Anche un solo esercizio di palestra conta come promessa mantenuta.',
+          'Stasera voglio vedere Obsession al cinema. Il film me l\'ha consigliato Marco: dice che la fotografia è incredibile.',
+          'Cose da comprare:\n• dentifricio\n• pane\n• batterie per il mouse',
+          'Da riguardare:\nhttps://www.youtube.com/@Figma\nhttps://pub.dev/packages/semantic_zoom',
+          'Per Transcrify il Dock deve essere più leggero, e il motore degli argomenti deve girare anche sui telefoni economici. '
+              'Transcrify resta gratis: niente che si paghi.',
+        ].join('\n\n'),
+      ),
+    );
+    Core.refresh();
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('«Nota di prova» è nei Pensieri')));
+  }
+
   static String _short(String model) => model.substring(model.lastIndexOf('/') + 1);
 
   static const _modeNames = {'fedele': 'Fedele', 'pulita': 'Pulita', 'riassunto': 'Riassunto'};
@@ -267,6 +296,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     SettingsGroup(
                       label: 'Prove',
                       children: [
+                        SettingsRow(
+                          icon: Icons.science_outlined,
+                          color: Tokens.blue,
+                          title: 'Crea la nota di prova',
+                          subtitle: 'Con tutto quello che c\'è: argomenti, elenchi, link',
+                          onTap: _demoNote,
+                        ),
                         SettingsRow(
                           icon: Icons.person_outline_rounded,
                           color: Tokens.blue,

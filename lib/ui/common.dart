@@ -210,8 +210,8 @@ Color islandColor(BuildContext context) => Theme.of(context).brightness == Brigh
 /// L'ombra delle isole: una larga e morbida che le solleva, e una stretta che fa da bordo appena
 /// accennato, così si staccano anche quando sotto passa una scheda. Niente linee vere.
 const islandShadow = [
-  BoxShadow(color: Color(0x29000000), blurRadius: 24, offset: Offset(0, 6)),
-  BoxShadow(color: Color(0x1A000000), blurRadius: 2, spreadRadius: 0.5),
+  BoxShadow(color: Color(0x17000000), blurRadius: 18, offset: Offset(0, 4)),
+  BoxShadow(color: Color(0x14000000), blurRadius: 1.5, spreadRadius: 0.5),
 ];
 
 /// Le misure del Dock: ogni isola è alta [dockIsland] e dentro ogni cosa tonda è [dockRound],

@@ -28,8 +28,8 @@ class NoteTopicsWorker private constructor(context: Context) {
     private val app = context.applicationContext
     private val store = Store(app)
     private val models = TopicModels(app)
-    // v3: con le grane relative, le frasi chiave e le parole chiave. I risultati di prima si rifanno.
-    private val file = File(app.filesDir, "note_topics_v3.json")
+    // v4: parole chiave di più parole. I risultati di prima si rifanno.
+    private val file = File(app.filesDir, "note_topics_v4.json")
     private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "argomenti").apply { priority = Thread.MIN_PRIORITY } }
 
     /** Le note in coda o in lavorazione. */
@@ -190,8 +190,8 @@ class NoteTopicsWorker private constructor(context: Context) {
                 if (range.last * 2 + 1 >= r.spans.size) return@mapNotNull null
                 Triple(note, r.spans[range.first * 2], r.spans[range.last * 2 + 1])
             }
-            // Un album fatto di pezzi di una nota sola non è «ne hai parlato tre volte»: è una nota lunga.
-            if (pieces.map { it.first.id }.distinct().size < 2) return@mapNotNull null
+            // Basta che un argomento torni tre volte, anche nella stessa nota: se ne hai parlato tanto, è un argomento.
+            if (pieces.size < 3) return@mapNotNull null
             val text = pieces.joinToString("\n") { (n, a, b) -> n.text.substring(a, b) }
             val name = keywords.top(text, 2).joinToString(" · ") { it.replaceFirstChar(Char::uppercase) }
             mapOf(
@@ -236,7 +236,7 @@ class NoteTopicsWorker private constructor(context: Context) {
     private fun save() {
         val j = JSONObject()
         for ((id, r) in results) j.put(id, r.toJson())
-        val tmp = File(file.parentFile, "note_topics_v3.tmp")
+        val tmp = File(file.parentFile, "note_topics_v4.tmp")
         tmp.writeText(j.toString())
         tmp.renameTo(file)
     }
