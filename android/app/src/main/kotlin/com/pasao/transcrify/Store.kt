@@ -27,6 +27,16 @@ data class Transcription(val text: String, val at: Long, val purified: Boolean, 
     }
 }
 
+/** Una nota: tua, da rileggere. Il titolo può restare vuoto. */
+data class Note(val id: String, val title: String, val text: String, val created: Long, val updated: Long) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("title", title).put("text", text).put("created", created).put("updated", updated)
+    fun toMap(): Map<String, Any> = mapOf("id" to id, "title" to title, "text" to text, "created" to created, "updated" to updated)
+
+    companion object {
+        fun fromJson(j: JSONObject) = Note(j.getString("id"), j.optString("title"), j.optString("text"), j.getLong("created"), j.getLong("updated"))
+    }
+}
+
 enum class Limit { OK, HOURLY, DAILY }
 
 /**
@@ -36,6 +46,7 @@ enum class Limit { OK, HOURLY, DAILY }
 class Store(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("transcrify", Context.MODE_PRIVATE)
     private val historyFile = File(context.filesDir, "history.json")
+    private val notesFile = File(context.filesDir, "notes.json")
 
     // --- Chiave Groq, cifrata con una chiave del Keystore che non esce dal telefono ---
 
@@ -179,6 +190,30 @@ class Store(context: Context) {
         val tmp = File(historyFile.parentFile, "history.tmp")
         tmp.writeText(JSONArray(list.map { it.toJson() }).toString())
         tmp.renameTo(historyFile)
+    }
+
+    // --- Note ---
+
+    /** Dalla più recente: quella che hai toccato per ultima sta in cima. */
+    @Synchronized
+    fun notes(): List<Note> = try {
+        val arr = JSONArray(notesFile.readText())
+        (0 until arr.length()).map { Note.fromJson(arr.getJSONObject(it)) }.sortedByDescending { it.updated }
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    /** Nuova, o al posto di quella con lo stesso id. */
+    @Synchronized
+    fun saveNote(n: Note) = writeNotes(listOf(n) + notes().filter { it.id != n.id })
+
+    @Synchronized
+    fun deleteNote(id: String) = writeNotes(notes().filter { it.id != id })
+
+    private fun writeNotes(list: List<Note>) {
+        val tmp = File(notesFile.parentFile, "notes.tmp")
+        tmp.writeText(JSONArray(list.map { it.toJson() }).toString())
+        tmp.renameTo(notesFile)
     }
 
     // --- Limiti del piano gratuito sull'audio (secondi) ---

@@ -3,34 +3,34 @@ import 'package:flutter/services.dart';
 /// Lo stato che arriva dal nucleo nativo (Kotlin).
 class CoreState {
   CoreState(Map m)
-      : hasKey = m['hasKey'] as bool,
-        maskedKey = m['maskedKey'] as String?,
-        pillOn = m['pillOn'] as bool,
-        purify = m['purify'] as bool,
-        words = (m['words'] as List).cast<String>(),
-        prompt = m['prompt'] as String,
-        customPrompt = m['customPrompt'] as bool,
-        defaultPrompt = m['defaultPrompt'] as String,
-        mode = m['mode'] as String,
-        limited = m['limited'] as String?,
-        resetAt = m['resetAt'] == null ? null : DateTime.fromMillisecondsSinceEpoch(m['resetAt'] as int),
-        simulateLimit = m['simulateLimit'] as bool,
-        sttModel = m['sttModel'] as String,
-        llmModel = m['llmModel'] as String,
-        sttLimits = (m['sttLimits'] as Map).cast<String, String>(),
-        llmLimits = (m['llmLimits'] as Map).cast<String, String>(),
-        sttUses = m['sttUses'] as int,
-        llmUses = m['llmUses'] as int,
-        hourUsed = m['hourUsed'] as int,
-        dayUsed = m['dayUsed'] as int,
-        accentMain = Color(m['accentMain'] as int),
-        accentSecond = Color(m['accentSecond'] as int),
-        accentA = Color(m['accentA'] as int),
-        accentB = Color(m['accentB'] as int),
-        hourEnd = _time(m['hourEnd']),
-        dayEnd = _time(m['dayEnd']),
-        hourLimit = m['hourLimit'] as int,
-        dayLimit = m['dayLimit'] as int;
+    : hasKey = m['hasKey'] as bool,
+      maskedKey = m['maskedKey'] as String?,
+      pillOn = m['pillOn'] as bool,
+      purify = m['purify'] as bool,
+      words = (m['words'] as List).cast<String>(),
+      prompt = m['prompt'] as String,
+      customPrompt = m['customPrompt'] as bool,
+      defaultPrompt = m['defaultPrompt'] as String,
+      mode = m['mode'] as String,
+      limited = m['limited'] as String?,
+      resetAt = m['resetAt'] == null ? null : DateTime.fromMillisecondsSinceEpoch(m['resetAt'] as int),
+      simulateLimit = m['simulateLimit'] as bool,
+      sttModel = m['sttModel'] as String,
+      llmModel = m['llmModel'] as String,
+      sttLimits = (m['sttLimits'] as Map).cast<String, String>(),
+      llmLimits = (m['llmLimits'] as Map).cast<String, String>(),
+      sttUses = m['sttUses'] as int,
+      llmUses = m['llmUses'] as int,
+      hourUsed = m['hourUsed'] as int,
+      dayUsed = m['dayUsed'] as int,
+      accentMain = Color(m['accentMain'] as int),
+      accentSecond = Color(m['accentSecond'] as int),
+      accentA = Color(m['accentA'] as int),
+      accentB = Color(m['accentB'] as int),
+      hourEnd = _time(m['hourEnd']),
+      dayEnd = _time(m['dayEnd']),
+      hourLimit = m['hourLimit'] as int,
+      dayLimit = m['dayLimit'] as int;
 
   final bool hasKey, pillOn, purify, customPrompt, simulateLimit;
 
@@ -60,10 +60,10 @@ class CoreState {
 
 class Entry {
   Entry(Map m)
-      : text = m['text'] as String,
-        at = DateTime.fromMillisecondsSinceEpoch(m['at'] as int),
-        purified = m['purified'] as bool,
-        mode = m['mode'] as String?;
+    : text = m['text'] as String,
+      at = DateTime.fromMillisecondsSinceEpoch(m['at'] as int),
+      purified = m['purified'] as bool,
+      mode = m['mode'] as String?;
 
   final String text;
   final DateTime at;
@@ -73,13 +73,47 @@ class Entry {
   final String? mode;
 }
 
+/// Una nota: tua, da rileggere. Si scrive a mano (per ora); il titolo può restare vuoto.
+class Note {
+  Note({required this.id, this.title = '', this.text = '', required this.created, required this.updated});
+
+  Note.fromMap(Map m)
+    : id = m['id'] as String,
+      title = m['title'] as String,
+      text = m['text'] as String,
+      created = DateTime.fromMillisecondsSinceEpoch(m['created'] as int),
+      updated = DateTime.fromMillisecondsSinceEpoch(m['updated'] as int);
+
+  /// Una nota nuova, vuota, nata adesso.
+  factory Note.blank() {
+    final now = DateTime.now();
+    return Note(id: '${now.microsecondsSinceEpoch}', created: now, updated: now);
+  }
+
+  final String id, title, text;
+  final DateTime created, updated;
+
+  bool get isEmpty => title.trim().isEmpty && text.trim().isEmpty;
+
+  Note edited({required String title, required String text}) =>
+      Note(id: id, title: title, text: text, created: created, updated: DateTime.now());
+
+  Map<String, Object> toMap() => {
+    'id': id,
+    'title': title,
+    'text': text,
+    'created': created.millisecondsSinceEpoch,
+    'updated': updated.millisecondsSinceEpoch,
+  };
+}
+
 /// Una registrazione che aspetta di essere trascritta (di solito: mancava la rete).
 class Waiting {
   Waiting(Map m)
-      : id = m['id'] as String,
-        at = DateTime.fromMillisecondsSinceEpoch(m['at'] as int),
-        seconds = m['seconds'] as int,
-        mode = m['mode'] as String?;
+    : id = m['id'] as String,
+      at = DateTime.fromMillisecondsSinceEpoch(m['at'] as int),
+      seconds = m['seconds'] as int,
+      mode = m['mode'] as String?;
 
   final String id;
   final DateTime at;
@@ -88,11 +122,7 @@ class Waiting {
 }
 
 class GroqModel {
-  GroqModel(Map m)
-      : id = m['id'] as String,
-        owner = m['owner'] as String,
-        context = m['context'] as int,
-        speech = m['speech'] as bool;
+  GroqModel(Map m) : id = m['id'] as String, owner = m['owner'] as String, context = m['context'] as int, speech = m['speech'] as bool;
 
   final String id, owner;
   final int context;
@@ -103,18 +133,28 @@ class GroqModel {
 class Core {
   static const _ch = MethodChannel('transcrify/core');
 
-  static VoidCallback? _changed;
+  static final _changed = <VoidCallback>{};
   static ValueChanged<bool>? _nestHot;
 
   static void _listen() => _ch.setMethodCallHandler((call) async {
-        if (call.method == 'changed') _changed?.call();
-        if (call.method == 'nestHot') _nestHot?.call(call.arguments as bool);
-      });
+    if (call.method == 'changed') refresh();
+    if (call.method == 'nestHot') _nestHot?.call(call.arguments as bool);
+  });
 
-  /// Chiamato quando la pillola cambia qualcosa (si accende, si spegne, trascrive).
-  static void onChanged(VoidCallback cb) {
-    _changed = cb;
+  /// Chi vuole sapere quando la pillola cambia qualcosa (si accende, si spegne, trascrive).
+  /// Ogni pagina si iscrive per conto suo e si toglie quando se ne va.
+  static void addListener(VoidCallback cb) {
+    _changed.add(cb);
     _listen();
+  }
+
+  static void removeListener(VoidCallback cb) => _changed.remove(cb);
+
+  /// Fa rileggere tutto a chi è iscritto: quando cambia qualcosa, o al ritorno nell'app.
+  static void refresh() {
+    for (final cb in [..._changed]) {
+      cb();
+    }
   }
 
   /// Chiamato quando, trascinandolo, Transcri arriva sopra il nido dell'app o se ne allontana.
@@ -145,11 +185,9 @@ class Core {
 
   static Future<CoreState> state() async => CoreState(await _ch.invokeMethod('state'));
 
-  static Future<List<Entry>> history() async =>
-      ((await _ch.invokeMethod('history')) as List).map((e) => Entry(e as Map)).toList();
+  static Future<List<Entry>> history() async => ((await _ch.invokeMethod('history')) as List).map((e) => Entry(e as Map)).toList();
 
-  static Future<List<Waiting>> waiting() async =>
-      ((await _ch.invokeMethod('pending')) as List).map((e) => Waiting(e as Map)).toList();
+  static Future<List<Waiting>> waiting() async => ((await _ch.invokeMethod('pending')) as List).map((e) => Waiting(e as Map)).toList();
 
   static Future<void> discardWaiting(String id) => _ch.invokeMethod('discardPending', {'id': id});
 
@@ -162,8 +200,14 @@ class Core {
     }
   }
 
-  static Future<void> deleteEntry(DateTime at) =>
-      _ch.invokeMethod('deleteHistory', {'at': at.millisecondsSinceEpoch});
+  static Future<void> deleteEntry(DateTime at) => _ch.invokeMethod('deleteHistory', {'at': at.millisecondsSinceEpoch});
+
+  static Future<List<Note>> notes() async => ((await _ch.invokeMethod('notes')) as List).map((e) => Note.fromMap(e as Map)).toList();
+
+  /// Salva una nota nuova o aggiorna quella con lo stesso id.
+  static Future<void> saveNote(Note n) => _ch.invokeMethod('saveNote', n.toMap());
+
+  static Future<void> deleteNote(String id) => _ch.invokeMethod('deleteNote', {'id': id});
 
   /// Prova la chiave con Groq. Restituisce null se va bene, altrimenti il motivo.
   static Future<String?> checkKey(String key) async {
@@ -178,11 +222,9 @@ class Core {
   static Future<void> setKey(String key) => _ch.invokeMethod('setKey', {'key': key});
   static Future<void> deleteKey() => _ch.invokeMethod('deleteKey');
 
-  static Future<List<GroqModel>> models() async =>
-      ((await _ch.invokeMethod('models')) as List).map((e) => GroqModel(e as Map)).toList();
+  static Future<List<GroqModel>> models() async => ((await _ch.invokeMethod('models')) as List).map((e) => GroqModel(e as Map)).toList();
 
-  static Future<void> setModel(String id, {required bool speech}) =>
-      _ch.invokeMethod('setModel', {'id': id, 'speech': speech});
+  static Future<void> setModel(String id, {required bool speech}) => _ch.invokeMethod('setModel', {'id': id, 'speech': speech});
 
   static Future<void> setWords(List<String> words) => _ch.invokeMethod('setWords', {'words': words});
 
@@ -205,6 +247,5 @@ class Core {
       await _ch.invokeMethod('startPill', {'x': x, 'y': y, 'home': home, 'place': place}) as String?;
 
   /// Con [x], [y] la pillola rientra volando in quel punto; senza, si chiude e basta.
-  static Future<void> stopPill({double? x, double? y, List<double>? home}) =>
-      _ch.invokeMethod('stopPill', {'x': x, 'y': y, 'home': home});
+  static Future<void> stopPill({double? x, double? y, List<double>? home}) => _ch.invokeMethod('stopPill', {'x': x, 'y': y, 'home': home});
 }

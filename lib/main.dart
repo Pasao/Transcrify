@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'core/native.dart';
-import 'ui/home.dart';
+import 'ui/shell.dart';
 import 'ui/onboarding.dart';
 import 'ui/theme.dart';
 
@@ -86,7 +86,7 @@ class _RootState extends State<_Root> {
             onBack: () => setState(() => step = _Step.intro),
             onKeep: hasKey ? () => setState(() => step = _Step.home) : null,
           ),
-        _Step.home => HomePage(
+        _Step.home => Shell(
             key: const ValueKey(3),
             onKeyRemoved: _decide,
             onReplayIntro: () => setState(() => step = _Step.intro),

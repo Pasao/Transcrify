@@ -59,6 +59,20 @@ class MainActivity : FlutterActivity() {
                     store.removeFromHistory(call.argument<Number>("at")!!.toLong())
                     result.success(null)
                 }
+                "notes" -> result.success(store.notes().map { it.toMap() })
+                "saveNote" -> {
+                    store.saveNote(
+                        Note(
+                            call.argument<String>("id")!!, call.argument<String>("title") ?: "", call.argument<String>("text") ?: "",
+                            call.argument<Number>("created")!!.toLong(), call.argument<Number>("updated")!!.toLong(),
+                        )
+                    )
+                    result.success(null)
+                }
+                "deleteNote" -> {
+                    store.deleteNote(call.argument<String>("id")!!)
+                    result.success(null)
+                }
                 "checkKey" -> background(result) { Groq(call.argument<String>("key")!!.trim()).models().size }
                 "setKey" -> {
                     store.apiKey = call.argument<String>("key")
