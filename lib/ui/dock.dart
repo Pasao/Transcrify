@@ -126,8 +126,8 @@ class RoundAction extends StatelessWidget {
   }
 }
 
-/// Il potere in cui sei, in basso a sinistra sotto il pollice. Tocchi e si apre la colonna
-/// degli altri; scorri su o giù e passi al vicino, con un piccolo scatto.
+/// Il potere in cui sei, in basso a sinistra sotto il pollice: una ruota in una finestra tonda.
+/// Tocchi e si apre la colonna degli altri; tiri su o giù e la ruota gira sul vicino.
 class PowerButton extends StatefulWidget {
   const PowerButton({super.key, required this.power, required this.onTap, required this.onStep});
 
@@ -139,61 +139,67 @@ class PowerButton extends StatefulWidget {
   State<PowerButton> createState() => _PowerButtonState();
 }
 
-class _PowerButtonState extends State<PowerButton> {
+class _PowerButtonState extends State<PowerButton> with SingleTickerProviderStateMixin {
+  /// Di quanto è girata la ruota, in punti: negativo verso l'alto.
   double _drag = 0;
+  late final AnimationController _settle = AnimationController.unbounded(vsync: this)
+    ..addListener(() => setState(() => _drag = _settle.value));
 
-  /// Quanto bisogna scorrere per passare al vicino.
-  static const _enough = 28.0;
+  /// La distanza tra un potere e il vicino sulla ruota: abbastanza perché del vicino si veda solo un pezzetto.
+  static const _gap = dockRound * 0.86;
+
+  /// Quanto bisogna tirare per passare al vicino.
+  static const _enough = 22.0;
+
+  @override
+  void dispose() {
+    _settle.dispose();
+    super.dispose();
+  }
+
+  void _end(DragEndDetails d) {
+    final v = d.primaryVelocity ?? 0;
+    var from = _drag;
+    if (_drag.abs() >= _enough || v.abs() > 500) {
+      // Tirando su sale il prossimo, come una ruota.
+      final up = (_drag != 0 ? _drag : v) < 0;
+      HapticFeedback.lightImpact();
+      widget.onStep(up ? 1 : -1);
+      // Il nuovo parte da dove stava il vicino, così la ruota continua senza salti.
+      from = _drag + (up ? _gap : -_gap);
+    }
+    _settle.value = from;
+    _settle.animateTo(0, duration: const Duration(milliseconds: 340), curve: Curves.easeOutBack);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
+    final p = widget.power;
+    Widget at(Power power, double y, {bool on = false}) => Transform.translate(
+      offset: Offset(0, y),
+      child: Opacity(
+        opacity: on ? 1 : 0.55,
+        child: PowerBadge(power: power, on: on),
+      ),
+    );
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
         widget.onTap();
       },
-      onVerticalDragStart: (_) => _drag = 0,
-      onVerticalDragUpdate: (d) => setState(() => _drag = (_drag + d.delta.dy).clamp(-_enough * 1.4, _enough * 1.4)),
-      onVerticalDragEnd: (d) {
-        final v = d.primaryVelocity ?? 0;
-        if (_drag.abs() >= _enough || v.abs() > 500) {
-          HapticFeedback.lightImpact();
-          // Su = il prossimo, come una ruota che gira verso l'alto.
-          widget.onStep((_drag != 0 ? _drag : v) < 0 ? 1 : -1);
-        }
-        setState(() => _drag = 0);
-      },
-      child: AnimatedSlide(
-        // Segue il dito per un pezzetto, poi torna al suo posto.
-        offset: Offset(0, _drag / dockIsland * 0.35),
-        duration: Duration(milliseconds: _drag == 0 ? 260 : 0),
-        curve: Curves.easeOutBack,
-        child: Container(
-          width: dockIsland,
-          height: dockIsland,
-          decoration: BoxDecoration(color: islandColor(context), shape: BoxShape.circle, boxShadow: islandShadow),
+      onVerticalDragStart: (_) => _settle.stop(),
+      onVerticalDragUpdate: (d) => setState(() => _drag = (_drag + d.delta.dy).clamp(-_gap, _gap)),
+      onVerticalDragEnd: _end,
+      child: Container(
+        width: dockIsland,
+        height: dockIsland,
+        decoration: BoxDecoration(color: islandColor(context), shape: BoxShape.circle, boxShadow: islandShadow),
+        // Una ruota vista da una finestra tonda: sopra e sotto spunta un pezzetto dei vicini,
+        // ed è quello che dice che si può girare.
+        child: ClipOval(
           child: Stack(
             alignment: Alignment.center,
-            children: [
-              // Due trattini sopra: gli altri poteri stanno "dietro", si raggiungono scorrendo.
-              Positioned(
-                top: 7,
-                child: Container(
-                  width: 10,
-                  height: 3,
-                  decoration: BoxDecoration(color: tk.border, borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                transitionBuilder: (c, a) => ScaleTransition(
-                  scale: a,
-                  child: FadeTransition(opacity: a, child: c),
-                ),
-                child: PowerBadge(power: widget.power, key: ValueKey(widget.power)),
-              ),
-            ],
+            children: [at(p.step(-1), -_gap + _drag), at(p.step(1), _gap + _drag), at(p, _drag, on: true)],
           ),
         ),
       ),

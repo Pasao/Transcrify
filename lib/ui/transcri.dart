@@ -29,6 +29,9 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
   /// Quanto è grande la casa: la stessa misura delle altre isole del Dock.
   static const slot = dockRound;
 
+  /// Quanto è grande Transcri dentro la casa: abbastanza margine perché l'anello colorato si legga.
+  static const _inNest = 0.76;
+
   // 0 = a riposo, 1 = schiacciato fino in fondo; al rilascio torna con una molla che rimbalza.
   late final _press = AnimationController(vsync: this, duration: const Duration(milliseconds: 160));
   // Il ritorno a casa: sobbalzo di Transcri e luce nel nido.
@@ -275,7 +278,8 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
       child: Center(
         child: AnimatedBuilder(
           animation: _swell,
-          builder: (context, child) => Transform.scale(scale: 1 + 0.3 * _swell.value, child: child),
+          // Un po' più piccolo della sua casa: intorno resta un anello del suo colore, che si vede.
+          builder: (context, child) => Transform.scale(scale: _inNest * (1 + 0.3 * _swell.value), child: child),
           child: GestureDetector(
             onLongPressStart: (d) => _grab(d.globalPosition),
             onLongPressMoveUpdate: (d) => _carry(d.globalPosition),
