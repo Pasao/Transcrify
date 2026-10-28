@@ -267,6 +267,15 @@ class Core {
 
   static Future<void> setModel(String id, {required bool speech}) => _ch.invokeMethod('setModel', {'id': id, 'speech': speech});
 
+  /// Fa dire a Groq i limiti di un modello mai usato (li dice solo nelle risposte). Una volta sola per modello.
+  static Future<void> probeLimits(String id, {required bool speech}) async {
+    try {
+      await _ch.invokeMethod('probeLimits', {'id': id, 'speech': speech});
+    } on PlatformException {
+      // Senza rete: si riproverà la prossima volta.
+    }
+  }
+
   static Future<void> setWords(List<String> words) => _ch.invokeMethod('setWords', {'words': words});
 
   /// null = torna al prompt predefinito.

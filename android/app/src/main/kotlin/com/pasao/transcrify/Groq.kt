@@ -86,6 +86,53 @@ class Groq(private val key: String) {
         return clean
     }
 
+    /**
+     * Chiede a Groq i limiti di un modello che non hai ancora usato: Groq li dice solo nelle risposte.
+     * Voce: un secondo di silenzio (WAV generato qui). Testo: una richiesta da un token.
+     * Costa una richiesta delle migliaia al giorno; i limiti finiscono in [lastLimits] anche se la risposta è un errore.
+     */
+    fun probe(model: String, speech: Boolean) {
+        try {
+            if (speech) {
+                val boundary = "----transcrify" + UUID.randomUUID()
+                request("audio/transcriptions") { c ->
+                    c.requestMethod = "POST"
+                    c.doOutput = true
+                    c.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                    DataOutputStream(c.outputStream).use { out ->
+                        out.writeBytes("--$boundary\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n$model\r\n")
+                        out.writeBytes("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"silenzio.wav\"\r\n")
+                        out.writeBytes("Content-Type: audio/wav\r\n\r\n")
+                        out.write(silence())
+                        out.writeBytes("\r\n--$boundary--\r\n")
+                    }
+                }
+            } else {
+                val payload = JSONObject().put("model", model).put("max_tokens", 1)
+                    .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", "ok")))
+                request("chat/completions") { c ->
+                    c.requestMethod = "POST"
+                    c.doOutput = true
+                    c.setRequestProperty("Content-Type", "application/json")
+                    c.outputStream.use { it.write(payload.toString().toByteArray()) }
+                }
+            }
+        } catch (_: GroqError) {
+            // Anche una risposta d'errore porta le intestazioni coi limiti: va bene così.
+        }
+    }
+
+    /** Un secondo di silenzio: WAV, 16 kHz, mono, 16 bit. */
+    private fun silence(): ByteArray {
+        val rate = 16_000
+        val data = rate * 2
+        val b = java.nio.ByteBuffer.allocate(44 + data).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        b.put("RIFF".toByteArray()).putInt(36 + data).put("WAVE".toByteArray())
+        b.put("fmt ".toByteArray()).putInt(16).putShort(1).putShort(1).putInt(rate).putInt(rate * 2).putShort(2).putShort(16)
+        b.put("data".toByteArray()).putInt(data)
+        return b.array()
+    }
+
     private fun request(path: String, setup: (HttpURLConnection) -> Unit): String {
         val c = URL(BASE + path).openConnection() as HttpURLConnection
         try {

@@ -147,6 +147,19 @@ class MainActivity : FlutterActivity() {
                     if (call.argument<Boolean>("speech") == true) store.transcriptionModel = id else store.cleanupModel = id
                     result.success(null)
                 }
+                "probeLimits" -> {
+                    // I limiti di un modello che non hai ancora usato: si chiedono una volta sola.
+                    val id = call.argument<String>("id")!!
+                    val speech = call.argument<Boolean>("speech") == true
+                    val key = store.apiKey
+                    if (key == null || store.modelLimits(id).isNotEmpty()) return@setMethodCallHandler result.success(null)
+                    background(result) {
+                        val g = Groq(key)
+                        g.probe(id, speech)
+                        store.saveModelLimits(id, g.lastLimits)
+                        null
+                    }
+                }
                 "setWords" -> {
                     store.words = call.argument<List<String>>("words")!!
                     result.success(null)

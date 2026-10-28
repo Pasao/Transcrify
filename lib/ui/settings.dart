@@ -76,6 +76,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final state = await Core.state();
     if (mounted) setState(() => s = state);
     _loadTopics();
+    if (await askLimits(state)) _load();
   }
 
   /// L'elenco dei modelli di Groq (il telefono lo tiene un giorno): serve a dire «più preciso» o «più veloce».
@@ -218,17 +219,15 @@ class _SettingsPageState extends State<SettingsPage> {
                       SettingsRow(
                         icon: Icons.insights_rounded,
                         color: Tokens.green,
-                        title: 'Quanto hai usato',
+                        title: 'Utilizzo',
                         value: '${(st.dayUsed / 60).round()} di ${(st.dayLimit / 60).round()} min oggi',
                         onTap: () => _open(
                           LiveSettings(
                             title: 'Utilizzo',
                             build: (context, st, reload) => [
-                              const UsageLabel('Trascrizione'),
-                              ...speechMeters(st),
-                              const SizedBox(height: 28),
-                              const UsageLabel('Pulizia del testo'),
-                              ...textMeters(st),
+                              UsageCard(label: 'Trascrizione', children: speechMeters(st)),
+                              const SizedBox(height: 20),
+                              UsageCard(label: 'Pulizia del testo', children: textMeters(st)),
                             ],
                           ),
                         ),
@@ -472,6 +471,52 @@ class _Note extends StatelessWidget {
   );
 }
 
+/// Se dei modelli in uso non sappiamo ancora i limiti, li chiede a Groq (una volta per modello).
+/// Restituisce true se ne ha chiesti: allora conviene rileggere lo stato.
+Future<bool> askLimits(CoreState st) async {
+  var asked = false;
+  if (_requestLimit(st.sttLimits) == null && _asked.add(st.sttModel)) {
+    await Core.probeLimits(st.sttModel, speech: true);
+    asked = true;
+  }
+  if (_requestLimit(st.llmLimits) == null && _asked.add(st.llmModel)) {
+    await Core.probeLimits(st.llmModel, speech: false);
+    asked = true;
+  }
+  return asked;
+}
+
+/// I modelli già chiesti in questa sessione: niente richieste ripetute se Groq non risponde.
+final _asked = <String>{};
+
+/// I contatori in una scheda, come gli altri gruppi delle impostazioni: si vedono separati e chiari.
+class UsageCard extends StatelessWidget {
+  const UsageCard({super.key, required this.label, required this.children});
+
+  final String label;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(padding: const EdgeInsets.only(left: 12), child: UsageLabel(label)),
+        Container(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+          decoration: BoxDecoration(color: islandColor(context), borderRadius: BorderRadius.circular(24)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < children.length; i++) ...[if (i > 0) const SizedBox(height: 16), children[i]],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// L'etichetta piccola sopra un gruppo di contatori.
 class UsageLabel extends StatelessWidget {
   const UsageLabel(this.text, {super.key});
@@ -525,6 +570,7 @@ class _ModelSettingsState extends State<ModelSettings> {
       models = list ?? models;
       error = problem;
     });
+    if (await askLimits(s)) _load();
   }
 
   Future<void> _pick(String id) async {
@@ -569,7 +615,7 @@ class _ModelSettingsState extends State<ModelSettings> {
             selected: current == id,
             onTap: () => _pick(id),
           ),
-        if (s != null) ...[const SizedBox(height: 28), const UsageLabel('Oggi'), ...(speech ? speechMeters(s) : textMeters(s))],
+        if (s != null) ...[const SizedBox(height: 20), UsageCard(label: 'Utilizzo', children: speech ? speechMeters(s) : textMeters(s))],
       ],
     );
   }
@@ -982,7 +1028,7 @@ class _Meter extends StatelessWidget {
             child: LinearProgressIndicator(
               value: fraction!.clamp(0, 1).toDouble(),
               minHeight: 5,
-              backgroundColor: tk.bg,
+              backgroundColor: tk.surface,
               color: full ? Tokens.red : Tokens.blue,
             ),
           ),
