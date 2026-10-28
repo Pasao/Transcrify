@@ -31,6 +31,7 @@ class Tokens extends ThemeExtension<Tokens> {
     violet = second;
     accent.value = main;
   }
+
   static const red = Color(0xFFF24822);
   static const green = Color(0xFF14AE5C);
   static const yellow = Color(0xFFFFCD29);
@@ -192,15 +193,17 @@ class Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(children: [
-            Expanded(
-              child: Text(
-                label.toUpperCase(),
-                style: TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w600, color: context.tk.muted),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  style: TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w600, color: context.tk.muted),
+                ),
               ),
-            ),
-            ?trailing,
-          ]),
+              ?trailing,
+            ],
+          ),
           const SizedBox(height: 14),
           ...children,
         ],
@@ -223,12 +226,7 @@ class Paper extends StatelessWidget {
     final top = Color.alphaBlend(Tokens.blue.withValues(alpha: dark ? 0.14 : 0.12), tk.bg);
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [top, tk.bg],
-          stops: const [0, 0.55],
-        ),
+        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [top, tk.bg], stops: const [0, 0.55]),
       ),
       child: child,
     );

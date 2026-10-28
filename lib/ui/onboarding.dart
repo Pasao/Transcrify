@@ -96,80 +96,76 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
     final t = Theme.of(context).textTheme;
     final steps = Padding(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text('Ultima cosa: una chiave Groq.', style: display(context, size: 24)),
-        const SizedBox(height: 6),
-        Text('È gratis. Tre passi, il terzo lo facciamo noi.', style: t.bodyMedium?.copyWith(color: context.tk.muted)),
-        const SizedBox(height: 22),
-        _Step(n: 1, color: Tokens.blue, text: 'Apri Groq e accedi, anche con Google.', done: wentToGroq || found != null),
-        _Step(n: 2, color: Tokens.violet, text: 'Premi “Create API Key”, dagli un nome e copiala.', done: found != null),
-        _Step(n: 3, color: Tokens.green, text: 'Torna qui: la troviamo da soli negli appunti.', done: false),
-        const SizedBox(height: 24),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          transitionBuilder: (c, a) => FadeTransition(
-            opacity: a,
-            child: SlideTransition(position: Tween(begin: const Offset(0, 0.15), end: Offset.zero).animate(a), child: c),
-          ),
-          child: found != null
-              ? _FoundCard(
-                  key: const ValueKey('found'),
-                  masked: _mask(found!),
-                  checking: checking,
-                  onUse: () => _use(found!),
-                )
-              : FilledButton.icon(
-                  key: const ValueKey('open'),
-                  onPressed: _openGroq,
-                  icon: const Icon(Icons.north_east_rounded, size: 18),
-                  label: const Text('Apri Groq'),
-                ),
-        ),
-        if (problem != null) ...[
-          const SizedBox(height: 12),
-          Text(problem!, style: t.bodySmall?.copyWith(color: Tokens.red)),
-        ],
-        // Gerarchia: il primario sopra (Apri Groq / Usa questa chiave), poi il secondario
-        // con il bordo, poi il terziario solo testo. Chi ha già una chiave la tiene come secondaria.
-        if (manual) ...[
-          const SizedBox(height: 12),
-          TextField(
-            controller: field,
-            obscureText: true,
-            autocorrect: false,
-            enableSuggestions: false,
-            autofocus: true,
-            decoration: const InputDecoration(hintText: 'gsk_…'),
-            onChanged: (_) => setState(() => problem = null),
-            onSubmitted: (v) => _use(v.trim()),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: checking ? null : () => _use(field.text.trim()),
-            child: const Text('Usa questa chiave'),
-          ),
-        ] else ...[
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: widget.onKeep ?? () => setState(() => manual = true),
-            child: Text(widget.onKeep != null ? 'Tieni quella che hai' : 'Ho già una chiave, la incollo io'),
-          ),
-          if (widget.onKeep != null) ...[
-            const SizedBox(height: 4),
-            TextButton(
-              onPressed: () => setState(() => manual = true),
-              child: const Text('Incollane un’altra'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Ultima cosa: una chiave Groq.', style: display(context, size: 24)),
+          const SizedBox(height: 6),
+          Text('È gratis. Tre passi, il terzo lo facciamo noi.', style: t.bodyMedium?.copyWith(color: context.tk.muted)),
+          const SizedBox(height: 22),
+          _Step(n: 1, color: Tokens.blue, text: 'Apri Groq e accedi, anche con Google.', done: wentToGroq || found != null),
+          _Step(n: 2, color: Tokens.violet, text: 'Premi “Create API Key”, dagli un nome e copiala.', done: found != null),
+          _Step(n: 3, color: Tokens.green, text: 'Torna qui: la troviamo da soli negli appunti.', done: false),
+          const SizedBox(height: 24),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            transitionBuilder: (c, a) => FadeTransition(
+              opacity: a,
+              child: SlideTransition(
+                position: Tween(begin: const Offset(0, 0.15), end: Offset.zero).animate(a),
+                child: c,
+              ),
             ),
+            child: found != null
+                ? _FoundCard(key: const ValueKey('found'), masked: _mask(found!), checking: checking, onUse: () => _use(found!))
+                : FilledButton.icon(
+                    key: const ValueKey('open'),
+                    onPressed: _openGroq,
+                    icon: const Icon(Icons.north_east_rounded, size: 18),
+                    label: const Text('Apri Groq'),
+                  ),
+          ),
+          if (problem != null) ...[const SizedBox(height: 12), Text(problem!, style: t.bodySmall?.copyWith(color: Tokens.red))],
+          // Gerarchia: il primario sopra (Apri Groq / Usa questa chiave), poi il secondario
+          // con il bordo, poi il terziario solo testo. Chi ha già una chiave la tiene come secondaria.
+          if (manual) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: field,
+              obscureText: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: 'gsk_…'),
+              onChanged: (_) => setState(() => problem = null),
+              onSubmitted: (v) => _use(v.trim()),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(onPressed: checking ? null : () => _use(field.text.trim()), child: const Text('Usa questa chiave')),
+          ] else ...[
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: widget.onKeep ?? () => setState(() => manual = true),
+              child: Text(widget.onKeep != null ? 'Tieni quella che hai' : 'Ho già una chiave, la incollo io'),
+            ),
+            if (widget.onKeep != null) ...[
+              const SizedBox(height: 4),
+              TextButton(onPressed: () => setState(() => manual = true), child: const Text('Incollane un’altra')),
+            ],
           ],
+          const SizedBox(height: 20),
+          Text('La chiave resta cifrata su questo telefono e parla solo con Groq.', style: t.bodySmall, textAlign: TextAlign.center),
         ],
-        const SizedBox(height: 20),
-        Text('La chiave resta cifrata su questo telefono e parla solo con Groq.',
-            style: t.bodySmall, textAlign: TextAlign.center),
-      ]),
+      ),
     );
 
     if (widget.replacing) {
-      return Paper(child: Scaffold(appBar: AppBar(), body: SafeArea(child: ListView(children: [steps]))));
+      return Paper(
+        child: Scaffold(
+          appBar: AppBar(),
+          body: SafeArea(child: ListView(children: [steps])),
+        ),
+      );
     }
     // Seconda pagina dell'introduzione: solo la chiave, e si può tornare indietro.
     return PopScope(
@@ -177,13 +173,17 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) widget.onBack?.call();
       },
-      child: Paper(child: Scaffold(
-        appBar: widget.onBack == null
-            ? null
-            : AppBar(leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: widget.onBack)),
-        body: SafeArea(child: ListView(children: [steps])),
-        bottomNavigationBar: const PageCount('2 di 2'),
-      )),
+      child: Paper(
+        child: Scaffold(
+          appBar: widget.onBack == null
+              ? null
+              : AppBar(
+                  leading: IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: widget.onBack),
+                ),
+          body: SafeArea(child: ListView(children: [steps])),
+          bottomNavigationBar: const PageCount('2 di 2'),
+        ),
+      ),
     );
   }
 }
@@ -211,38 +211,49 @@ class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
     return Container(
       height: 380 + top,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Tokens.blue, Tokens.violet],
-        ),
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Tokens.blue, Tokens.violet]),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
       ),
-      child: Stack(children: [
-        // Una bolla nasce, vola al bordo e diventa la pillola, in loop.
-        Positioned.fill(child: AnimatedBuilder(animation: _c, builder: (_, _) => CustomPaint(painter: _PillPainter(_c.value)))),
-        Positioned(
-          left: 24,
-          right: 56,
-          bottom: 32,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Transcrify', style: monoStyle(context, size: 13, color: Colors.white.withValues(alpha: 0.75))),
-            const SizedBox(height: 12),
-            Text.rich(
-              TextSpan(children: [
-                const TextSpan(text: 'Parla.\nÈ già '),
-                TextSpan(text: 'copiato.', style: display(context, size: 46, strong: true, color: Colors.white)),
-              ]),
-              style: display(context, size: 46, color: Colors.white),
+      child: Stack(
+        children: [
+          // Una bolla nasce, vola al bordo e diventa la pillola, in loop.
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _c,
+              builder: (_, _) => CustomPaint(painter: _PillPainter(_c.value)),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Transcri vive sul bordo di ogni app. Lo tocchi, detti, incolli.',
-              style: TextStyle(fontSize: 15, height: 1.4, color: Colors.white.withValues(alpha: 0.85)),
+          ),
+          Positioned(
+            left: 24,
+            right: 56,
+            bottom: 32,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Transcrify', style: monoStyle(context, size: 13, color: Colors.white.withValues(alpha: 0.75))),
+                const SizedBox(height: 12),
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      const TextSpan(text: 'Parla.\nÈ già '),
+                      TextSpan(
+                        text: 'copiato.',
+                        style: display(context, size: 46, strong: true, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  style: display(context, size: 46, color: Colors.white),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Transcri vive sul bordo di ogni app. Lo tocchi, detti, incolli.',
+                  style: TextStyle(fontSize: 15, height: 1.4, color: Colors.white.withValues(alpha: 0.85)),
+                ),
+              ],
             ),
-          ]),
-        ),
-      ]),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -267,10 +278,7 @@ class _PillPainter extends CustomPainter {
     final h = 46 + (72 - 46) * settle;
     final breathe = settle >= 1 ? 0.7 + 0.3 * math.sin(t * math.pi * 6).abs() : 1.0;
 
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset(x, y), width: w, height: h),
-      Radius.circular(math.min(w, h) / 2),
-    );
+    final rect = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(x, y), width: w, height: h), Radius.circular(math.min(w, h) / 2));
     canvas.drawRRect(
       rect.shift(const Offset(0, 6)),
       Paint()
@@ -296,23 +304,25 @@ class _Step extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          width: 30,
-          height: 30,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: done ? color : color.withValues(alpha: 0.14),
-            shape: BoxShape.circle,
+      child: Row(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: done ? color : color.withValues(alpha: 0.14), shape: BoxShape.circle),
+            child: done
+                ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                : Text(
+                    '$n',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color),
+                  ),
           ),
-          child: done
-              ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
-              : Text('$n', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
-        ),
-        const SizedBox(width: 14),
-        Expanded(child: Text(text, style: Theme.of(context).textTheme.bodyMedium)),
-      ]),
+          const SizedBox(width: 14),
+          Expanded(child: Text(text, style: Theme.of(context).textTheme.bodyMedium)),
+        ],
+      ),
     );
   }
 }
@@ -329,27 +339,32 @@ class _FoundCard extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Tokens.green.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(20),
+      decoration: BoxDecoration(color: Tokens.green.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(20)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, size: 16, color: Tokens.green),
+              const SizedBox(width: 8),
+              Text(
+                'Trovata negli appunti',
+                style: t.bodyMedium?.copyWith(color: Tokens.green, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(masked, style: monoStyle(context, size: 16, color: context.tk.text)),
+          const SizedBox(height: 14),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Tokens.green),
+            onPressed: checking ? null : onUse,
+            child: checking
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text('Usa questa chiave'),
+          ),
+        ],
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          const Icon(Icons.auto_awesome, size: 16, color: Tokens.green),
-          const SizedBox(width: 8),
-          Text('Trovata negli appunti', style: t.bodyMedium?.copyWith(color: Tokens.green, fontWeight: FontWeight.w600)),
-        ]),
-        const SizedBox(height: 8),
-        Text(masked, style: monoStyle(context, size: 16, color: context.tk.text)),
-        const SizedBox(height: 14),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: Tokens.green),
-          onPressed: checking ? null : onUse,
-          child: checking
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Text('Usa questa chiave'),
-        ),
-      ]),
     );
   }
 }
@@ -362,12 +377,12 @@ class PageCount extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 14, top: 6),
-          child: Text(label, style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
-        ),
-      );
+    top: false,
+    child: Padding(
+      padding: const EdgeInsets.only(bottom: 14, top: 6),
+      child: Text(label, style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
+    ),
+  );
 }
 
 /// Prima pagina del primo avvio: cos'è e come si usa, in tre righe. Poi la chiave.
@@ -378,39 +393,47 @@ class IntroPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Paper(child: Scaffold(
-      bottomNavigationBar: const PageCount('1 di 2'),
-      body: ListView(padding: EdgeInsets.zero, children: [
-        const _Hero(),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text('Come funziona', style: display(context, size: 24)),
-            const SizedBox(height: 18),
-            _How(
-              icon: Icons.bubble_chart_rounded,
-              color: Tokens.blue,
-              title: 'Fai uscire Transcri',
-              text: 'Dal bottone dell’app vola sul bordo dello schermo e resta lì, sopra tutto.',
+    return Paper(
+      child: Scaffold(
+        bottomNavigationBar: const PageCount('1 di 2'),
+        body: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            const _Hero(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Come funziona', style: display(context, size: 24)),
+                  const SizedBox(height: 18),
+                  _How(
+                    icon: Icons.bubble_chart_rounded,
+                    color: Tokens.blue,
+                    title: 'Fai uscire Transcri',
+                    text: 'Dal bottone dell’app vola sul bordo dello schermo e resta lì, sopra tutto.',
+                  ),
+                  _How(
+                    icon: Icons.mic_rounded,
+                    color: Tokens.violet,
+                    title: 'Toccala e parla',
+                    text: 'Da WhatsApp, dalle note, dalla mail: ovunque tu stia scrivendo.',
+                  ),
+                  const _How(
+                    icon: Icons.content_paste_rounded,
+                    color: Tokens.green,
+                    title: 'Incolla',
+                    text: 'Il testo è già negli appunti, anche ripulito da esitazioni e ripetizioni se vuoi.',
+                  ),
+                  const SizedBox(height: 28),
+                  FilledButton(onPressed: onNext, child: const Text('Avanti')),
+                ],
+              ),
             ),
-            _How(
-              icon: Icons.mic_rounded,
-              color: Tokens.violet,
-              title: 'Toccala e parla',
-              text: 'Da WhatsApp, dalle note, dalla mail: ovunque tu stia scrivendo.',
-            ),
-            const _How(
-              icon: Icons.content_paste_rounded,
-              color: Tokens.green,
-              title: 'Incolla',
-              text: 'Il testo è già negli appunti, anche ripulito da esitazioni e ripetizioni se vuoi.',
-            ),
-            const SizedBox(height: 28),
-            FilledButton(onPressed: onNext, child: const Text('Avanti')),
-          ]),
+          ],
         ),
-      ]),
-    ));
+      ),
+    );
   }
 }
 
@@ -426,22 +449,28 @@ class _How extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.14), shape: BoxShape.circle),
-          child: Icon(icon, size: 20, color: color),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: t.titleMedium),
-            const SizedBox(height: 2),
-            Text(text, style: t.bodyMedium?.copyWith(color: context.tk.muted)),
-          ]),
-        ),
-      ]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.14), shape: BoxShape.circle),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: t.titleMedium),
+                const SizedBox(height: 2),
+                Text(text, style: t.bodyMedium?.copyWith(color: context.tk.muted)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

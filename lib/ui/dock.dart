@@ -24,7 +24,7 @@ class Dock extends StatelessWidget {
   const Dock({super.key, required this.power, required this.onSwitch, required this.onStep, required this.nest, this.onWrite});
 
   /// Quanto spazio prende, dal fondo: le pagine lasciano libero questo.
-  static const height = 64.0 + 12;
+  static const height = dockIsland + 12;
 
   final Power power;
 
@@ -50,17 +50,18 @@ class Dock extends StatelessWidget {
           PowerButton(power: power, onTap: onSwitch, onStep: onStep),
           const Spacer(),
           Island(
-            padding: EdgeInsets.zero,
+            padding: const EdgeInsets.all((dockIsland - dockRound) / 2),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // In Pensieri la matita esce da Transcri: l'isola si allunga verso sinistra.
                 AnimatedSize(
                   duration: const Duration(milliseconds: 280),
                   curve: Curves.easeOutCubic,
                   child: onWrite == null
-                      ? const SizedBox(height: 64)
+                      ? const SizedBox.shrink()
                       : Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+                          padding: const EdgeInsets.only(right: (dockIsland - dockRound) / 2),
                           child: RoundAction(icon: Icons.edit_rounded, label: 'Scrivi', onTap: onWrite!),
                         ),
                 ),
@@ -93,7 +94,7 @@ class Island extends StatelessWidget {
 
 /// Un'azione tonda dentro un'isola: un'icona su un fondo appena grigio.
 class RoundAction extends StatelessWidget {
-  const RoundAction({super.key, required this.icon, required this.label, required this.onTap, this.size = 48});
+  const RoundAction({super.key, required this.icon, required this.label, required this.onTap, this.size = dockRound});
 
   final IconData icon;
   final String label;
@@ -165,12 +166,12 @@ class _PowerButtonState extends State<PowerButton> {
       },
       child: AnimatedSlide(
         // Segue il dito per un pezzetto, poi torna al suo posto.
-        offset: Offset(0, _drag / 64 * 0.35),
+        offset: Offset(0, _drag / dockIsland * 0.35),
         duration: Duration(milliseconds: _drag == 0 ? 260 : 0),
         curve: Curves.easeOutBack,
         child: Container(
-          width: 64,
-          height: 64,
+          width: dockIsland,
+          height: dockIsland,
           decoration: BoxDecoration(color: islandColor(context), shape: BoxShape.circle, boxShadow: islandShadow),
           child: Stack(
             alignment: Alignment.center,
@@ -202,7 +203,7 @@ class _PowerButtonState extends State<PowerButton> {
 
 /// L'icona di un potere su un tondo del colore del telefono: acceso se è quello in cui sei.
 class PowerBadge extends StatelessWidget {
-  const PowerBadge({super.key, required this.power, this.on = true, this.size = 46});
+  const PowerBadge({super.key, required this.power, this.on = true, this.size = dockRound});
 
   final Power power;
   final bool on;

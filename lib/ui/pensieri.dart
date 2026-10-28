@@ -251,15 +251,109 @@ class NoteEditor extends StatefulWidget {
 class _NoteEditorState extends State<NoteEditor> {
   late final _title = TextEditingController(text: widget.note.title);
   late final _text = TextEditingController(text: widget.note.text);
+  final _undo = UndoHistoryController();
+
+  /// Il testo com'era un attimo fa: serve a capire se sei appena andato a capo dentro un elenco.
+  late String _before = _text.text;
+
+  /// Le dettature arrivate dopo che hai aperto la nota. Transcri fuori copia sempre negli appunti:
+  /// qui ti offriamo di incollare l'ultima dove sei, con un tocco. Non decide da solo.
+  final _opened = DateTime.now();
+  Entry? _dictation;
+  DateTime? _pasted;
+
+  @override
+  void initState() {
+    super.initState();
+    _text.addListener(_continueList);
+    Core.addListener(_checkDictation);
+  }
 
   @override
   void dispose() {
+    Core.removeListener(_checkDictation);
     _title.dispose();
     _text.dispose();
+    _undo.dispose();
     super.dispose();
   }
 
   Note get _current => widget.note.edited(title: _title.text, text: _text.text);
+
+  Future<void> _checkDictation() async {
+    final h = await Core.history();
+    if (!mounted || h.isEmpty) return;
+    final last = h.first;
+    if (last.at.isAfter(_opened) && last.at != _pasted && last.at != _dictation?.at) setState(() => _dictation = last);
+  }
+
+  void _set(String text, int cursor) {
+    _before = text;
+    _text.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: cursor),
+    );
+  }
+
+  TextSelection get _selection {
+    final s = _text.selection;
+    return s.isValid ? s : TextSelection.collapsed(offset: _text.text.length);
+  }
+
+  /// Mette [s] dove c'è il cursore (o al posto di quello che hai selezionato).
+  void _insert(String s) {
+    final sel = _selection;
+    _set(_text.text.replaceRange(sel.start, sel.end, s), sel.start + s.length);
+  }
+
+  void _pasteDictation() {
+    final d = _dictation;
+    if (d == null) return;
+    final before = _text.text.substring(0, _selection.start);
+    // Uno spazio se stai continuando una frase, niente se sei a inizio riga.
+    final glue = before.isEmpty || before.endsWith('\n') || before.endsWith(' ') ? '' : ' ';
+    _insert('$glue${d.text}');
+    HapticFeedback.selectionClick();
+    setState(() {
+      _pasted = d.at;
+      _dictation = null;
+    });
+  }
+
+  static const _bullet = '• ';
+
+  int _lineStart(String text, int at) => at <= 0 ? 0 : text.lastIndexOf('\n', at - 1) + 1;
+
+  /// Il tasto elenco: mette o toglie il pallino all'inizio della riga dove sei.
+  void _toggleList() {
+    final text = _text.text;
+    final at = _selection.start;
+    final start = _lineStart(text, at);
+    HapticFeedback.selectionClick();
+    if (text.startsWith(_bullet, start)) {
+      _set(text.replaceRange(start, start + _bullet.length, ''), (at - _bullet.length).clamp(start, text.length));
+    } else {
+      _set(text.replaceRange(start, start, _bullet), at + _bullet.length);
+    }
+  }
+
+  /// Andando a capo dentro un elenco il pallino continua; su una riga vuota col pallino, l'elenco finisce.
+  void _continueList() {
+    final now = _text.text;
+    final before = _before;
+    _before = now;
+    if (now.length != before.length + 1) return;
+    final c = _text.selection.baseOffset;
+    if (c < 1 || now[c - 1] != '\n') return;
+    final start = _lineStart(now, c - 1);
+    final line = now.substring(start, c - 1);
+    if (!line.startsWith(_bullet)) return;
+    if (line == _bullet) {
+      _set(now.replaceRange(start, c, ''), start);
+    } else {
+      _set(now.replaceRange(c, c, _bullet), c + _bullet.length);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -293,39 +387,105 @@ class _NoteEditorState extends State<NoteEditor> {
               const SizedBox(width: 8),
             ],
           ),
-          body: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: _title,
-                  style: display(context, size: 24),
-                  textCapitalization: TextCapitalization.sentences,
-                  textInputAction: TextInputAction.next,
-                  maxLines: null,
-                  decoration: plain.copyWith(
-                    hintText: 'Titolo',
-                    hintStyle: display(context, size: 24, color: tk.faint),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: _title,
+                        style: display(context, size: 24),
+                        textCapitalization: TextCapitalization.sentences,
+                        textInputAction: TextInputAction.next,
+                        maxLines: null,
+                        decoration: plain.copyWith(
+                          hintText: 'Titolo',
+                          hintStyle: display(context, size: 24, color: tk.faint),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _text,
+                          undoController: _undo,
+                          autofocus: fresh,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                          textCapitalization: TextCapitalization.sentences,
+                          keyboardType: TextInputType.multiline,
+                          maxLines: null,
+                          expands: true,
+                          textAlignVertical: TextAlignVertical.top,
+                          decoration: plain.copyWith(hintText: 'Scrivi…'),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _text,
-                    autofocus: fresh,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                    textCapitalization: TextCapitalization.sentences,
-                    keyboardType: TextInputType.multiline,
-                    maxLines: null,
-                    expands: true,
-                    textAlignVertical: TextAlignVertical.top,
-                    decoration: plain.copyWith(hintText: 'Scrivi…'),
-                  ),
-                ),
-              ],
-            ),
+              ),
+              NoteToolbar(undo: _undo, onList: _toggleList, dictation: _dictation, onPaste: _pasteDictation),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// La barra sotto la nota, sopra la tastiera: annulla e ripeti, l'elenco, e quando hai
+/// appena dettato qualcosa con Transcri, il tasto per incollarlo qui.
+class NoteToolbar extends StatelessWidget {
+  const NoteToolbar({super.key, required this.undo, required this.onList, required this.dictation, required this.onPaste});
+
+  final UndoHistoryController undo;
+  final VoidCallback onList;
+  final Entry? dictation;
+  final VoidCallback onPaste;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+        child: Row(
+          children: [
+            ValueListenableBuilder<UndoHistoryValue>(
+              valueListenable: undo,
+              builder: (context, v, _) => Row(
+                children: [
+                  IconButton(onPressed: v.canUndo ? undo.undo : null, icon: const Icon(Icons.undo_rounded), tooltip: 'Annulla'),
+                  IconButton(onPressed: v.canRedo ? undo.redo : null, icon: const Icon(Icons.redo_rounded), tooltip: 'Ripeti'),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: onList,
+              icon: Icon(Icons.format_list_bulleted_rounded, color: tk.text),
+              tooltip: 'Elenco',
+            ),
+            const Spacer(),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              transitionBuilder: (c, a) => ScaleTransition(
+                scale: a,
+                child: FadeTransition(opacity: a, child: c),
+              ),
+              child: dictation == null
+                  ? const SizedBox.shrink()
+                  : FilledButton.icon(
+                      key: ValueKey(dictation!.at),
+                      onPressed: onPaste,
+                      style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+                      icon: const Icon(Icons.mic_rounded, size: 18),
+                      label: const Text('Incolla la dettatura'),
+                    ),
+            ),
+          ],
         ),
       ),
     );

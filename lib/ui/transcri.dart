@@ -8,7 +8,7 @@ import '../core/native.dart';
 import 'common.dart';
 import 'theme.dart';
 
-/// Il nido di Transcri: la sua casa tonda nel Dock, in basso a destra. Lì sta seduto, respira,
+/// Il nido di Transcri: la sua casa tonda dentro l'isola di destra del Dock. Lì sta seduto, respira,
 /// sbatte gli occhi e si guarda intorno. Toccando il nido esce e vola al bordo; toccandolo di
 /// nuovo torna, atterra con un sobbalzo e il nido si illumina. Quando è fuori resta il suo contorno.
 class TranscriNest extends StatefulWidget {
@@ -27,7 +27,7 @@ class TranscriNest extends StatefulWidget {
 class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMixin {
   static const _outroMs = 640; // come OUTRO_MS nel nativo
   /// Quanto è grande la casa: la stessa misura delle altre isole del Dock.
-  static const slot = 64.0;
+  static const slot = dockRound;
 
   // 0 = a riposo, 1 = schiacciato fino in fondo; al rilascio torna con una molla che rimbalza.
   late final _press = AnimationController(vsync: this, duration: const Duration(milliseconds: 160));
@@ -293,7 +293,7 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
       curve: Curves.easeOutCubic,
       width: slot,
       height: slot,
-      decoration: BoxDecoration(gradient: _fill(islandColor(context), home), shape: BoxShape.circle, boxShadow: islandShadow),
+      decoration: BoxDecoration(gradient: _fill(islandColor(context), home), shape: BoxShape.circle),
       child: face,
     );
     return GestureDetector(
