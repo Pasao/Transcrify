@@ -78,6 +78,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
+    testImplementation("junit:junit:4.13.2")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("androidx.savedstate:savedstate-ktx:1.4.0")
 }
