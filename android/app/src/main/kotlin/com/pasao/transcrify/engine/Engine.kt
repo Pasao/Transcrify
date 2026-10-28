@@ -27,7 +27,12 @@ class NoteTopics(
  *
  * Quindi modificare una frase in una nota lunga costa una frase al modello e un paio di pezzi negli album.
  */
-class Engine(private val embedder: Embedder, val topics: Topics = Topics(embedder.dim)) {
+class Engine(
+    private val embedder: Embedder,
+    /** Le soglie del modello che dà il senso: ognuno ha la sua scala. */
+    private val profile: EngineProfile,
+    val topics: Topics = Topics(embedder.dim, profile.pair, profile.split),
+) {
     /** Il senso di ogni frase già vista, per impronta. (Su disco: una tabella SQLite con le stesse chiavi.) */
     private val memory = HashMap<Fingerprint, Int8Vec>()
     private val notePieces = HashMap<String, List<Long>>()
@@ -44,8 +49,8 @@ class Engine(private val embedder: Embedder, val topics: Topics = Topics(embedde
             missing.keys.forEachIndexed { i, fp -> memory[fp] = Int8Vec.of(Vec.normalized(vs[i])) }
         }
         val vectors = prints.map { memory.getValue(it).toFloats() }
-        val seg = Segmenter.segment(vectors)
-        val ranges = seg.pieces(seg.cuts(Grain.MEDIUM))
+        val seg = Segmenter.segment(vectors, profile.depthScale)
+        val ranges = seg.pieces(seg.cuts(Grain.MEDIUM, profile))
         val pieces = ranges.map { pieceId(noteId, prints, it) to it }
         val before = notePieces[noteId].orEmpty().toHashSet()
         val now = pieces.map { it.first }.toHashSet()

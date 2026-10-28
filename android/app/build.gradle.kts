@@ -65,6 +65,12 @@ flutter {
     source = "../.."
 }
 
+// I test col modello vero sul PC: su Windows il Java di Android Studio porta un msvcp140.dll
+// troppo vecchio per ONNX Runtime, quindi se ne può indicare un altro solo per i test (vedi TestModels).
+tasks.withType<Test>().configureEach {
+    providers.environmentVariable("TRANSCRIFY_TEST_JAVA").orNull?.let { executable = it }
+}
+
 android {
     buildFeatures {
         compose = true
@@ -79,6 +85,13 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     testImplementation("junit:junit:4.13.2")
+    // Il modello degli argomenti sul telefono. Il pacchetto completo (non «mobile»): Gemma in 4 bit
+    // usa operatori di Microsoft (MatMulNBits, GatherBlockQuantized, MultiHeadAttention…).
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
+    // Nei test sul PC la stessa versione, con le librerie per Windows, Linux e Mac.
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.31.1")
+    // Per leggere il tokenizer.json (20 MB) a flusso, uguale sul telefono e sul PC.
+    implementation("com.google.code.gson:gson:2.13.2")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("androidx.savedstate:savedstate-ktx:1.4.0")
 }

@@ -93,10 +93,10 @@ class HammingIndex(private val sim: SimHash) {
  */
 class Topics(
     val dim: Int,
-    /** Quanto devono somigliarsi in media due pezzi per stare nello stesso album. */
-    private val pair: Float = 0.38f,
+    /** Quanto devono somigliarsi in media due pezzi per stare nello stesso album (dal profilo del modello). */
+    private val pair: Float = EngineProfile.DEFAULT.pair,
     /** Sotto questa coesione un album grande si spezza. */
-    private val split: Float = 0.26f,
+    private val split: Float = EngineProfile.DEFAULT.split,
     val minShown: Int = 3,
     bits: Int = 256,
 ) {

@@ -1,0 +1,47 @@
+# Note finte per tarare le soglie, scritte come si detta: frasi lunghe, «allora», «cioè», pochi punti.
+# Una riga = un argomento: [argomento] testo. Una riga vuota = nota nuova.
+# Gli stessi argomenti tornano in note diverse, con parole diverse: così si vede se gli album li ritrovano.
+
+[palestra] Allora domani mattina vado in palestra presto perché il pomeriggio non ho tempo. Faccio gambe, squat e affondi, e poi dieci minuti di cyclette per scaldarmi. Devo ricordarmi di portare l'asciugamano che l'ultima volta l'ho dimenticato.
+[lavoro] Per il lavoro invece il cliente ha chiesto di spostare la consegna della schermata di login a venerdì. Quindi giovedì sera devo finire i test e mandare la build a Marco. Se non funziona l'accesso con Google lo diciamo subito, non aspettiamo l'ultimo giorno.
+[spesa] Poi passando al supermercato prendo il latte, le uova, il pane e qualcosa per la cena. Manca anche il detersivo per i piatti e la carta da forno.
+
+[viaggio] Sto pensando al viaggio in Sardegna a giugno, cioè una settimana tra Cagliari e la costa sud. Dobbiamo prenotare il traghetto da Civitavecchia prima che i prezzi salgano. Per dormire forse un agriturismo vicino a Chia, che ha la piscina e costa meno degli hotel.
+[universita] Per l'esame di statistica mi mancano ancora due capitoli, la regressione e i test di ipotesi. Il professore ha detto che all'orale chiede sempre gli esercizi del secondo compito. Voglio fare almeno tre esercizi al giorno fino al ventidue.
+[soldi] Devo pagare la bolletta della luce entro il quindici, sono centoventi euro. E controllare l'estratto conto perché mi sembra che l'abbonamento della palestra sia stato addebitato due volte.
+
+[famiglia] Il compleanno della mamma è il tre marzo e non ho ancora idea del regalo. Forse un corso di ceramica, le piaceva tanto quello che aveva fatto l'anno scorso con la zia. Oppure una cena tutti insieme in quel ristorante sul lago.
+[salute] Ah e devo prenotare la visita dal dentista perché il dente in fondo mi fa male quando bevo cose fredde. Chiamo lo studio lunedì mattina, aprono alle nove.
+[lavoro] Nella riunione di oggi abbiamo deciso di rifare il backend dell'app da capo, perché quello vecchio non regge più gli utenti. Io mi occupo delle notifiche e della sincronizzazione. Bisogna stimare i tempi entro la fine della settimana e dirlo al capo.
+[casa] Il rubinetto della cucina perde ancora, devo chiamare l'idraulico. E già che c'è gli faccio guardare anche lo scaldabagno che fa un rumore strano la mattina.
+
+[cucina] Stasera faccio la pasta al forno con la besciamella, la ricetta della nonna che sta nel quaderno blu. Servono il ragù, la mozzarella e il parmigiano, e il forno a duecento gradi per mezz'ora. Se avanza la porto domani a pranzo.
+[palestra] Comunque ho deciso che da lunedì ricomincio a correre, tre volte a settimana al parco. Parto con cinque chilometri e poi aumento piano piano, senza farmi male al ginocchio come l'anno scorso. Devo anche comprare le scarpe nuove da corsa, quelle vecchie sono distrutte.
+
+[auto] La macchina deve fare il tagliando entro fine mese, e poi c'è la revisione a maggio. Il meccanico ha detto che le pastiglie dei freni sono quasi finite. Chiedo anche quanto costa cambiare le gomme invernali.
+[universita] allora per la tesi il relatore vuole il primo capitolo entro dicembre quindi devo finire di leggere gli articoli sul machine learning e scrivere lo stato dell'arte. Poi devo fissare un incontro per fargli vedere l'indice.
+[viaggio] Per il viaggio di giugno ho guardato i voli per Cagliari, costano meno del traghetto se prenotiamo adesso. Però con la macchina a noleggio la spesa sale parecchio. Ne parlo con Giulia stasera e decidiamo.
+[spesa] Lista della spesa per sabato: pomodori, zucchine, pollo, yogurt, caffè e le mele per la torta.
+
+[salute] Il medico mi ha detto di fare gli esami del sangue a digiuno, e di portare i risultati entro due settimane. Devo anche ricordarmi di prendere la vitamina D tutte le mattine dopo colazione. Se continua il mal di schiena mi manda dal fisioterapista.
+[soldi] Questo mese ho speso troppo in ristoranti, quindi da adesso metto da parte duecento euro al mese per le vacanze. Devo anche capire se mi conviene cambiare banca, quella di adesso costa dieci euro al mese solo di canone.
+[lavoro] Domani alle dieci c'è la demo dell'app con il cliente. Devo preparare le slide e controllare che la versione di prova non si blocchi sul telefono vecchio. Marco porta i dati delle prime settimane di utilizzo.
+[famiglia] Domenica pranzo da mio fratello, porto il dolce. I bambini vogliono giocare a calcio in giardino quindi porto anche il pallone.
+
+[casa] Allora per la casa nuova bisogna ancora scegliere il colore delle pareti del soggiorno, io direi un grigio chiaro. Il divano arriva il dodici e deve esserci qualcuno a casa la mattina. Poi c'è da montare la libreria dell'Ikea che è ancora negli scatoloni.
+[auto] Ho preso una multa per eccesso di velocità sulla statale, devo pagarla entro cinque giorni così è ridotta. E l'assicurazione della macchina scade a fine aprile, devo confrontare i preventivi.
+[cucina] Voglio provare a fare il pane in casa con il lievito madre, ho visto un video dove spiegano come rinfrescarlo ogni giorno. Mi serve la farina tipo uno e un cestino per la lievitazione.
+
+[universita] Ho passato l'esame di statistica con ventotto, finalmente. Adesso il prossimo è economia politica a febbraio, devo ritirare il libro in biblioteca e iniziare con i primi capitoli.
+[palestra] in palestra l'istruttore mi ha cambiato la scheda adesso faccio più esercizi per la schiena e meno per le braccia e mi ha detto di bere di più durante l'allenamento e di non saltare lo stretching alla fine.
+[viaggio] Per la Sardegna abbiamo prenotato il volo, partiamo il dieci giugno e torniamo il diciassette. Adesso manca solo l'alloggio, Giulia preferisce stare vicino al mare anche se costa di più. Dobbiamo anche vedere se a Chia si può fare snorkeling.
+[salute] Gli esami del sangue sono andati bene, solo il ferro è un po' basso. Il medico ha detto di mangiare più legumi e verdure a foglia verde.
+
+[soldi] Ho fatto i conti delle spese di casa: affitto, luce, gas e internet fanno quasi novecento euro al mese. Devo vedere se si può cambiare gestore del gas, ho sentito che ci sono offerte migliori. E ricordarmi la rata della macchina il venti.
+[famiglia] Per Natale quest'anno andiamo dai nonni in montagna, partiamo il ventitré. Bisogna comprare i regali per i cugini, sono sette e non ho ancora idee. La mamma dice di non spendere troppo.
+[casa] Il condominio ha mandato la convocazione per l'assemblea, si parla del rifacimento del tetto e delle spese per l'ascensore. Ci vado io perché mio padre quel giorno lavora.
+[lavoro] La demo è andata bene, il cliente vuole aggiungere la funzione per esportare i dati in Excel. Dobbiamo rifare la stima e capire se ci sta nel prossimo rilascio. Marco dice che senza un'altra persona non ce la facciamo.
+
+[cucina] Domenica viene gente a cena, siamo in otto, faccio il risotto ai funghi e l'arrosto. Per antipasto taglieri di salumi e formaggi, e il tiramisù lo fa Giulia.
+[auto] Il tagliando è costato duecentottanta euro, hanno cambiato anche l'olio e il filtro dell'aria. Le gomme invece le cambio a novembre quando arrivano quelle invernali.
+[spesa] Al mercato di sabato prendo la frutta di stagione, le castagne e il pesce fresco. Ricordarsi i sacchetti di stoffa e i soldi in contanti perché lì non prendono la carta.
