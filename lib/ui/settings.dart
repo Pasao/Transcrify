@@ -51,7 +51,8 @@ class ModelTiers {
   }
 }
 
-/// Le impostazioni, a gruppi come in Revolut: Dettatura, Modelli, Utilizzo, Aiuto, la zona sensibile.
+/// Le impostazioni, a gruppi come in Revolut: Dettatura, Pulizia del testo, Argomenti nelle note,
+/// Utilizzo, Aiuto, la zona sensibile.
 /// Ogni riga dice il suo valore e apre la sua pagina. Restituisce 'intro' per rivedere come funziona.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -127,75 +128,87 @@ class _SettingsPageState extends State<SettingsPage> {
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                     child: Text('Impostazioni', style: display(context)),
                   ),
+                  // Tre gruppi, uno per cosa fa l'app col tuo parlato: la voce diventa testo, il testo si pulisce,
+                  // le note si dividono per argomento. Quando una cosa si accende, le sue scelte compaiono sotto.
                   SettingsGroup(
                     label: 'Dettatura',
-                    children: [
-                      SettingsRow(
-                        icon: Icons.auto_fix_high_rounded,
-                        color: Tokens.blue,
-                        title: 'Pulisci il testo',
-                        subtitle: 'Toglie esitazioni e ripetizioni, mette la punteggiatura',
-                        trailing: Switch(value: st.purify, onChanged: _setPurify),
-                        onTap: () => _setPurify(!st.purify),
-                      ),
-                      // Come pulisce e il vocabolario servono solo alla pulizia: ci sono solo quando è accesa.
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 260),
-                        curve: Curves.easeOutCubic,
-                        alignment: Alignment.topCenter,
-                        child: !st.purify
-                            ? const SizedBox(width: double.infinity)
-                            : Column(
-                                children: [
-                                  SettingsRow(
-                                    icon: Icons.tune_rounded,
-                                    color: Tokens.violet,
-                                    title: 'Come pulisce',
-                                    value: _modeNames[st.mode],
-                                    onTap: () => _open(LiveSettings(title: 'Come pulisce', build: _cleanPage)),
-                                  ),
-                                  SettingsRow(
-                                    icon: Icons.spellcheck_rounded,
-                                    color: Tokens.green,
-                                    title: 'Vocabolario',
-                                    value: st.words.isEmpty ? 'Vuoto' : '${st.words.length} ${st.words.length == 1 ? 'parola' : 'parole'}',
-                                    onTap: () => _open(
-                                      LiveSettings(
-                                        title: 'Vocabolario',
-                                        build: (context, st, reload) => [WordsEditor(words: st.words, onChanged: reload)],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ],
-                  ),
-                  SettingsGroup(
-                    label: 'Modelli',
                     children: [
                       SettingsRow(
                         icon: Icons.graphic_eq_rounded,
                         color: Tokens.blue,
                         title: 'Trascrizione',
+                        subtitle: 'Chi ascolta la tua voce e la scrive',
                         value: _modelValue(st.sttModel, speech: true),
                         onTap: () => _open(const ModelSettings(speech: true)),
                       ),
+                    ],
+                  ),
+                  SettingsGroup(
+                    label: 'Pulizia del testo',
+                    children: [
                       SettingsRow(
-                        icon: Icons.auto_awesome_rounded,
+                        icon: Icons.auto_fix_high_rounded,
                         color: Tokens.violet,
-                        title: 'Pulizia del testo',
-                        value: _modelValue(st.llmModel, speech: false),
-                        onTap: () => _open(const ModelSettings(speech: false)),
+                        title: 'Pulisci il testo',
+                        subtitle: 'Toglie esitazioni e ripetizioni, mette la punteggiatura',
+                        trailing: Switch(value: st.purify, onChanged: _setPurify),
+                        onTap: () => _setPurify(!st.purify),
                       ),
+                      _Unfold(
+                        open: st.purify,
+                        children: [
+                          SettingsRow(
+                            icon: Icons.auto_awesome_rounded,
+                            color: Tokens.violet,
+                            title: 'Modello',
+                            value: _modelValue(st.llmModel, speech: false),
+                            onTap: () => _open(const ModelSettings(speech: false)),
+                          ),
+                          SettingsRow(
+                            icon: Icons.tune_rounded,
+                            color: Tokens.violet,
+                            title: 'Come pulisce',
+                            value: _modeNames[st.mode],
+                            onTap: () => _open(LiveSettings(title: 'Come pulisce', build: _cleanPage)),
+                          ),
+                          SettingsRow(
+                            icon: Icons.spellcheck_rounded,
+                            color: Tokens.violet,
+                            title: 'Vocabolario',
+                            value: st.words.isEmpty ? 'Vuoto' : '${st.words.length} ${st.words.length == 1 ? 'parola' : 'parole'}',
+                            onTap: () => _open(
+                              LiveSettings(
+                                title: 'Vocabolario',
+                                build: (context, st, reload) => [WordsEditor(words: st.words, onChanged: reload)],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  SettingsGroup(
+                    label: 'Argomenti nelle note',
+                    children: [
                       SettingsRow(
                         icon: Icons.bubble_chart_rounded,
                         color: Tokens.green,
-                        title: 'Argomenti nelle note',
+                        title: 'Dividi per argomento',
                         subtitle: 'Sul telefono, senza rete',
-                        value: topicsOn ? topics : null,
                         trailing: Switch(value: topicsOn, onChanged: _setTopics),
-                        onTap: () => _open(const TopicsSettings()),
+                        onTap: () => _setTopics(!topicsOn),
+                      ),
+                      _Unfold(
+                        open: topicsOn,
+                        children: [
+                          SettingsRow(
+                            icon: Icons.memory_rounded,
+                            color: Tokens.green,
+                            title: 'Modello',
+                            value: topics,
+                            onTap: () => _open(const TopicsSettings()),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -384,6 +397,22 @@ class _SettingsPageState extends State<SettingsPage> {
       ],
     ];
   }
+}
+
+/// Le righe che dipendono da un interruttore: si aprono sotto quando è acceso, spariscono quando è spento.
+class _Unfold extends StatelessWidget {
+  const _Unfold({required this.open, required this.children});
+
+  final bool open;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => AnimatedSize(
+    duration: const Duration(milliseconds: 260),
+    curve: Curves.easeOutCubic,
+    alignment: Alignment.topCenter,
+    child: open ? Column(children: children) : const SizedBox(width: double.infinity),
+  );
 }
 
 /// I contatori della trascrizione: quante oggi e i minuti di audio, con quando si azzerano.
