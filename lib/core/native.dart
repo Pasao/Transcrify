@@ -301,11 +301,13 @@ class Core {
   static final live = ValueNotifier<Live>(const Live());
 
   /// Comincia ad ascoltare dentro l'app. Se esci, Transcri vola fuori e continua.
-  /// [appendTo]: quello che senti finisce in fondo a questa trascrizione.
-  static Future<void> listen({DateTime? appendTo}) => _ch.invokeMethod('listen', {'appendTo': appendTo?.millisecondsSinceEpoch});
+  /// [appendTo]: quello che senti finisce in questa trascrizione, alla posizione [cursor] (-1 = in fondo).
+  /// [panel]: dove aprire subito il player (l, t, r, b, in pixel fisici).
+  static Future<void> listen({DateTime? appendTo, int cursor = -1, List<double>? panel}) =>
+      _ch.invokeMethod('listen', {'appendTo': appendTo?.millisecondsSinceEpoch, 'cursor': cursor, 'panel': panel});
 
-  /// Apre i comandi del Floater sopra il Dock: butta, ferma, pausa, modi.
-  static Future<void> openPanel() => _ch.invokeMethod('openPanel');
+  /// Apre il player del Floater (butta, ferma, pausa, modi) vicino a [rect] (l, t, r, b, in pixel fisici).
+  static Future<void> openPanel(List<double> rect) => _ch.invokeMethod('openPanel', {'rect': rect});
 
   static Future<void> stopListening() => _ch.invokeMethod('stopListening');
 

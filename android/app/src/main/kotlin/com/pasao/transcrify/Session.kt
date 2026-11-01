@@ -69,6 +69,9 @@ class Session(private val context: Context, private val store: Store, private va
     /** La trascrizione a cui si attacca quello che stai dettando, se l'hai aperta con «Aggiungi a voce». */
     var appendingTo by mutableStateOf<Long?>(null); private set
 
+    /** Dov'era il cursore in quella trascrizione: lì finisce il testo. -1 = in fondo. */
+    private var appendCursor = -1
+
     /** Sta lavorando sugli audio condivisi: chi spegne il servizio aspetta anche loro. */
     private var draining by mutableStateOf(false)
 
@@ -137,9 +140,10 @@ class Session(private val context: Context, private val store: Store, private va
         purify = store.purify
     }
 
-    fun start(appendTo: Long? = null) {
+    fun start(appendTo: Long? = null, cursor: Int = -1) {
         if (phase == Phase.RECORDING || phase == Phase.PROCESSING) return
         appendingTo = appendTo
+        appendCursor = cursor
         refreshLimits()
         if (phase == Phase.LIMITED) return
         if (Simulated.noMic || context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -262,7 +266,7 @@ class Session(private val context: Context, private val store: Store, private va
             say("Non ho sentito niente")
             return null
         }
-        val item = queue.add(recording, duration / 1000, if (purify) mode else null, appendingTo)
+        val item = queue.add(recording, duration / 1000, if (purify) mode else null, appendingTo, cursor = appendCursor)
         waiting = queue.all().size
         onHistoryChanged()
         return item

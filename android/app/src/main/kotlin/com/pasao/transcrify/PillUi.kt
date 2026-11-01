@@ -658,7 +658,9 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
         val mw = with(density) { sizeW.dp.toPx() }
         val mh = with(density) { sizeH.dp.toPx() }
         val margin = with(density) { PillGeometry.MENU_MARGIN.dp.toPx() }
-        val left = if (nest != null || svc.pillRight) w - mw - margin else margin
+        // Vicino al tasto che l'ha aperto, o sul lato della pillola.
+        val right = if (nest != null) nest.center.x > w / 2 else svc.pillRight
+        val left = if (right) w - mw - margin else margin
         val top = if (nest != null) nest.top - mh - margin else (bar.center.y - mh / 2).coerceIn(margin * 4, h - mh - margin * 4)
         val menu = Rect(left, top, left + mw, top + mh)
         val p = t.value

@@ -42,6 +42,19 @@ data class Note(val id: String, val title: String, val text: String, val created
     }
 }
 
+/**
+ * Mette [piece] in [text] alla posizione [cursor]. Dentro il testo si attacca con uno spazio dove serve;
+ * in fondo, o senza cursore (-1), diventa un paragrafo nuovo. Il cursore può essere vecchio: non si fida.
+ */
+fun insertPiece(text: String, piece: String, cursor: Int): String {
+    if (cursor !in 0 until text.trimEnd().length) return if (text.isBlank()) piece else text.trimEnd() + "\n\n" + piece
+    val before = text.substring(0, cursor)
+    val after = text.substring(cursor)
+    val left = if (before.isEmpty() || before.last().isWhitespace()) "" else " "
+    val right = if (after.first().isWhitespace()) "" else " "
+    return before + left + piece + right + after
+}
+
 enum class Limit { OK, HOURLY, DAILY }
 
 /**
@@ -215,11 +228,11 @@ class Store(context: Context) {
     @Synchronized
     fun editEntry(at: Long, text: String) = writeHistory(history().map { if (it.at == at) it.copy(text = text) else it })
 
-    /** Nuove parole in fondo a una trascrizione. Null se nel frattempo è stata eliminata. */
+    /** Nuove parole in una trascrizione, dove c'era il cursore. Null se nel frattempo è stata eliminata. */
     @Synchronized
-    fun appendToEntry(at: Long, text: String): Transcription? {
+    fun addToEntry(at: Long, text: String, cursor: Int): Transcription? {
         val entry = history().firstOrNull { it.at == at } ?: return null
-        val longer = entry.copy(text = entry.text.trimEnd() + "\n\n" + text)
+        val longer = entry.copy(text = insertPiece(entry.text, text, cursor))
         writeHistory(history().map { if (it.at == at) longer else it })
         return longer
     }

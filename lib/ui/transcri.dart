@@ -169,7 +169,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
     if (_listening) {
       HapticFeedback.selectionClick();
       _press.animateBack(0, duration: const Duration(milliseconds: 520), curve: Curves.elasticOut);
-      Core.openPanel();
+      Core.openPanel(_home().$2);
       return;
     }
     if (_blocked) {

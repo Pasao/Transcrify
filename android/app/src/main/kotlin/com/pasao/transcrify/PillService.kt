@@ -203,7 +203,8 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         finishing?.cancel()
         when (intent?.action) {
             ACTION_LISTEN -> {
-                listen(if (intent.hasExtra(EXTRA_APPEND)) intent.getLongExtra(EXTRA_APPEND, 0) else null)
+                listen(if (intent.hasExtra(EXTRA_APPEND)) intent.getLongExtra(EXTRA_APPEND, 0) else null, intent.getIntExtra(EXTRA_CURSOR, -1))
+                intent.getFloatArrayExtra(EXTRA_PANEL)?.toRect()?.let(::openPanel)
                 return START_NOT_STICKY
             }
             ACTION_SHARED -> {
@@ -237,8 +238,8 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     )
 
     /** Ascolta: dal Dock, senza finestre sopra le altre app; se è già fuori, lo vedi sulla sua pillola. */
-    private fun listen(appendTo: Long?) {
-        session.start(appendTo)
+    private fun listen(appendTo: Long?, cursor: Int) {
+        session.start(appendTo, cursor)
         if (!out && session.phase != Phase.RECORDING) rest()
     }
 
@@ -628,9 +629,12 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 
-    /** Transcri è nel Dock: apre lì i comandi del Floater (ferma, butta, pausa, modi). */
+    /** Apre il player (ferma, butta, pausa, modi) vicino a [nest], dov'è il tasto toccato. Se è fuori, dalla pillola. */
     fun openPanel(nest: Rect) {
-        if (!out && stage == null && Settings.canDrawOverlays(this)) showStage(Stage.Panel(nest))
+        when {
+            out -> expand()
+            stage == null && Settings.canDrawOverlays(this) -> showStage(Stage.Panel(nest))
+        }
     }
 
     /**
@@ -716,6 +720,8 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         private const val ACTION_LISTEN = "listen"
         private const val ACTION_SHARED = "shared"
         private const val EXTRA_APPEND = "append"
+        private const val EXTRA_CURSOR = "cursor"
+        private const val EXTRA_PANEL = "panel"
         private const val EXTRA_X = "x"
         private const val EXTRA_Y = "y"
         private const val EXTRA_HOME = "home"
@@ -748,9 +754,12 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
 
         /** Comincia ad ascoltare con l'app aperta: è qui che Android concede il microfono anche per dopo. */
-        fun listen(context: Context, appendTo: Long?) {
+        fun listen(context: Context, appendTo: Long?, cursor: Int, panel: FloatArray?) {
             context.startForegroundService(
-                Intent(context, PillService::class.java).setAction(ACTION_LISTEN).apply { appendTo?.let { putExtra(EXTRA_APPEND, it) } }
+                Intent(context, PillService::class.java).setAction(ACTION_LISTEN).putExtra(EXTRA_CURSOR, cursor).apply {
+                    appendTo?.let { putExtra(EXTRA_APPEND, it) }
+                    panel?.let { putExtra(EXTRA_PANEL, it) }
+                }
             )
         }
 

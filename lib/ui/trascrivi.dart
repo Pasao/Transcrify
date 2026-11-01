@@ -747,28 +747,56 @@ class _EntrySheetState extends State<_EntrySheet> {
     Core.editEntry(widget.entry.at, now);
   }
 
-  /// Sono arrivate parole a voce: si attaccano in fondo, senza toccare quello che stai scrivendo.
+  /// Sono arrivate parole a voce: entrano dov'era il cursore, e lui si sposta dopo di loro.
   Future<void> _reload() async {
     final list = await Core.history();
     if (!mounted) return;
     final now = list.where((e) => e.at == widget.entry.at).firstOrNull?.text;
     if (now == null || now == _saved) return;
-    final added = now.startsWith(_saved) ? now.substring(_saved.length) : null;
-    final cursor = _text.selection;
+    final grown = now.length - _saved.length;
+    final at = _text.selection.isValid ? _text.selection.baseOffset : -1;
     _saved = now;
-    if (added == null) {
-      _text.text = now;
-    } else {
-      _text.value = _text.value.copyWith(text: _text.text + added, selection: cursor.isValid ? cursor : null, composing: TextRange.empty);
-    }
+    _text.value = TextEditingValue(
+      text: now,
+      selection: at >= 0 && at + grown <= now.length ? TextSelection.collapsed(offset: at + grown) : const TextSelection.collapsed(offset: -1),
+    );
+  }
+
+  /// Quando la tastiera si chiude sparisce anche il cursore; il punto resta ricordato per la voce.
+  double _keyboard = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final now = MediaQuery.viewInsetsOf(context).bottom;
+    if (_keyboard > 0 && now == 0 && _focus.hasFocus) _focus.unfocus();
+    _keyboard = now;
+  }
+
+  final _voiceKey = GlobalKey();
+
+  /// Il tasto della voce, in pixel fisici: il player si apre lì sopra.
+  List<double> _voiceRect() {
+    final box = _voiceKey.currentContext!.findRenderObject() as RenderBox;
+    final ratio = MediaQuery.devicePixelRatioOf(context);
+    final tl = box.localToGlobal(Offset.zero) * ratio;
+    final br = box.localToGlobal(box.size.bottomRight(Offset.zero)) * ratio;
+    return [tl.dx, tl.dy, br.dx, br.dy];
   }
 
   Future<void> _addVoice() async {
     _saving?.cancel();
     _save();
     if (!await transcriReady(context)) return;
+    // Il player sta sopra la tastiera: si chiude prima, così non copre il testo.
+    if (_focus.hasFocus) {
+      _focus.unfocus();
+      await Future.delayed(const Duration(milliseconds: 320));
+      if (!mounted) return;
+    }
     HapticFeedback.heavyImpact();
-    await Core.listen(appendTo: widget.entry.at);
+    final at = _text.selection;
+    await Core.listen(appendTo: widget.entry.at, cursor: at.isValid ? at.end : -1, panel: _voiceRect());
   }
 
   @override
@@ -829,7 +857,10 @@ class _EntrySheetState extends State<_EntrySheet> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: _AddVoice(at: entry.at, onStart: _addVoice),
+                        child: KeyedSubtree(
+                          key: _voiceKey,
+                          child: _AddVoice(at: entry.at, onStart: _addVoice, onOpen: () => Core.openPanel(_voiceRect())),
+                        ),
                       ),
                       DeleteButton(onDelete: widget.onDelete),
                       ListenableBuilder(
@@ -848,13 +879,13 @@ class _EntrySheetState extends State<_EntrySheet> {
   }
 }
 
-/// «Aggiungi a voce», a sinistra nella barra: mentre ascolta e trascrive diventa il cerchio di Transcri,
-/// con accanto cosa sta facendo. Il testo arriva in fondo.
+/// «Aggiungi a voce», a sinistra nella barra. Il tocco fa partire Transcri e apre il player, lo stesso del
+/// Floater. Mentre ascolta e trascrive qui c'è il suo cerchio: toccandolo si riapre il player.
 class _AddVoice extends StatelessWidget {
-  const _AddVoice({required this.at, required this.onStart});
+  const _AddVoice({required this.at, required this.onStart, required this.onOpen});
 
   final DateTime at;
-  final VoidCallback onStart;
+  final VoidCallback onStart, onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -872,33 +903,37 @@ class _AddVoice extends StatelessWidget {
         if (mine && live.listening) {
           return Row(
             children: [
-              Tooltip(
-                message: 'Ferma e aggiungi',
-                child: InkResponse(
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    Core.stopListening();
-                  },
-                  child: const VoiceCircle(
-                    phase: 'RECORDING',
-                    size: 34,
-                    child: Icon(Icons.stop_rounded, size: 20, color: Colors.white),
+              Flexible(
+                child: Tooltip(
+                  message: 'Apri i comandi',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: onOpen,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(6, 3, 10, 3),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [const VoiceCircle(phase: 'RECORDING', size: 28), saying('Ti ascolto')]),
+                    ),
                   ),
                 ),
               ),
-              saying('Ti ascolto'),
               IconButton(
                 constraints: const BoxConstraints.tightFor(width: 40, height: 40),
                 padding: EdgeInsets.zero,
-                onPressed: Core.discardListening,
-                tooltip: 'Butta',
-                icon: Icon(Icons.close_rounded, size: 20, color: tk.muted),
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  Core.stopListening();
+                },
+                tooltip: 'Ferma e aggiungi',
+                icon: Icon(Icons.stop_rounded, size: 22, color: tk.muted),
               ),
             ],
           );
         }
         if (mine && live.phase == 'PROCESSING') {
-          return Row(children: [const VoiceCircle(phase: 'PROCESSING', size: 34), saying('Sto trascrivendo')]);
+          return Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Row(children: [const VoiceCircle(phase: 'PROCESSING', size: 28), saying('Sto trascrivendo')]),
+          );
         }
         return Align(
           alignment: Alignment.centerLeft,

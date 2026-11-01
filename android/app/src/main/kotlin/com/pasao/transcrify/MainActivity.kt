@@ -76,11 +76,16 @@ class MainActivity : FlutterActivity() {
                 }
                 "listen" -> {
                     // Parte con l'app davanti: Android poi lascia il microfono acceso anche fuori.
-                    PillService.listen(this, call.argument<Number>("appendTo")?.toLong())
+                    PillService.listen(
+                        this, call.argument<Number>("appendTo")?.toLong(), call.argument<Number>("cursor")?.toInt() ?: -1,
+                        call.argument<List<Double>>("panel")?.map { it.toFloat() }?.toFloatArray(),
+                    )
                     result.success(null)
                 }
                 "openPanel" -> {
-                    PillService.appNest?.let { PillService.instance?.openPanel(it) }
+                    call.argument<List<Double>>("rect")?.map { it.toFloat() }?.toFloatArray()
+                        ?.let { with(PillService) { it.toRect() } }
+                        ?.let { PillService.instance?.openPanel(it) }
                     result.success(null)
                 }
                 "stopListening" -> {

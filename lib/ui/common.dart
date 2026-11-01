@@ -92,7 +92,8 @@ class _VoicePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
-    final base = size.width / 2 * (1 + voice * 0.14);
+    // Di pochi punti, gli stessi a ogni misura: su un cerchio piccolo una percentuale non si vedrebbe.
+    final base = size.width / 2 + voice * 5;
     final path = Path();
     const steps = 90;
     for (var i = 0; i <= steps; i++) {

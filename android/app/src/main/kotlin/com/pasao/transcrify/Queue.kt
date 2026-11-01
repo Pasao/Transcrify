@@ -17,6 +17,7 @@ data class Pending(
     val mode: String?,
     val appendTo: Long? = null,
     val origin: Origin? = null,
+    val cursor: Int = -1,
 )
 
 /** Un audio arrivato da «Condividi»: [source] è l'app che lo manda ("whatsapp"), se si riconosce. */
@@ -35,7 +36,7 @@ class Queue(context: Context) {
     private val dir = File(Sandbox.dir(context), "queue").apply { mkdirs() }
 
     @Synchronized
-    fun add(src: File, seconds: Long, mode: String?, appendTo: Long? = null, origin: Origin? = null): Pending {
+    fun add(src: File, seconds: Long, mode: String?, appendTo: Long? = null, origin: Origin? = null, cursor: Int = -1): Pending {
         val at = System.currentTimeMillis()
         // Più audio condivisi insieme arrivano nello stesso millesimo di secondo.
         var id = at.toString()
@@ -47,10 +48,10 @@ class Queue(context: Context) {
             src.delete()
         }
         val meta = JSONObject().put("at", at).put("seconds", seconds).put("mode", mode).put("ext", src.extension)
-        appendTo?.let { meta.put("appendTo", it) }
+        appendTo?.let { meta.put("appendTo", it).put("cursor", cursor) }
         origin?.let { meta.put("shared", true).put("source", it.source).put("toNote", it.toNote) }
         File(dir, "$id.json").writeText(meta.toString())
-        return Pending(id, audio, at, seconds, mode, appendTo, origin)
+        return Pending(id, audio, at, seconds, mode, appendTo, origin, cursor)
     }
 
     /** Dalla più vecchia alla più nuova. */
@@ -64,6 +65,7 @@ class Queue(context: Context) {
                 if (j.isNull("mode")) null else j.getString("mode"),
                 if (j.has("appendTo")) j.getLong("appendTo") else null,
                 if (j.optBoolean("shared")) Origin(if (j.isNull("source")) null else j.getString("source"), j.optBoolean("toNote")) else null,
+                j.optInt("cursor", -1),
             )
         }.getOrNull()
     }.filter { it.audio.exists() }.sortedWith(compareBy({ it.at }, { it.id }))
@@ -126,7 +128,7 @@ class Transcriber(private val context: Context, private val store: Store, privat
     private fun deliver(item: Pending, text: String, cleaned: Boolean): Transcription {
         val now = System.currentTimeMillis()
         val mode = if (cleaned) item.mode else null
-        item.appendTo?.let { at -> store.appendToEntry(at, text)?.let { return it } }
+        item.appendTo?.let { at -> store.addToEntry(at, text, item.cursor)?.let { return it } }
         val source = item.origin?.source
         if (item.origin?.toNote == true) {
             val id = "$now-${item.id}"
