@@ -90,7 +90,7 @@ class Session(private val context: Context, private val store: Store, private va
         .build()
     private var ticker: Job? = null
     // Nei file dell'app, non nella cache: Android non la cancella mentre aspetta.
-    private val recording get() = File(context.filesDir, "recording.m4a")
+    private val recording get() = File(Sandbox.dir(context), "recording.m4a")
 
     init {
         // L'audio da riprovare della versione di prima entra nella coda.
@@ -429,6 +429,7 @@ class Session(private val context: Context, private val store: Store, private va
     }
 
     private fun copy(text: String) {
+        if (Sandbox.on(context)) return
         val cm = context.getSystemService(ClipboardManager::class.java)
         cm.setPrimaryClip(ClipData.newPlainText("Transcrify", text))
     }

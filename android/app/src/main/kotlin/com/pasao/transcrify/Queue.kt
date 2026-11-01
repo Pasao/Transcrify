@@ -32,7 +32,7 @@ data class Origin(val source: String?, val toNote: Boolean) {
  * o quando le butti tu. Un audio di 40 minuti non si perde per una rete che manca.
  */
 class Queue(context: Context) {
-    private val dir = File(context.filesDir, "queue").apply { mkdirs() }
+    private val dir = File(Sandbox.dir(context), "queue").apply { mkdirs() }
 
     @Synchronized
     fun add(src: File, seconds: Long, mode: String?, appendTo: Long? = null, origin: Origin? = null): Pending {
@@ -101,11 +101,11 @@ class Transcriber(private val context: Context, private val store: Store, privat
             var cleaned = false
             if (text.isNotEmpty() && item.mode != null) {
                 // Se la pulizia fallisce si tiene il testo grezzo: meglio di niente.
-                runCatching { groq.cleanLong(text, store.cleanupModel, store.promptFor(item.mode), store.words) }
+                runCatching { groq.cleanLong(text, store.cleanupModel, store.promptFor(item.mode), store.words, store.guardFor(item.mode)) }
                     .onSuccess { text = it; cleaned = true; store.countUse(store.cleanupModel) }
                 store.saveModelLimits(store.cleanupModel, groq.lastLimits)
             }
-            val result = if (isHallucination(text)) null else deliver(item, text, cleaned)
+            val result = if (isHallucination(text)) null else deliver(groq, item, text, cleaned)
             store.addUsage(item.seconds)
             queue.remove(item.id)
             Outcome.Done(result)
@@ -117,14 +117,17 @@ class Transcriber(private val context: Context, private val store: Store, privat
     }
 
     /** Il testo va dove deve: in fondo a una trascrizione, in una nota nuova o in una trascrizione nuova. */
-    private fun deliver(item: Pending, text: String, cleaned: Boolean): Transcription {
+    private fun deliver(groq: Groq, item: Pending, text: String, cleaned: Boolean): Transcription {
         val now = System.currentTimeMillis()
         val mode = if (cleaned) item.mode else null
         item.appendTo?.let { at -> store.appendToEntry(at, text)?.let { return it } }
         val source = item.origin?.source
         if (item.origin?.toNote == true) {
             val id = "$now-${item.id}"
-            store.saveNote(Note(id, "", text, now, now, source))
+            // Un titolo fa ritrovare la nota; se non arriva, resta senza.
+            val title = runCatching { groq.title(text, store.cleanupModel) }
+                .onSuccess { store.countUse(store.cleanupModel) }.getOrDefault("")
+            store.saveNote(Note(id, title, text, now, now, source))
             NoteTopicsWorker.get(context).request(id)
             return Transcription(text, now, cleaned, mode, source)
         }

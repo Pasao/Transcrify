@@ -12,6 +12,8 @@ import 'theme.dart';
 /// Se l'hai eliminata, per qualche secondo la puoi riavere.
 Future<void> openNote(BuildContext context, [Note? note]) async {
   final start = note ?? Note.blank();
+  // La tastiera rimasta aperta dalla ricerca alzerebbe la barra e taglierebbe il testo.
+  FocusManager.instance.primaryFocus?.unfocus();
   final result = await Navigator.of(context).push<Note?>(MaterialPageRoute(builder: (_) => NoteEditor(note: start)));
   final existed = note != null;
   if (result == null) {
@@ -807,7 +809,36 @@ class _NoteEditorState extends State<NoteEditor> {
     _loadTopics();
   }
 
-  // --- Gli argomenti: si accendono pizzicando (o col tasto nella barra) ---
+  // --- Gli argomenti: si accendono pizzicando, col tasto nella barra, o tirandolo su ---
+
+  /// Mentre tiri su il tasto: la scala delle grane, e quanto hai tirato.
+  bool _sliding = false;
+  double _slid = 0;
+  int _slideFrom = 0;
+
+  void _slideStart() {
+    if (!_text.usable) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _sliding = true;
+      _slid = 0;
+      _slideFrom = _text.level;
+    });
+  }
+
+  /// Un gradino ogni 34 punti: più tiri su, più è preciso.
+  void _slide(double by) {
+    if (!_sliding) return;
+    _slid += by;
+    final l = (_slideFrom - (_slid / 34).round()).clamp(0, 4);
+    if (l == _text.level) return;
+    HapticFeedback.selectionClick();
+    setState(() => _text.level = l);
+  }
+
+  void _slideEnd() {
+    if (_sliding) setState(() => _sliding = false);
+  }
 
   static const _levels = ['Spento', 'Argomenti', 'Argomenti specifici', 'Frasi chiave', 'Parole chiave'];
 
@@ -1104,6 +1135,45 @@ class _NoteEditorState extends State<NoteEditor> {
                           ),
                         ),
                       ),
+                      // La scala delle grane, sopra il tasto, mentre lo tiri.
+                      if (_sliding)
+                        Positioned(
+                          left: 120,
+                          bottom: 4,
+                          child: IgnorePointer(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(color: const Color(0xFF242424), borderRadius: BorderRadius.circular(18)),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  for (var i = 4; i >= 0; i--)
+                                    Container(
+                                      height: 34,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                                      color: i == _text.level ? Tokens.blue.withValues(alpha: 0.3) : Colors.transparent,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          GrainIcon(level: i, size: 16, color: Colors.white),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            _levels[i],
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 13,
+                                              fontWeight: i == _text.level ? FontWeight.w600 : FontWeight.w400,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       // La grana scelta, per un attimo, in alto.
                       Positioned(
                         top: 8,
@@ -1146,7 +1216,11 @@ class _NoteEditorState extends State<NoteEditor> {
                 onPaste: _pasteDictation,
                 topics: _text.usable ? _text.level : null,
                 onTopics: () => _setLevel(_text.level == 4 ? 0 : _text.level + 1),
-                onSummarize: widget.note.source == null ? null : _summarize,
+                onSlideStart: _slideStart,
+                onSlide: _slide,
+                onSlideEnd: _slideEnd,
+                onHold: (from) => _slide(from - _slid),
+                onSummarize: _summarize,
                 summarizing: _summarizing,
                 summaryOn: _showSummary,
               ),
@@ -1169,7 +1243,11 @@ class NoteToolbar extends StatelessWidget {
     required this.onPaste,
     required this.topics,
     required this.onTopics,
-    this.onSummarize,
+    required this.onSlideStart,
+    required this.onSlide,
+    required this.onSlideEnd,
+    required this.onHold,
+    required this.onSummarize,
     this.summarizing = false,
     this.summaryOn = false,
   });
@@ -1183,8 +1261,15 @@ class NoteToolbar extends StatelessWidget {
   final int? topics;
   final VoidCallback onTopics;
 
-  /// Riassumere: solo le note nate da un audio.
-  final VoidCallback? onSummarize;
+  /// Tenendo il tasto e tirando su si sceglie la grana: [onSlide] riceve di quanto ti sei spostato.
+  final VoidCallback onSlideStart, onSlideEnd;
+  final ValueChanged<double> onSlide;
+
+  /// Lo stesso, tenendolo premuto: riceve la distanza dal punto di partenza.
+  final ValueChanged<double> onHold;
+
+  /// Passa dal testo al riassunto e ritorno.
+  final VoidCallback onSummarize;
   final bool summarizing;
 
   /// Si sta leggendo il riassunto: il tasto è acceso e riporta al testo intero.
@@ -1215,13 +1300,22 @@ class NoteToolbar extends StatelessWidget {
             ),
             // Gli argomenti: lo stesso del pizzico, per chi non lo conosce. Acceso = colorato.
             if (topics != null)
-              IconButton(
-                onPressed: onTopics,
-                tooltip: 'Argomenti (o pizzica la nota)',
-                icon: GrainIcon(level: topics!),
+              Tooltip(
+                message: 'Tocca, tira su o pizzica la nota',
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onTopics,
+                  onVerticalDragStart: (_) => onSlideStart(),
+                  onVerticalDragUpdate: (d) => onSlide(d.delta.dy),
+                  onVerticalDragEnd: (_) => onSlideEnd(),
+                  onVerticalDragCancel: onSlideEnd,
+                  onLongPressStart: (_) => onSlideStart(),
+                  onLongPressMoveUpdate: (d) => onHold(d.offsetFromOrigin.dy),
+                  onLongPressEnd: (_) => onSlideEnd(),
+                  child: Padding(padding: const EdgeInsets.all(12), child: GrainIcon(level: topics!)),
+                ),
               ),
-            if (onSummarize != null)
-              IconButton(
+            IconButton(
                 onPressed: onSummarize,
                 tooltip: summaryOn ? 'Torna al testo intero' : 'Riassumi',
                 icon: summarizing

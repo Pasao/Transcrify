@@ -447,6 +447,17 @@ class _UndoPillState extends State<_UndoPill> with SingleTickerProviderStateMixi
   late final Timer _timer = Timer(undoTime, () => _leave(false));
   bool _leaving = false;
 
+  /// Dove l'hai portata col dito. Abbastanza lontano, o con uno scatto, e se ne va: l'eliminazione resta.
+  Offset _drag = Offset.zero;
+
+  void _dragEnd(DragEndDetails d) {
+    if (_drag.distance > 36 || d.velocity.pixelsPerSecond.distance > 400) {
+      _leave(false);
+    } else {
+      setState(() => _drag = Offset.zero);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -486,7 +497,12 @@ class _UndoPillState extends State<_UndoPill> with SingleTickerProviderStateMixi
       child: Center(
         child: FadeTransition(
           opacity: _show,
-          child: Material(
+          child: GestureDetector(
+            onPanUpdate: (d) => setState(() => _drag += d.delta),
+            onPanEnd: _dragEnd,
+            child: Transform.translate(
+              offset: _drag,
+              child: Material(
             color: const Color(0xFF242424),
             borderRadius: BorderRadius.circular(24),
             elevation: 3,
@@ -511,6 +527,8 @@ class _UndoPillState extends State<_UndoPill> with SingleTickerProviderStateMixi
                     child: const Text('Annulla'),
                   ),
                 ],
+              ),
+            ),
               ),
             ),
           ),

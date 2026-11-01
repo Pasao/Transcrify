@@ -30,6 +30,11 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- Le due scorciatoie nel «Condividi»: un tocco solo, senza scegliere dopo. -->
+            <meta-data
+              android:name="android.app.shortcuts"
+              android:resource="@xml/share_shortcuts"
+              />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -86,7 +91,8 @@
         <activity-alias
             android:name=".ShareAsTranscription"
             android:exported="true"
-            android:label="Trascrizione"
+            android:label="Transcrify trascrizione"
+            android:icon="@drawable/ic_share_transcription"
             android:targetActivity=".ShareAudio">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -99,7 +105,8 @@
         <activity-alias
             android:name=".ShareAsThought"
             android:exported="true"
-            android:label="Pensiero"
+            android:label="Transcrify pensiero"
+            android:icon="@drawable/ic_share_thought"
             android:targetActivity=".ShareAudio">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

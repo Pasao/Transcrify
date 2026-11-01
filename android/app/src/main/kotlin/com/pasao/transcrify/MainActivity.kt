@@ -61,6 +61,15 @@ class MainActivity : FlutterActivity() {
                     store.removeFromHistory(call.argument<Number>("at")!!.toLong())
                     result.success(null)
                 }
+                "setSandbox" -> {
+                    // Tutto legge la cartella all'avvio: si chiude Transcri e si riparte da capo.
+                    PillService.stop(this)
+                    Sandbox.set(this, call.argument<Boolean>("on")!!)
+                    packageManager.getLaunchIntentForPackage(packageName)?.let {
+                        startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                    }
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                }
                 "editHistory" -> {
                     store.editEntry(call.argument<Number>("at")!!.toLong(), call.argument<String>("text")!!)
                     result.success(null)
@@ -271,6 +280,7 @@ class MainActivity : FlutterActivity() {
         PillService.liveListener = { live -> main.post { channel.invokeMethod("live", live) } }
         // Una nota ha i suoi argomenti: Flutter rilegge (l'indicatore nella lista, la nota aperta).
         topics.listener = { main.post { channel.invokeMethod("changed", null) } }
+        ShareShortcuts.publish(this)
         // Le note scritte prima di scegliere il modello, o cambiate mentre l'app era chiusa.
         topics.requestAll()
     }
@@ -320,6 +330,7 @@ class MainActivity : FlutterActivity() {
             "introSeen" to store.introSeen,
             "maskedKey" to store.maskedKey,
             "pillOn" to PillService.running,
+            "sandbox" to Sandbox.on(this),
             "live" to PillService.instance?.liveNow(),
             "purify" to store.purify,
             "words" to store.words,

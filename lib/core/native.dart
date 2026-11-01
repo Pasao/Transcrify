@@ -8,6 +8,7 @@ class CoreState {
       introSeen = m['introSeen'] as bool,
       maskedKey = m['maskedKey'] as String?,
       pillOn = m['pillOn'] as bool,
+      sandbox = m['sandbox'] as bool,
       purify = m['purify'] as bool,
       words = (m['words'] as List).cast<String>(),
       prompt = m['prompt'] as String,
@@ -40,6 +41,9 @@ class CoreState {
       dayLimit = m['dayLimit'] as int;
 
   final bool hasKey, pillOn, purify, customPrompt, simulateLimit;
+
+  /// L'app sta usando i dati finti delle prove: quelli veri sono da parte.
+  final bool sandbox;
 
   /// I guasti finti delle prove: niente rete, chiave rifiutata, microfono negato.
   final bool simOffline, simBadKey, simNoMic;
@@ -519,6 +523,9 @@ class Core {
 
   /// Un guasto finto delle prove: 'offline', 'badKey' o 'noMic'.
   static Future<void> simulate(String what, bool on) => _ch.invokeMethod('simulate', {'what': what, 'on': on});
+
+  /// Passa ai dati finti o torna a quelli veri. L'app si riavvia.
+  static Future<void> setSandbox(bool on) => _ch.invokeMethod('setSandbox', {'on': on});
 
   static Future<void> simulateLimit(bool on) => _ch.invokeMethod('simulateLimit', {'on': on});
 

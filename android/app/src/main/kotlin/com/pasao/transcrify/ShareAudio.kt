@@ -46,7 +46,7 @@ class ShareAudio : Activity() {
     }
 
     private fun enqueue(uri: Uri, toNote: Boolean, store: Store, queue: Queue) {
-        val copy = File(filesDir, "condiviso-${System.nanoTime()}.${extensionOf(uri)}")
+        val copy = File(Sandbox.dir(this), "condiviso-${System.nanoTime()}.${extensionOf(uri)}")
         contentResolver.openInputStream(uri)!!.use { input -> copy.outputStream().use { input.copyTo(it) } }
         // Una trascrizione usa la pulizia che hai scelto; un pensiero resta fedele, poi puoi riassumerlo dalla nota.
         val mode = if (toNote) "fedele" else if (store.purify) store.cleanMode else null

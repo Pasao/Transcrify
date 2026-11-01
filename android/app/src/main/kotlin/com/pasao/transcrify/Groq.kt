@@ -66,14 +66,24 @@ class Groq(private val key: String) {
      * Pulisce un testo di qualunque lunghezza: quelli lunghi a pezzi, tagliati tra una frase e l'altra.
      * Una risposta sola ha un tetto di token, e oltre quello il testo finirebbe tagliato.
      */
-    fun cleanLong(raw: String, model: String, prompt: String, words: List<String>): String {
+    fun cleanLong(raw: String, model: String, prompt: String, words: List<String>, maxWer: Double? = null): String {
         val chunks = mutableListOf(StringBuilder())
         for (sentence in raw.split(Regex("""(?<=[.!?…])\s+"""))) {
             if (chunks.last().isNotEmpty() && chunks.last().length + sentence.length > CLEAN_CHUNK) chunks += StringBuilder()
             chunks.last().append(sentence).append(' ')
         }
-        return chunks.joinToString("\n\n") { clean(it.toString().trim(), model, prompt, words) }
+        return chunks.joinToString("\n\n") { chunk ->
+            val before = chunk.toString().trim()
+            val after = clean(before, model, prompt, words)
+            // Il modello ha tagliato troppo: di questo pezzo si tiene quello che hai detto, parola per parola.
+            if (maxWer != null && WordGuard.wer(before, after) > maxWer) before else after
+        }
     }
+
+    /** Un titolo di poche parole per una nota. */
+    fun title(text: String, model: String): String =
+        clean(text.take(3000), model, TITLE_PROMPT, emptyList(), maxTokens = 600)
+            .lineSequence().first().trim().trim('"', '«', '»', '*', '#', '.', ' ').take(60)
 
     fun clean(raw: String, model: String, prompt: String, words: List<String>, maxTokens: Int = 6000): String {
         var system = prompt + "\n\n" + GUARD
@@ -189,6 +199,8 @@ class Groq(private val key: String) {
 
         /** Quanti caratteri si puliscono in una chiamata: stanno larghi sotto il tetto di token della risposta. */
         private const val CLEAN_CHUNK = 8000
+        private const val TITLE_PROMPT = "Scrivi un titolo di al massimo 5 parole per questo testo, nella sua stessa lingua. " +
+            "Rispondi solo con il titolo, senza virgolette e senza punto finale."
         const val DEFAULT_STT = "whisper-large-v3"
         const val DEFAULT_LLM = "openai/gpt-oss-120b"
 

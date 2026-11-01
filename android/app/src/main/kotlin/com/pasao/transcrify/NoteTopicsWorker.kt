@@ -29,7 +29,7 @@ class NoteTopicsWorker private constructor(context: Context) {
     private val store = Store(app)
     private val models = TopicModels(app)
     // v4: parole chiave di più parole. I risultati di prima si rifanno.
-    private val file = File(app.filesDir, "note_topics_v4.json")
+    private val file = File(Sandbox.dir(app), "note_topics_v4.json")
     private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "argomenti").apply { priority = Thread.MIN_PRIORITY } }
 
     /** Le note in coda o in lavorazione. */
@@ -206,7 +206,7 @@ class NoteTopicsWorker private constructor(context: Context) {
     private fun engineFor(m: TopicModel): Engine {
         engine?.takeIf { engineModel == m }?.let { return it }
         release()
-        val disk = SentenceStore(File(models.dir(m), "frasi.bin"), m.embedding.dim)
+        val disk = SentenceStore(File(if (Sandbox.on(app)) Sandbox.dir(app) else models.dir(m), "frasi.bin"), m.embedding.dim)
         val lazy = object : Embedder {
             override val dim = m.embedding.dim
             override fun embed(sentences: List<String>): List<FloatArray> =

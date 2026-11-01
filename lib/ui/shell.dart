@@ -29,6 +29,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   int thoughts = 0;
   bool pillOn = false;
   bool hasKey = true;
+
+  /// Dati finti accesi: lo dice sempre, in alto.
+  bool sandbox = false;
   DateTime? limitedUntil;
   int waiting = 0;
 
@@ -72,6 +75,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     setState(() {
       waiting = w.length;
       pillOn = s.pillOn;
+      sandbox = s.sandbox;
       _liveChanged();
       hasKey = s.hasKey;
       transcriColors = [s.accentA, s.accentB];
@@ -171,6 +175,13 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                             child: Text(power.label, key: ValueKey(power), style: display(context, size: 26)),
                           ),
                         ),
+                        if (sandbox)
+                          Container(
+                            margin: const EdgeInsets.only(right: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(color: Tokens.blue.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(14)),
+                            child: Text('Dati finti', style: TextStyle(color: Tokens.blue, fontSize: 12, fontWeight: FontWeight.w600)),
+                          ),
                         // Se qualcosa non va o aspetta, lo dice qui, accanto alle impostazioni.
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 220),

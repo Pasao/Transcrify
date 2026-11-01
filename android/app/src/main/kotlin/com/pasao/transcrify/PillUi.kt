@@ -687,6 +687,7 @@ private fun MenuStage(svc: PillService) {
 
 /**
  * Il testo di un audio condiviso: si apre dalla pillola come il menu, sopra l'app in cui sei.
+ * Si chiude solo con la X: un tocco per sbaglio non deve portartela via a metà lettura.
  * Chiuderla non perde niente: il testo è già salvato nell'app. Se ne restano altri, tocca al prossimo.
  */
 @Composable
@@ -728,7 +729,6 @@ private fun MessageStage(svc: PillService) {
             Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.32f * p.coerceIn(0f, 1f)))
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { close() }
         )
         Blob(
             rect = lerpRect(bar, card, p),

@@ -300,6 +300,14 @@ class _SettingsPageState extends State<SettingsPage> {
                       label: 'Prove',
                       children: [
                         SettingsRow(
+                          icon: Icons.shield_outlined,
+                          color: Tokens.blue,
+                          title: 'Dati finti',
+                          subtitle: 'Note e trascrizioni inventate: quelle vere restano da parte. L\'app si riavvia.',
+                          trailing: Switch(value: st.sandbox, onChanged: Core.setSandbox),
+                          onTap: () => Core.setSandbox(!st.sandbox),
+                        ),
+                        SettingsRow(
                           icon: Icons.science_outlined,
                           color: Tokens.blue,
                           title: 'Crea la nota di prova',
@@ -1282,30 +1290,42 @@ class _PermissionsState extends State<_Permissions> with WidgetsBindingObserver 
   @override
   Widget build(BuildContext context) {
     String state(bool? on) => on == null ? '' : (on ? 'Attivo' : 'Da attivare');
-    return SettingsGroup(
-      label: 'Permessi',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SettingsRow(
-          icon: Icons.mic_rounded,
-          color: Tokens.blue,
-          title: 'Microfono',
-          value: state(mic),
-          onTap: () => _fix(Permission.microphone),
+        SettingsGroup(
+          label: 'Permessi necessari',
+          children: [
+            SettingsRow(
+              icon: Icons.mic_rounded,
+              color: Tokens.blue,
+              title: 'Microfono',
+              subtitle: 'Per sentirti mentre detti',
+              value: state(mic),
+              onTap: () => _fix(Permission.microphone),
+            ),
+            SettingsRow(
+              icon: Icons.layers_rounded,
+              color: Tokens.blue,
+              title: 'Sopra le altre app',
+              subtitle: 'Per stare sul bordo dello schermo e dettare dentro qualunque app',
+              value: state(overlay),
+              onTap: Core.openOverlaySettings,
+            ),
+          ],
         ),
-        SettingsRow(
-          icon: Icons.notifications_rounded,
-          color: Tokens.blue,
-          title: 'Notifiche',
-          value: state(notifications),
-          onTap: () => _fix(Permission.notification),
-        ),
-        SettingsRow(
-          icon: Icons.layers_rounded,
-          color: Tokens.blue,
-          title: 'Sopra le altre app',
-          subtitle: 'Per stare sul bordo dello schermo',
-          value: state(overlay),
-          onTap: Core.openOverlaySettings,
+        SettingsGroup(
+          label: 'Permessi facoltativi',
+          children: [
+            SettingsRow(
+              icon: Icons.notifications_rounded,
+              color: Tokens.blue,
+              title: 'Notifiche',
+              subtitle: 'Il testo dei vocali condivisi, se Transcri non può stare sopra le altre app',
+              value: state(notifications),
+              onTap: () => _fix(Permission.notification),
+            ),
+          ],
         ),
       ],
     );

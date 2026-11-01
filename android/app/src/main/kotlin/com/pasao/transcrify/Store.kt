@@ -50,8 +50,8 @@ enum class Limit { OK, HOURLY, DAILY }
  */
 class Store(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("transcrify", Context.MODE_PRIVATE)
-    private val historyFile = File(context.filesDir, "history.json")
-    private val notesFile = File(context.filesDir, "notes.json")
+    private val historyFile = File(Sandbox.dir(context), "history.json")
+    private val notesFile = File(Sandbox.dir(context), "notes.json")
 
     // --- Chiave Groq, cifrata con una chiave del Keystore che non esce dal telefono ---
 
@@ -121,6 +121,17 @@ class Store(context: Context) {
 
     val defaultPrompt: String get() = Groq.PROMPTS.getValue(cleanMode)
     val prompt: String get() = customPrompt ?: defaultPrompt
+
+    /**
+     * Quanto può cambiare il testo la pulizia prima che si tenga l'originale. Null se è giusto che cambi
+     * molto: il riassunto, o un prompt scritto da te, che può chiedere qualunque cosa.
+     */
+    fun guardFor(mode: String): Double? = when {
+        prefs.getString("prompt_$mode", null) != null -> null
+        mode == "fedele" -> GUARD_FAITHFUL
+        mode == "pulita" -> GUARD_CLEAN
+        else -> null
+    }
 
     /** Il prompt di un modo preciso (quello con cui è stata fatta una registrazione in coda). */
     fun promptFor(mode: String): String = prefs.getString("prompt_$mode", null) ?: Groq.PROMPTS[mode] ?: Groq.DEFAULT_PROMPT
@@ -294,6 +305,10 @@ class Store(context: Context) {
 
     companion object {
         const val HOUR_LIMIT = 7200L
+
+        /** Fedele corregge e tiene tutte le parole; Pulita toglie intercalari e ripetizioni, quindi può cambiare di più. */
+        const val GUARD_FAITHFUL = 0.35
+        const val GUARD_CLEAN = 0.60
         const val DAY_LIMIT = 28800L
         private const val HOUR_MS = 3_600_000L
         private const val DAY_MS = 86_400_000L
