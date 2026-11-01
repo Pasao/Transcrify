@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -66,53 +64,71 @@ class Dock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Il potere e le sue pagine sono un pezzo solo: si capisce che le pagine sono sue,
-          // e il potere si tira su lo stesso per cambiarlo.
-          if (pages.length > 1)
-            Container(
-              height: dockIsland,
-              padding: const EdgeInsets.only(right: (dockIsland - dockRound) / 2),
-              decoration: BoxDecoration(
-                color: islandColor(context),
-                borderRadius: BorderRadius.circular(dockIsland / 2),
-                boxShadow: islandShadow,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  PowerButton(power: power, onTap: onSwitch, onStep: onStep),
-                  for (var i = 0; i < pages.length; i++)
-                    Tooltip(
-                      message: pages[i].$2,
-                      child: InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          onPage?.call(i);
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: dockRound - 4,
-                          height: dockRound - 4,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: i == page ? Tokens.blue.withValues(alpha: 0.16) : Colors.transparent,
+          // e il potere si tira su lo stesso per cambiarlo. Cambiando potere le pagine rientrano ed escono.
+          Container(
+            height: dockIsland,
+            decoration: BoxDecoration(
+              color: islandColor(context),
+              borderRadius: BorderRadius.circular(dockIsland / 2),
+              boxShadow: islandShadow,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PowerButton(power: power, onTap: onSwitch, onStep: onStep),
+                _Retract(
+                  id: pages.length > 1 ? pages.map((p) => p.$2).join() : null,
+                  from: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: (dockIsland - dockRound) / 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0; i < pages.length; i++)
+                          Tooltip(
+                            message: pages[i].$2,
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                onPage?.call(i);
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: dockRound - 4,
+                                height: dockRound - 4,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: i == page ? Tokens.blue.withValues(alpha: 0.16) : Colors.transparent,
+                                ),
+                                child: Icon(pages[i].$1, size: 22, color: i == page ? Tokens.blue : context.tk.muted),
+                              ),
+                            ),
                           ),
-                          child: Icon(pages[i].$1, size: 22, color: i == page ? Tokens.blue : context.tk.muted),
-                        ),
-                      ),
+                      ],
                     ),
-                ],
-              ),
-            )
-          else
-            PowerButton(power: power, onTap: onSwitch, onStep: onStep),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const Spacer(),
           Island(
             padding: const EdgeInsets.all((dockIsland - dockRound) / 2),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _DockAction(action: action),
+                // L'azione esce da Transcri: l'isola si allunga verso sinistra.
+                _Retract(
+                  id: action?.$1,
+                  from: Alignment.centerRight,
+                  child: action == null
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(right: (dockIsland - dockRound) / 2),
+                          child: RoundAction(icon: action!.$1, label: action!.$2, onTap: action!.$3),
+                        ),
+                ),
                 nest,
               ],
             ),
@@ -123,63 +139,69 @@ class Dock extends StatelessWidget {
   }
 }
 
-/// L'azione accanto a Transcri: esce da lui, e l'isola si allunga verso sinistra.
-/// Se cambia (dalla matita al microfono) prima rientra in lui, poi esce quella nuova: mai un cambio d'icona sul posto.
-class _DockAction extends StatefulWidget {
-  const _DockAction({required this.action});
+/// Un pezzo del Dock che dipende dal potere: se cambia prima rientra da dov'è uscito, poi esce quello
+/// nuovo; mai un cambio sul posto. [id] dice cos'è: null = non c'è niente. [from]: il lato da cui esce.
+class _Retract extends StatefulWidget {
+  const _Retract({required this.id, required this.from, required this.child});
 
-  final (IconData, String, VoidCallback)? action;
+  final Object? id;
+  final Alignment from;
+  final Widget child;
 
   @override
-  State<_DockAction> createState() => _DockActionState();
+  State<_Retract> createState() => _RetractState();
 }
 
-class _DockActionState extends State<_DockAction> {
-  static const _half = Duration(milliseconds: 200);
+class _RetractState extends State<_Retract> with SingleTickerProviderStateMixin {
+  late final _open = AnimationController(vsync: this, duration: const Duration(milliseconds: 200), value: widget.id == null ? 0 : 1)
+    ..addStatusListener((status) {
+      if (status == AnimationStatus.dismissed) _swap();
+    });
 
-  /// L'icona che si vede: durante il cambio resta quella vecchia, mentre rientra.
-  late IconData? _shown = widget.action?.$1;
-  late bool _open = widget.action != null;
-  Timer? _swap;
+  /// Quello che si vede: mentre rientra resta il vecchio.
+  late Object? _shownId = widget.id;
+  late Widget _shown = widget.child;
+
+  void _swap() {
+    setState(() {
+      _shownId = widget.id;
+      _shown = widget.child;
+    });
+    if (_shownId != null) _open.forward();
+  }
 
   @override
-  void didUpdateWidget(covariant _DockAction old) {
+  void didUpdateWidget(covariant _Retract old) {
     super.didUpdateWidget(old);
-    final next = widget.action?.$1;
-    if (next == _shown) {
-      if (next != null && !_open) setState(() => _open = true);
-      _swap?.cancel();
-      return;
+    if (widget.id == _shownId) {
+      _shown = widget.child;
+      if (_shownId != null) _open.forward();
+    } else if (_open.isDismissed) {
+      _swap();
+    } else {
+      _open.reverse();
     }
-    setState(() => _open = false);
-    _swap?.cancel();
-    _swap = Timer(_half, () {
-      if (!mounted) return;
-      setState(() {
-        _shown = widget.action?.$1;
-        _open = _shown != null;
-      });
-    });
   }
 
   @override
   void dispose() {
-    _swap?.cancel();
+    _open.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final action = widget.action;
-    return AnimatedSize(
-      duration: _half,
-      curve: Curves.easeInOutCubic,
-      child: !_open || action == null || _shown == null
-          ? const SizedBox(height: dockRound)
-          : Padding(
-              padding: const EdgeInsets.only(right: (dockIsland - dockRound) / 2),
-              child: RoundAction(icon: _shown!, label: action.$2, onTap: action.$3),
-            ),
+    final v = CurvedAnimation(parent: _open, curve: Curves.easeInOutCubic);
+    return ClipRect(
+      child: AnimatedBuilder(
+        animation: v,
+        builder: (context, child) => Align(
+          alignment: widget.from,
+          widthFactor: v.value,
+          child: Opacity(opacity: v.value, child: child),
+        ),
+        child: _shown,
+      ),
     );
   }
 }
@@ -314,7 +336,7 @@ class _PowerButtonState extends State<PowerButton> {
                 width: dockIsland,
                 height: dockIsland,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: islandColor(context), shape: BoxShape.circle, boxShadow: islandShadow),
+                decoration: BoxDecoration(color: islandColor(context), shape: BoxShape.circle),
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 220),
                   transitionBuilder: (c, a) => ScaleTransition(

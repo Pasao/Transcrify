@@ -148,13 +148,35 @@ String shortStamp(DateTime d) {
 }
 
 /// La barra delle cose scelte: quante sono, e cosa farne. Come in Samsung Note, in fondo, sopra il Dock.
-class SelectionBar extends StatelessWidget {
+class SelectionBar extends StatefulWidget {
   const SelectionBar({super.key, required this.label, required this.onClose, required this.actions});
 
   /// "1 nota", "3 trascrizioni".
   final String label;
   final VoidCallback onClose;
   final List<(IconData, String, VoidCallback)> actions;
+
+  @override
+  State<SelectionBar> createState() => _SelectionBarState();
+}
+
+class _SelectionBarState extends State<SelectionBar> {
+  // La barra prende il posto di «Annulla», se c'è: lui sale, e quando la barra se ne va torna giù.
+  static const _height = 68.0;
+
+  void _lift(double by) => WidgetsBinding.instance.addPostFrameCallback((_) => _undoLift.value = by);
+
+  @override
+  void initState() {
+    super.initState();
+    _lift(_height);
+  }
+
+  @override
+  void dispose() {
+    _lift(0);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -164,17 +186,17 @@ class SelectionBar extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
-            onPressed: onClose,
+            onPressed: widget.onClose,
             icon: const Icon(Icons.close_rounded, color: Colors.white),
             tooltip: 'Annulla',
           ),
           Expanded(
             child: Text(
-              label,
+              widget.label,
               style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
             ),
           ),
-          for (final (icon, name, onTap) in actions)
+          for (final (icon, name, onTap) in widget.actions)
             IconButton(
               onPressed: () {
                 HapticFeedback.selectionClick();
@@ -367,7 +389,7 @@ class Countdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).snackBarTheme.actionTextColor ?? Theme.of(context).colorScheme.inversePrimary;
+    final color = Tokens.blue;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 1, end: 0),
       duration: duration,
@@ -383,23 +405,119 @@ class Countdown extends StatelessWidget {
 /// Quanto resta il messaggio "Annulla" dopo un'eliminazione.
 const undoTime = Duration(seconds: 5);
 
-/// Una cosa appena eliminata: il messaggio "Annulla" per qualche secondo, con il cerchio che si consuma.
-/// Restituisce true se l'hai ripresa; altrimenti si può cancellare davvero.
-Future<bool> undoable(BuildContext context, String label) async {
+/// Di quanto sale «Annulla» sopra la sua posizione: la barra di selezione, quando c'è, gli prende il posto.
+final _undoLift = ValueNotifier<double>(0);
+
+/// Chiude l'«Annulla» in corso: ce n'è uno solo alla volta.
+void Function()? _closeUndo;
+
+/// Una cosa appena eliminata: «Annulla» per qualche secondo, con il cerchio che si consuma.
+/// Sta sopra il Dock, senza coprirlo. Restituisce true se l'hai ripresa; altrimenti si può cancellare davvero.
+Future<bool> undoable(BuildContext context, String label) {
   HapticFeedback.mediumImpact();
-  final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
-  final reason = await messenger
-      .showSnackBar(
-        SnackBar(
-          content: Row(children: [const Countdown(undoTime), const SizedBox(width: 14), Text(label)]),
-          duration: undoTime,
-          action: SnackBarAction(label: 'Annulla', onPressed: () {}),
+  _closeUndo?.call();
+  final done = Completer<bool>();
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (_) => _UndoPill(
+      label: label,
+      onDone: (again) {
+        entry.remove();
+        if (again) HapticFeedback.selectionClick();
+        done.complete(again);
+      },
+    ),
+  );
+  Overlay.of(context, rootOverlay: true).insert(entry);
+  return done.future;
+}
+
+class _UndoPill extends StatefulWidget {
+  const _UndoPill({required this.label, required this.onDone});
+
+  final String label;
+  final ValueChanged<bool> onDone;
+
+  @override
+  State<_UndoPill> createState() => _UndoPillState();
+}
+
+class _UndoPillState extends State<_UndoPill> with SingleTickerProviderStateMixin {
+  late final _show = AnimationController(vsync: this, duration: const Duration(milliseconds: 180))..forward();
+  late final Timer _timer = Timer(undoTime, () => _leave(false));
+  bool _leaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer;
+    _closeUndo = () => _leave(false);
+  }
+
+  Future<void> _leave(bool again) async {
+    if (_leaving) return;
+    _leaving = true;
+    _timer.cancel();
+    _closeUndo = null;
+    await _show.reverse();
+    widget.onDone(again);
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    _show.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = dockIsland + 12 + MediaQuery.viewPaddingOf(context).bottom + 8;
+    return ValueListenableBuilder<double>(
+      valueListenable: _undoLift,
+      builder: (context, lift, child) => AnimatedPositioned(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        left: 16,
+        right: 16,
+        bottom: bottom + lift,
+        child: child!,
+      ),
+      child: Center(
+        child: FadeTransition(
+          opacity: _show,
+          child: Material(
+            color: const Color(0xFF242424),
+            borderRadius: BorderRadius.circular(24),
+            elevation: 3,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 2, 4, 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Countdown(undoTime),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      widget.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(foregroundColor: Tokens.blue),
+                    onPressed: () => _leave(true),
+                    child: const Text('Annulla'),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-      )
-      .closed;
-  if (reason != SnackBarClosedReason.action) return false;
-  HapticFeedback.selectionClick();
-  return true;
+      ),
+    );
+  }
 }
 
 /// Il colore delle isole che galleggiano sopra la pagina (il Dock, la casa di Transcri):
