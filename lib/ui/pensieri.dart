@@ -587,7 +587,7 @@ class NoteCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Text('${dayLabel(note.updated)}, ${hm(note.updated)}', style: monoStyle(context), overflow: TextOverflow.ellipsis),
+                    child: Text(shortStamp(note.updated), style: monoStyle(context), overflow: TextOverflow.ellipsis),
                   ),
                   if (note.source != null) ...[SourceIcon(note.source), const SizedBox(width: 6)],
                   TopicsBadge(state: note.topics),

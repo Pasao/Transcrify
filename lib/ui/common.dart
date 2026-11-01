@@ -140,6 +140,13 @@ String dayLabel(DateTime d) {
   return '${d.day} ${_months[d.month - 1]} ${d.year}';
 }
 
+/// Giorno e ora in poco spazio, per le schede strette: «Oggi, 22:46», «28 ott, 14:47».
+String shortStamp(DateTime d) {
+  final day = dayLabel(d);
+  final short = day == 'Oggi' || day == 'Ieri' ? day : '${d.day} ${_months[d.month - 1].substring(0, 3)}';
+  return '$short, ${hm(d)}';
+}
+
 /// La barra delle cose scelte: quante sono, e cosa farne. Come in Samsung Note, in fondo, sopra il Dock.
 class SelectionBar extends StatelessWidget {
   const SelectionBar({super.key, required this.label, required this.onClose, required this.actions});
