@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.DeleteOutline
@@ -336,6 +337,7 @@ fun StageLayer(svc: PillService) {
             Stage.Menu -> MenuStage(svc)
             Stage.Dismiss -> DismissTarget(svc)
             Stage.Message -> MessageStage(svc)
+            is Stage.Panel -> MenuStage(svc, stage.nest)
             null -> Unit
         }
     }
@@ -624,12 +626,13 @@ private fun DismissTarget(svc: PillService) {
 }
 
 @Composable
-private fun MenuStage(svc: PillService) {
+private fun MenuStage(svc: PillService, nest: Rect? = null) {
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val t = remember { Animatable(0f) }
     var closing by remember { mutableStateOf(false) }
-    val bar = remember { svc.barRect() }
+    // Dalla pillola sul bordo o, con Transcri nel Dock, dal suo posto.
+    val bar = remember { nest ?: svc.barRect() }
     LaunchedEffect(Unit) { t.animateTo(1f, spring(dampingRatio = 0.68f, stiffness = Spring.StiffnessMediumLow)) }
 
     fun collapse() {
@@ -655,8 +658,8 @@ private fun MenuStage(svc: PillService) {
         val mw = with(density) { sizeW.dp.toPx() }
         val mh = with(density) { sizeH.dp.toPx() }
         val margin = with(density) { PillGeometry.MENU_MARGIN.dp.toPx() }
-        val left = if (svc.pillRight) w - mw - margin else margin
-        val top = (bar.center.y - mh / 2).coerceIn(margin * 4, h - mh - margin * 4)
+        val left = if (nest != null || svc.pillRight) w - mw - margin else margin
+        val top = if (nest != null) nest.top - mh - margin else (bar.center.y - mh / 2).coerceIn(margin * 4, h - mh - margin * 4)
         val menu = Rect(left, top, left + mw, top + mh)
         val p = t.value
 
@@ -753,6 +756,32 @@ private fun MessageStage(svc: PillService) {
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        if (!current.second.toNote) {
+                            CircleButton(Icons.Rounded.Cloud, "Spostalo nei Pensieri", Palette.Muted, small = true) { svc.messageToNote() }
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        // Letto e basta: non resta da nessuna parte. Il primo tocco arma, il secondo cancella.
+                        var armed by remember(current.first.at) { mutableStateOf(false) }
+                        LaunchedEffect(armed) {
+                            if (armed) {
+                                kotlinx.coroutines.delay(2200)
+                                armed = false
+                            }
+                        }
+                        CircleButton(
+                            Icons.Rounded.DeleteOutline,
+                            if (armed) "Tocca ancora per non salvarlo" else "Non salvarlo",
+                            if (armed) Palette.Red else Palette.Muted,
+                            small = true,
+                        ) {
+                            if (armed) {
+                                svc.forgetMessage()
+                                close()
+                            } else {
+                                armed = true
+                            }
+                        }
+                        Spacer(Modifier.width(6.dp))
                         CircleButton(Icons.Rounded.Close, "Chiudi", Palette.Muted, small = true) { close() }
                     }
                     Text(

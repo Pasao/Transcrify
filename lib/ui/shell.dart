@@ -130,9 +130,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   void _liveChanged() => _heard.value = Core.live.value.listening && Core.live.value.appendTo == null && !pillOn;
 
-  /// L'azione accanto a Transcri: mentre ascolta si può buttare; altrimenti dipende dal potere.
+  /// L'azione accanto a Transcri: mentre ascolta è il tasto per fermarlo; altrimenti dipende dal potere.
   (IconData, String, VoidCallback)? _action(bool heard) {
-    if (heard) return (Icons.close_rounded, 'Butta', Core.discardListening);
+    if (heard) return (Icons.stop_rounded, 'Ferma e trascrivi', Core.stopListening);
     return switch (power) {
       Power.pensieri => (Icons.edit_rounded, 'Scrivi', () => openNote(context)),
       Power.trascrivi => pillOn ? null : (Icons.mic_rounded, 'Detta qui', () => _nest.currentState?.listen()),

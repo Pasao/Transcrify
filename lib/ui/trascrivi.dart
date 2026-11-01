@@ -35,6 +35,7 @@ class _TrascriviPageState extends State<TrascriviPage> {
   @override
   void dispose() {
     Core.removeListener(_load);
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -109,6 +110,22 @@ class _TrascriviPageState extends State<TrascriviPage> {
     );
   }
 
+  final _scroll = ScrollController();
+
+  /// L'intestazione di ogni giorno: serve a sapere quale giorno si sta guardando.
+  final _dayKeys = <String, GlobalKey>{};
+
+  /// Il giorno al centro della pagina: l'ultimo che comincia sopra quel punto.
+  String? _dayInView(double middle) {
+    String? found;
+    for (final (label, _) in _groups(entries ?? const [])) {
+      final box = _dayKeys[label]?.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || box.localToGlobal(Offset.zero).dy > middle) break;
+      found = label;
+    }
+    return found ?? (entries?.isEmpty ?? true ? null : dayLabel(entries!.last.at));
+  }
+
   /// Le trascrizioni in gruppi per giorno, dal più vecchio (in alto) a oggi (in basso, vicino al pollice).
   List<(String, List<Entry>)> _groups(List<Entry> list) {
     final out = <(String, List<Entry>)>[];
@@ -134,7 +151,12 @@ class _TrascriviPageState extends State<TrascriviPage> {
         ? _Empty(bottom: widget.bottom)
         // Le schede stanno in basso, dove arriva il pollice; se sono tante, si scorre.
         : LayoutBuilder(
-            builder: (context, box) => SingleChildScrollView(
+            builder: (context, box) => _FastScroll(
+              controller: _scroll,
+              bottom: widget.bottom,
+              dayAt: _dayInView,
+              child: SingleChildScrollView(
+              controller: _scroll,
               // Si apre dal fondo: oggi è subito lì.
               reverse: true,
               child: ConstrainedBox(
@@ -144,6 +166,7 @@ class _TrascriviPageState extends State<TrascriviPage> {
                   children: [
                     for (final (label, items) in _groups(list)) ...[
                       Padding(
+                        key: _dayKeys.putIfAbsent(label, GlobalKey.new),
                         padding: const EdgeInsets.fromLTRB(20, 24, 8, 12),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
@@ -222,6 +245,7 @@ class _TrascriviPageState extends State<TrascriviPage> {
                   ],
                 ),
               ),
+              ),
             ),
           );
     if (selected.isEmpty) return page;
@@ -244,6 +268,169 @@ class _TrascriviPageState extends State<TrascriviPage> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Lo slider veloce, come nella galleria: mentre scorri compare sul bordo destro; se lo prendi corri
+/// da un capo all'altro e accanto al dito c'è la data di quello che stai guardando.
+class _FastScroll extends StatefulWidget {
+  const _FastScroll({required this.controller, required this.bottom, required this.dayAt, required this.child});
+
+  final ScrollController controller;
+
+  /// Lo spazio in fondo coperto dal Dock: lo slider si ferma prima.
+  final double bottom;
+
+  /// Il giorno che si vede a questa altezza dello schermo.
+  final String? Function(double middle) dayAt;
+  final Widget child;
+
+  @override
+  State<_FastScroll> createState() => _FastScrollState();
+}
+
+class _FastScrollState extends State<_FastScroll> {
+  static const _thumb = 56.0;
+  bool _visible = false, _dragging = false;
+  String? _day;
+  Timer? _hide;
+
+  @override
+  void dispose() {
+    _hide?.cancel();
+    super.dispose();
+  }
+
+  void _show() {
+    _hide?.cancel();
+    if (!_visible) setState(() => _visible = true);
+    if (!_dragging) {
+      _hide = Timer(const Duration(milliseconds: 1400), () {
+        if (mounted) setState(() => _visible = false);
+      });
+    }
+  }
+
+  bool get _usable => widget.controller.hasClients && widget.controller.position.maxScrollExtent > 0;
+
+  /// Da 0 (in alto, le più vecchie) a 1 (in fondo, oggi): la pagina è al contrario, 0 pixel vuol dire oggi.
+  double get _at => _usable ? 1 - (widget.controller.offset / widget.controller.position.maxScrollExtent).clamp(0.0, 1.0) : 1;
+
+  void _drag(double dy, double track) {
+    final max = widget.controller.position.maxScrollExtent;
+    final to = (_at + dy / track).clamp(0.0, 1.0);
+    widget.controller.jumpTo(max * (1 - to));
+    _readDay();
+  }
+
+  void _readDay() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final day = widget.dayAt(box.localToGlobal(Offset.zero).dy + box.size.height / 2);
+    if (day != _day) {
+      if (_day != null) HapticFeedback.selectionClick();
+      setState(() => _day = day);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        // Le schede del giorno scorrono di lato: quelle non contano.
+        if (n.metrics.axis == Axis.vertical && n is ScrollUpdateNotification) _show();
+        return false;
+      },
+      child: Stack(
+        children: [
+          widget.child,
+          Positioned(
+            top: 4,
+            right: 0,
+            bottom: widget.bottom + 4,
+            left: 0,
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final track = box.maxHeight - _thumb;
+                return AnimatedBuilder(
+                  animation: widget.controller,
+                  builder: (context, _) {
+                    if (!_usable) return const SizedBox.shrink();
+                    return IgnorePointer(
+                      ignoring: !_visible,
+                      child: AnimatedOpacity(
+                        opacity: _visible ? 1 : 0,
+                        duration: const Duration(milliseconds: 180),
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              right: 0,
+                              top: _at * track,
+                              height: _thumb,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onVerticalDragStart: (_) {
+                                  HapticFeedback.selectionClick();
+                                  _hide?.cancel();
+                                  setState(() => _dragging = true);
+                                  _readDay();
+                                },
+                                onVerticalDragUpdate: (d) => _drag(d.delta.dy, track),
+                                onVerticalDragEnd: (_) {
+                                  setState(() => _dragging = false);
+                                  _show();
+                                },
+                                onVerticalDragCancel: () {
+                                  setState(() => _dragging = false);
+                                  _show();
+                                },
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (_dragging && _day != null)
+                                      Container(
+                                        margin: const EdgeInsets.only(right: 10),
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                        decoration: BoxDecoration(color: const Color(0xFF242424), borderRadius: BorderRadius.circular(18)),
+                                        child: Text(
+                                          _day!,
+                                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                    // Una zona larga per il dito, attorno a una barretta sottile.
+                                    SizedBox(
+                                      width: 36,
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: AnimatedContainer(
+                                          duration: const Duration(milliseconds: 120),
+                                          width: _dragging ? 8 : 5,
+                                          height: _thumb,
+                                          margin: const EdgeInsets.only(right: 3),
+                                          decoration: BoxDecoration(
+                                            color: _dragging ? Tokens.blue : tk.faint,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

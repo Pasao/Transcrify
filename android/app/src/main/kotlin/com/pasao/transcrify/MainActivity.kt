@@ -79,6 +79,10 @@ class MainActivity : FlutterActivity() {
                     PillService.listen(this, call.argument<Number>("appendTo")?.toLong())
                     result.success(null)
                 }
+                "openPanel" -> {
+                    PillService.appNest?.let { PillService.instance?.openPanel(it) }
+                    result.success(null)
+                }
                 "stopListening" -> {
                     PillService.instance?.stopListening()
                     result.success(null)

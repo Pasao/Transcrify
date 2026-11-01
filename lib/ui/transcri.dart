@@ -161,11 +161,11 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
   /// Il rilascio: il nido rimbalza e, nel rimbalzo, Transcri parte (o torna).
   /// Funziona anche a metà di un volo: il nuovo parte da dove si trova la bolla.
   void _release() {
-    // Sta ascoltando qui: il tocco ferma e manda.
+    // Sta ascoltando qui: come la pillola, il tocco apre i comandi (tenerlo premuto lo ferma).
     if (_listening) {
-      HapticFeedback.mediumImpact();
+      HapticFeedback.selectionClick();
       _press.animateBack(0, duration: const Duration(milliseconds: 520), curve: Curves.elasticOut);
-      Core.stopListening();
+      Core.openPanel();
       return;
     }
     if (_blocked) {

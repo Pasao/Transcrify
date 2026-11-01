@@ -105,7 +105,7 @@ class Transcriber(private val context: Context, private val store: Store, privat
                     .onSuccess { text = it; cleaned = true; store.countUse(store.cleanupModel) }
                 store.saveModelLimits(store.cleanupModel, groq.lastLimits)
             }
-            val result = if (isHallucination(text)) null else deliver(groq, item, text, cleaned)
+            val result = if (isHallucination(text)) null else deliver(item, text, cleaned)
             store.addUsage(item.seconds)
             queue.remove(item.id)
             Outcome.Done(result)
@@ -116,8 +116,14 @@ class Transcriber(private val context: Context, private val store: Store, privat
         }
     }
 
+    /** Un titolo per la nota, se si riesce: il testo non deve dipendere da questo. */
+    fun titleFor(text: String): String {
+        val key = store.apiKey ?: return ""
+        return runCatching { Groq(key).title(text, store.cleanupModel) }.onSuccess { store.countUse(store.cleanupModel) }.getOrDefault("")
+    }
+
     /** Il testo va dove deve: in fondo a una trascrizione, in una nota nuova o in una trascrizione nuova. */
-    private fun deliver(groq: Groq, item: Pending, text: String, cleaned: Boolean): Transcription {
+    private fun deliver(item: Pending, text: String, cleaned: Boolean): Transcription {
         val now = System.currentTimeMillis()
         val mode = if (cleaned) item.mode else null
         item.appendTo?.let { at -> store.appendToEntry(at, text)?.let { return it } }
@@ -125,11 +131,10 @@ class Transcriber(private val context: Context, private val store: Store, privat
         if (item.origin?.toNote == true) {
             val id = "$now-${item.id}"
             // Un titolo fa ritrovare la nota; se non arriva, resta senza.
-            val title = runCatching { groq.title(text, store.cleanupModel) }
-                .onSuccess { store.countUse(store.cleanupModel) }.getOrDefault("")
+            val title = titleFor(text)
             store.saveNote(Note(id, title, text, now, now, source))
             NoteTopicsWorker.get(context).request(id)
-            return Transcription(text, now, cleaned, mode, source)
+            return Transcription(text, now, cleaned, mode, source, noteId = id)
         }
         return Transcription(text, now, cleaned, mode, source).also { store.addToHistory(it) }
     }

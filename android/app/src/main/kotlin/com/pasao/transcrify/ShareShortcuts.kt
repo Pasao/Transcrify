@@ -11,18 +11,22 @@ import android.graphics.drawable.Icon
  * mostra una accanto all'altra, così basta un tocco. Dal launcher aprono semplicemente l'app.
  */
 object ShareShortcuts {
+    const val THOUGHT = "pensiero"
+
     fun publish(context: Context) {
         val open = Intent(context, MainActivity::class.java).setAction(Intent.ACTION_MAIN)
-        fun shortcut(id: String, label: String, category: String, icon: Int) = ShortcutInfo.Builder(context, id)
+        fun shortcut(id: String, label: String, category: String, icon: Int, rank: Int) = ShortcutInfo.Builder(context, id)
             .setShortLabel(label)
+            .setRank(rank)
             .setLongLived(true)
             .setCategories(setOf("com.pasao.transcrify.category.$category"))
             .setIcon(Icon.createWithResource(context, icon))
             .setIntent(open)
             .build()
         context.getSystemService(ShortcutManager::class.java)?.dynamicShortcuts = listOf(
-            shortcut("trascrizione", "Transcrify trascrizione", "TRANSCRIPTION", R.drawable.ic_share_transcription),
-            shortcut("pensiero", "Transcrify pensiero", "THOUGHT", R.drawable.ic_share_thought),
+            // Sopra Samsung ne mostra una per app: il pensiero, perché la trascrizione sta già tra le app.
+            shortcut(THOUGHT, "Transcrify pensiero", "THOUGHT", R.drawable.ic_share_thought, 0),
+            shortcut("trascrizione", "Transcrify trascrizione", "TRANSCRIPTION", R.drawable.ic_share_transcription, 1),
         )
     }
 }

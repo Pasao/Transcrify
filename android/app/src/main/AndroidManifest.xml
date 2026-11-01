@@ -81,7 +81,7 @@
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
         <!-- Un audio condiviso da un'altra app, per esempio un vocale di WhatsApp. Non si vede: mette
-             l'audio in coda e si chiude. Compare due volte nel «Condividi», una per ogni destinazione. -->
+             l'audio in coda e si chiude. Tra le app compare una volta sola (Samsung ne mostrerebbe una e poi chiederebbe): il pensiero è una scorciatoia. -->
         <activity
             android:name=".ShareAudio"
             android:exported="false"
@@ -93,20 +93,6 @@
             android:exported="true"
             android:label="Transcrify trascrizione"
             android:icon="@drawable/ic_share_transcription"
-            android:targetActivity=".ShareAudio">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="audio/*" />
-                <data android:mimeType="application/ogg" />
-            </intent-filter>
-        </activity-alias>
-        <activity-alias
-            android:name=".ShareAsThought"
-            android:exported="true"
-            android:label="Transcrify pensiero"
-            android:icon="@drawable/ic_share_thought"
             android:targetActivity=".ShareAudio">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

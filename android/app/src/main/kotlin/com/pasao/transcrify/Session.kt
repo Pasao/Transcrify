@@ -62,7 +62,7 @@ class Session(private val context: Context, private val store: Store, private va
 
     /** Registrazioni che aspettano la rete (o un nuovo tentativo). */
     val queue = Queue(context)
-    private val transcriber = Transcriber(context, store, queue)
+    val transcriber = Transcriber(context, store, queue)
     var waiting by androidx.compose.runtime.mutableIntStateOf(queue.all().size); private set
     private var flushing = false
 

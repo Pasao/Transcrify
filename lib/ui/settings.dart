@@ -1290,43 +1290,36 @@ class _PermissionsState extends State<_Permissions> with WidgetsBindingObserver 
   @override
   Widget build(BuildContext context) {
     String state(bool? on) => on == null ? '' : (on ? 'Attivo' : 'Da attivare');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    // L'asterisco dice che serve, e resta solo finché non è acceso.
+    String need(String name, bool? on) => on == false ? '$name *' : name;
+    return SettingsGroup(
+      label: 'Permessi',
       children: [
-        SettingsGroup(
-          label: 'Permessi necessari',
-          children: [
-            SettingsRow(
-              icon: Icons.mic_rounded,
-              color: Tokens.blue,
-              title: 'Microfono',
-              subtitle: 'Per sentirti mentre detti',
-              value: state(mic),
-              onTap: () => _fix(Permission.microphone),
-            ),
-            SettingsRow(
-              icon: Icons.layers_rounded,
-              color: Tokens.blue,
-              title: 'Sopra le altre app',
-              subtitle: 'Per stare sul bordo dello schermo e dettare dentro qualunque app',
-              value: state(overlay),
-              onTap: Core.openOverlaySettings,
-            ),
-          ],
+        SettingsRow(
+          icon: Icons.mic_rounded,
+          color: Tokens.blue,
+          title: need('Microfono', mic),
+          subtitle: 'Per sentirti mentre detti',
+          value: state(mic),
+          onTap: () => _fix(Permission.microphone),
         ),
-        SettingsGroup(
-          label: 'Permessi facoltativi',
-          children: [
-            SettingsRow(
-              icon: Icons.notifications_rounded,
-              color: Tokens.blue,
-              title: 'Notifiche',
-              subtitle: 'Il testo dei vocali condivisi, se Transcri non può stare sopra le altre app',
-              value: state(notifications),
-              onTap: () => _fix(Permission.notification),
-            ),
-          ],
+        SettingsRow(
+          icon: Icons.layers_rounded,
+          color: Tokens.blue,
+          title: need('Sopra le altre app', overlay),
+          subtitle: 'Per stare sul bordo dello schermo e dettare dentro qualunque app',
+          value: state(overlay),
+          onTap: Core.openOverlaySettings,
         ),
+        SettingsRow(
+          icon: Icons.notifications_rounded,
+          color: Tokens.blue,
+          title: 'Notifiche',
+          subtitle: 'Il testo dei vocali condivisi, se Transcri non può stare sopra le altre app',
+          value: state(notifications),
+          onTap: () => _fix(Permission.notification),
+        ),
+        if (mic == false || overlay == false) const _Note('* Senza questi Transcri non può dettare.'),
       ],
     );
   }

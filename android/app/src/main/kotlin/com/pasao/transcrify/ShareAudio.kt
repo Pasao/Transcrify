@@ -11,15 +11,15 @@ import java.io.File
 import kotlin.concurrent.thread
 
 /**
- * Un audio condiviso da un'altra app, per esempio un vocale di WhatsApp. Compare due volte nel «Condividi»:
- * come trascrizione o come pensiero (vedi gli alias nel manifest). Non si vede niente: l'audio entra
+ * Un audio condiviso da un'altra app, per esempio un vocale di WhatsApp: come trascrizione, o come
+ * pensiero se arriva dalla scorciatoia (vedi [ShareShortcuts]). Non si vede niente: l'audio entra
  * subito nella coda, così non si perde, e Transcri ci lavora mentre tu resti dove sei.
  */
 class ShareAudio : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val uris = sharedUris()
-        val toNote = intent.component?.className?.endsWith(THOUGHT) == true
+        val toNote = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID) == ShareShortcuts.THOUGHT
         val store = Store(this)
         thread {
             val queue = Queue(this)
@@ -78,8 +78,4 @@ class ShareAudio : Activity() {
             ms / 1000
         }
     }.getOrDefault(0)
-
-    private companion object {
-        const val THOUGHT = "ShareAsThought"
-    }
 }

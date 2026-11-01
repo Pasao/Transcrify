@@ -817,9 +817,10 @@ class _NoteEditorState extends State<NoteEditor> {
   int _slideFrom = 0;
 
   void _slideStart() {
-    if (!_text.usable) return;
+    if (!_text.usable) return _setLevel(1);
     HapticFeedback.selectionClick();
     setState(() {
+      _showSummary = false;
       _sliding = true;
       _slid = 0;
       _slideFrom = _text.level;
@@ -871,9 +872,15 @@ class _NoteEditorState extends State<NoteEditor> {
   void _setLevel(int level) {
     if (!_text.usable) {
       // Il motivo, invece di niente: gli argomenti si fanno quando salvi.
-      _say(widget.note.topics == 'pending' ? 'Sto dividendo per argomento…' : 'Gli argomenti arrivano quando salvi');
+      _say(switch (widget.note.topics) {
+        'pending' => 'Sto dividendo per argomento…',
+        'off' when !widget.note.isEmpty => 'Accendi «Dividi per argomento» nelle impostazioni',
+        _ => 'Gli argomenti arrivano quando salvi',
+      });
       return;
     }
+    // Gli argomenti stanno sul testo intero: il riassunto si fa da parte.
+    if (_showSummary) setState(() => _showSummary = false);
     final l = level.clamp(0, 4);
     if (l == _text.level) return;
     HapticFeedback.selectionClick();
@@ -1214,7 +1221,7 @@ class _NoteEditorState extends State<NoteEditor> {
                 onList: _toggleList,
                 dictation: _dictation,
                 onPaste: _pasteDictation,
-                topics: _text.usable ? _text.level : null,
+                topics: _text.usable && !_showSummary ? _text.level : 0,
                 onTopics: () => _setLevel(_text.level == 4 ? 0 : _text.level + 1),
                 onSlideStart: _slideStart,
                 onSlide: _slide,
@@ -1257,8 +1264,8 @@ class NoteToolbar extends StatelessWidget {
   final Entry? dictation;
   final VoidCallback onPaste;
 
-  /// La grana degli argomenti (0–3), o null se non ci sono per questo testo: allora il tasto non c'è.
-  final int? topics;
+  /// La grana degli argomenti (0–4). Il tasto c'è sempre: se non sono pronti, toccandolo dice perché.
+  final int topics;
   final VoidCallback onTopics;
 
   /// Tenendo il tasto e tirando su si sceglie la grana: [onSlide] riceve di quanto ti sei spostato.
@@ -1299,8 +1306,7 @@ class NoteToolbar extends StatelessWidget {
               tooltip: 'Elenco',
             ),
             // Gli argomenti: lo stesso del pizzico, per chi non lo conosce. Acceso = colorato.
-            if (topics != null)
-              Tooltip(
+            Tooltip(
                 message: 'Tocca, tira su o pizzica la nota',
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -1312,7 +1318,7 @@ class NoteToolbar extends StatelessWidget {
                   onLongPressStart: (_) => onSlideStart(),
                   onLongPressMoveUpdate: (d) => onHold(d.offsetFromOrigin.dy),
                   onLongPressEnd: (_) => onSlideEnd(),
-                  child: Padding(padding: const EdgeInsets.all(12), child: GrainIcon(level: topics!)),
+                  child: Padding(padding: const EdgeInsets.all(12), child: GrainIcon(level: topics)),
                 ),
               ),
             IconButton(

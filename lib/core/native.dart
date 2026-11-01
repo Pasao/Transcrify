@@ -303,6 +303,9 @@ class Core {
   /// [appendTo]: quello che senti finisce in fondo a questa trascrizione.
   static Future<void> listen({DateTime? appendTo}) => _ch.invokeMethod('listen', {'appendTo': appendTo?.millisecondsSinceEpoch});
 
+  /// Apre i comandi del Floater sopra il Dock: butta, ferma, pausa, modi.
+  static Future<void> openPanel() => _ch.invokeMethod('openPanel');
+
   static Future<void> stopListening() => _ch.invokeMethod('stopListening');
 
   static Future<void> discardListening() => _ch.invokeMethod('discardListening');

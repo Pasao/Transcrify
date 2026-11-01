@@ -52,7 +52,7 @@ object Sandbox {
                     entry("Vocale finto: domani passo a prendere le chiavi, poi andiamo insieme a vedere la macchina.", 5, "fedele", "whatsapp"),
                     entry("Ricordarsi di chiamare il meccanico.", 26, null),
                     entry("Prova di un testo più lungo per vedere come sta nella scheda. " + "Una frase in più per riempire lo spazio. ".repeat(8), 30, "pulita"),
-                )
+                ) + (2..40).map { day -> entry("Trascrizione finta di $day giorni fa: la ferramenta chiude alle sette.", day * 24L + 3, "fedele") }
             ).toString()
         )
         fun note(id: String, title: String, text: String, ago: Long, source: String? = null, summary: String? = null) = JSONObject()

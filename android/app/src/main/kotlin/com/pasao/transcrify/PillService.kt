@@ -66,6 +66,9 @@ sealed interface Stage {
 
     /** Il testo di un audio condiviso: si apre dalla pillola, sopra l'app in cui sei. */
     data object Message : Stage
+
+    /** I comandi del Floater con Transcri nel Dock: si aprono dal suo posto [nest], sopra l'app. */
+    data class Panel(val nest: Rect) : Stage
 }
 
 /**
@@ -277,6 +280,35 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     /** I testi degli audio condivisi ancora da leggere: il primo è quello che si vede. */
     val messages = androidx.compose.runtime.mutableStateListOf<Pair<Transcription, Origin>>()
 
+    /** Il messaggio l'ho solo letto: via dalle trascrizioni o dai Pensieri, dov'era finito. */
+    fun forgetMessage() {
+        val (t, _) = messages.firstOrNull() ?: return
+        if (t.noteId != null) {
+            store.deleteNote(t.noteId)
+            NoteTopicsWorker.get(this).forget(t.noteId)
+        } else {
+            store.removeFromHistory(t.at)
+        }
+        listener?.invoke()
+    }
+
+    /** Il messaggio era una trascrizione, ma lo voglio tra i pensieri. Il titolo arriva appena è pronto. */
+    fun messageToNote() {
+        val (t, origin) = messages.firstOrNull() ?: return
+        if (t.noteId != null) return
+        val id = "${t.at}-pensiero"
+        store.removeFromHistory(t.at)
+        store.saveNote(Note(id, "", t.text, t.at, t.at, origin.source))
+        NoteTopicsWorker.get(this).request(id)
+        messages[0] = t.copy(noteId = id) to origin.copy(toNote = true)
+        listener?.invoke()
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val title = session.transcriber.titleFor(t.text)
+            if (title.isNotEmpty()) store.notes().firstOrNull { it.id == id }?.let { store.saveNote(it.copy(title = title)) }
+            listener?.invoke()
+        }
+    }
+
     private fun showMessage(t: Transcription, origin: Origin) {
         messages += t to origin
         if (stage == null) showStage(Stage.Message)
@@ -324,7 +356,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     /** Lo schermo ruota: la pillola resta sul suo bordo, alla stessa altezza in proporzione. */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (stage == Stage.Menu || stage == Stage.Dismiss || stage == Stage.Message) removeStage()
+        if (stage == Stage.Menu || stage == Stage.Dismiss || stage == Stage.Message || stage is Stage.Panel) removeStage()
         readAccent()
         placePill()
     }
@@ -557,7 +589,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         stage = s
         val params = overlayParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
         // Animazioni e X non prendono tocchi: passano alla pillola o all'app sotto.
-        if (s !is Stage.Menu && s !is Stage.Message) params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        if (s !is Stage.Menu && s !is Stage.Message && s !is Stage.Panel) params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         val view = composeView { StageLayer(this) }
         wm.addView(view, params)
         stageView = view
@@ -588,7 +620,17 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         stageView = null
         stage = null
         leaving?.postDelayed({ runCatching { wm.removeView(leaving) } }, 48)
-        if (messages.isNotEmpty()) showStage(Stage.Message) else goHomeIfDone()
+        when {
+            messages.isNotEmpty() -> showStage(Stage.Message)
+            // Il pannello nel Dock si chiude, e non c'è più niente in corso: il servizio può spegnersi.
+            !out -> if (session.phase != Phase.RECORDING) rest()
+            else -> goHomeIfDone()
+        }
+    }
+
+    /** Transcri è nel Dock: apre lì i comandi del Floater (ferma, butta, pausa, modi). */
+    fun openPanel(nest: Rect) {
+        if (!out && stage == null && Settings.canDrawOverlays(this)) showStage(Stage.Panel(nest))
     }
 
     /**

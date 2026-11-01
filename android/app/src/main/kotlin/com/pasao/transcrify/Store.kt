@@ -15,7 +15,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Una trascrizione salvata. */
-data class Transcription(val text: String, val at: Long, val purified: Boolean, val mode: String? = null, val source: String? = null) {
+data class Transcription(val text: String, val at: Long, val purified: Boolean, val mode: String? = null, val source: String? = null, val noteId: String? = null) {
     fun toJson(): JSONObject = JSONObject().put("text", text).put("at", at).put("purified", purified).put("mode", mode).put("source", source)
 
     companion object {

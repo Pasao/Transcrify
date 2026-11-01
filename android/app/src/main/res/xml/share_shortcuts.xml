@@ -5,7 +5,7 @@
         <data android:mimeType="application/ogg" />
         <category android:name="com.pasao.transcrify.category.TRANSCRIPTION" />
     </share-target>
-    <share-target android:targetClass="com.pasao.transcrify.ShareAsThought">
+    <share-target android:targetClass="com.pasao.transcrify.ShareAsTranscription">
         <data android:mimeType="audio/*" />
         <data android:mimeType="application/ogg" />
         <category android:name="com.pasao.transcrify.category.THOUGHT" />
