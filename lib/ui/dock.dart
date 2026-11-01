@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,7 +8,8 @@ import 'theme.dart';
 
 /// I poteri di Transcri. Per ora due: Trascrivi (quello che detti per gli altri) e Pensieri (le tue note).
 enum Power {
-  trascrivi('Trascrivi', Icons.mic_rounded),
+  // Il microfono è il tasto per dettare, qui accanto a Transcri: il potere ha il suo segno, l'onda della voce.
+  trascrivi('Trascrivi', Icons.graphic_eq_rounded),
   pensieri('Pensieri', Icons.cloud_rounded);
 
   const Power(this.label, this.icon);
@@ -109,24 +112,74 @@ class Dock extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // L'azione esce da Transcri: l'isola si allunga verso sinistra.
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 280),
-                  curve: Curves.easeOutCubic,
-                  child: switch (action) {
-                    null => const SizedBox.shrink(),
-                    (final icon, final label, final onTap) => Padding(
-                      padding: const EdgeInsets.only(right: (dockIsland - dockRound) / 2),
-                      child: RoundAction(icon: icon, label: label, onTap: onTap),
-                    ),
-                  },
-                ),
+                _DockAction(action: action),
                 nest,
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// L'azione accanto a Transcri: esce da lui, e l'isola si allunga verso sinistra.
+/// Se cambia (dalla matita al microfono) prima rientra in lui, poi esce quella nuova: mai un cambio d'icona sul posto.
+class _DockAction extends StatefulWidget {
+  const _DockAction({required this.action});
+
+  final (IconData, String, VoidCallback)? action;
+
+  @override
+  State<_DockAction> createState() => _DockActionState();
+}
+
+class _DockActionState extends State<_DockAction> {
+  static const _half = Duration(milliseconds: 200);
+
+  /// L'icona che si vede: durante il cambio resta quella vecchia, mentre rientra.
+  late IconData? _shown = widget.action?.$1;
+  late bool _open = widget.action != null;
+  Timer? _swap;
+
+  @override
+  void didUpdateWidget(covariant _DockAction old) {
+    super.didUpdateWidget(old);
+    final next = widget.action?.$1;
+    if (next == _shown) {
+      if (next != null && !_open) setState(() => _open = true);
+      _swap?.cancel();
+      return;
+    }
+    setState(() => _open = false);
+    _swap?.cancel();
+    _swap = Timer(_half, () {
+      if (!mounted) return;
+      setState(() {
+        _shown = widget.action?.$1;
+        _open = _shown != null;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _swap?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final action = widget.action;
+    return AnimatedSize(
+      duration: _half,
+      curve: Curves.easeInOutCubic,
+      child: !_open || action == null || _shown == null
+          ? const SizedBox(height: dockRound)
+          : Padding(
+              padding: const EdgeInsets.only(right: (dockIsland - dockRound) / 2),
+              child: RoundAction(icon: _shown!, label: action.$2, onTap: action.$3),
+            ),
     );
   }
 }

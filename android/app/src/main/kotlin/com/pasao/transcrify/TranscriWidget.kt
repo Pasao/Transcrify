@@ -92,7 +92,8 @@ class TranscriWidget : AppWidgetProvider() {
                     setViewVisibility(R.id.widget_words, if (look.text) View.VISIBLE else View.INVISIBLE)
                     setViewVisibility(R.id.widget_open, if (open) View.VISIBLE else View.GONE)
                     if (open) {
-                        setColorStateList(R.id.widget_open, "setImageTintList", text)
+                        setColorStateList(R.id.widget_open_icon, "setImageTintList", text)
+                        setColorStateList(R.id.widget_open_text, "setTextColor", text)
                         setColorStateList(R.id.widget_open, "setBackgroundTintList", text)
                         setOnClickPendingIntent(R.id.widget_open, openApp(context, id))
                     }

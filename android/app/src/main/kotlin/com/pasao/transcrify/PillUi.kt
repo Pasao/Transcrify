@@ -92,6 +92,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.verticalScroll
 import kotlin.math.roundToInt
 
 /** Misure della pillola, in dp. */
@@ -334,6 +335,7 @@ fun StageLayer(svc: PillService) {
             is Stage.Outro -> Outro(svc, stage.to, stage.home)
             Stage.Menu -> MenuStage(svc)
             Stage.Dismiss -> DismissTarget(svc)
+            Stage.Message -> MessageStage(svc)
             null -> Unit
         }
     }
@@ -678,6 +680,92 @@ private fun MenuStage(svc: PillService) {
             val visible = ((p - 0.55f) / 0.45f).coerceIn(0f, 1f)
             androidx.compose.animation.Crossfade(compact, animationSpec = tween(180), label = "menu") { small ->
                 if (small) CompactMenu(svc, visible, ::collapse) else Menu(svc, visible = visible, onCollapse = ::collapse)
+            }
+        }
+    }
+}
+
+/**
+ * Il testo di un audio condiviso: si apre dalla pillola come il menu, sopra l'app in cui sei.
+ * Chiuderla non perde niente: il testo è già salvato nell'app. Se ne restano altri, tocca al prossimo.
+ */
+@Composable
+private fun MessageStage(svc: PillService) {
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    val t = remember { Animatable(0f) }
+    var closing by remember { mutableStateOf(false) }
+    val bar = remember { svc.barRect() }
+    LaunchedEffect(Unit) { t.animateTo(1f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)) }
+    val current = svc.messages.firstOrNull()
+
+    fun close() {
+        if (closing) return
+        if (svc.messages.size > 1) {
+            svc.messages.removeAt(0)
+            return
+        }
+        closing = true
+        scope.launch {
+            t.animateTo(0f, tween(200, easing = FastOutSlowInEasing))
+            svc.messages.clear()
+            svc.stageDone()
+        }
+    }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val w = constraints.maxWidth.toFloat()
+        val h = constraints.maxHeight.toFloat()
+        val margin = with(density) { 16.dp.toPx() }
+        val text = current?.first?.text.orEmpty()
+        // Tanto alta quanto serve: le righe si stimano dai caratteri; oltre il limite il testo scorre.
+        val lines = text.split('\n').sumOf { 1 + it.length / 36 }
+        val mh = with(density) { (64 + lines * 24).dp.toPx() }.coerceAtMost(h * 0.62f)
+        val top = (bar.center.y - mh / 2).coerceIn(margin * 4, h - mh - margin * 4)
+        val card = Rect(margin, top, w - margin, top + mh)
+        val p = t.value
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.32f * p.coerceIn(0f, 1f)))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { close() }
+        )
+        Blob(
+            rect = lerpRect(bar, card, p),
+            color = lerp(Palette.AccentA, Palette.Panel, p.coerceIn(0f, 1f)),
+            shadow = p.coerceIn(0f, 1f),
+            maxRadius = with(density) { PillGeometry.MENU_RADIUS.dp.toPx() },
+        ) {
+            val visible = ((p - 0.55f) / 0.45f).coerceIn(0f, 1f)
+            if (current != null) {
+                Column(
+                    Modifier
+                        .alpha(visible)
+                        .size(with(density) { card.width.toDp() }, with(density) { card.height.toDp() })
+                        .padding(start = 20.dp, end = 10.dp, top = 10.dp, bottom = 14.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth().height(36.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            current.second.title + if (svc.messages.size > 1) "  (altri ${svc.messages.size - 1})" else "",
+                            Modifier.weight(1f),
+                            color = Palette.Muted,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        CircleButton(Icons.Rounded.Close, "Chiudi", Palette.Muted, small = true) { close() }
+                    }
+                    Text(
+                        text,
+                        Modifier
+                            .weight(1f, fill = false)
+                            .padding(end = 10.dp)
+                            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                        color = Palette.Text,
+                        fontSize = 16.sp,
+                        lineHeight = 23.sp,
+                    )
+                }
             }
         }
     }

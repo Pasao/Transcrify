@@ -628,8 +628,8 @@ class _EntrySheetState extends State<_EntrySheet> {
   }
 }
 
-/// «Aggiungi a voce»: un microfono che, mentre ascolta, diventa il tasto per fermare (rosso, col respiro
-/// della voce) con accanto la X per buttare. Mentre trascrive gira un cerchio; il testo arriva in fondo.
+/// «Aggiungi a voce»: un microfono che, mentre ascolta e trascrive, diventa il cerchio di Transcri.
+/// Accanto, ferma, la X per buttare. Il testo arriva in fondo.
 class _AddVoice extends StatelessWidget {
   const _AddVoice({required this.at, required this.onStart});
 
@@ -661,13 +661,13 @@ class _AddVoice extends StatelessWidget {
                     HapticFeedback.mediumImpact();
                     Core.stopListening();
                   },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 90),
-                    width: 34 + live.level * 6,
-                    height: 34 + live.level * 6,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    decoration: const BoxDecoration(color: Tokens.red, shape: BoxShape.circle),
-                    child: const Icon(Icons.stop_rounded, size: 20, color: Colors.white),
+                  child: const Padding(
+                    padding: EdgeInsets.all(3),
+                    child: VoiceCircle(
+                      phase: 'RECORDING',
+                      size: 34,
+                      child: Icon(Icons.stop_rounded, size: 20, color: Colors.white),
+                    ),
                   ),
                 ),
               ),
@@ -675,11 +675,9 @@ class _AddVoice extends StatelessWidget {
           );
         }
         if (mine && live.phase == 'PROCESSING') {
-          return SizedBox.square(
-            dimension: 40,
-            child: Center(
-              child: SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: tk.muted)),
-            ),
+          return const Padding(
+            padding: EdgeInsets.all(3),
+            child: VoiceCircle(phase: 'PROCESSING', size: 34),
           );
         }
         return IconButton(

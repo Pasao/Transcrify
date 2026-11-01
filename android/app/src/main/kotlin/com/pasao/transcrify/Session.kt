@@ -305,7 +305,7 @@ class Session(private val context: Context, private val store: Store, private va
                     return true
                 }
                 // Quello che detti lo incolli altrove; un audio condiviso lo vuoi leggere, e gli appunti non si toccano.
-                if (item.origin != null) showShared(t, item.origin) else copy(t.text)
+                if (item.origin != null) onShared(t, item.origin) else copy(t.text)
                 if (item.origin?.toNote != true) hasLast = true
                 phase = Phase.SUCCESS
                 delay(1500)
@@ -337,8 +337,11 @@ class Session(private val context: Context, private val store: Store, private va
         }
     }
 
-    /** Il testo di un audio condiviso, leggibile lì dove sei: la notifica si apre e si legge tutto. */
-    private fun showShared(t: Transcription, origin: Origin) {
+    /** Un audio condiviso è pronto: chi vive nel servizio decide dove mostrarlo. */
+    var onShared: (Transcription, Origin) -> Unit = ::notifyShared
+
+    /** Senza il Floater (manca il permesso): la notifica si apre e si legge tutto. */
+    fun notifyShared(t: Transcription, origin: Origin) {
         val nm = context.getSystemService(android.app.NotificationManager::class.java)
         nm.createNotificationChannel(
             android.app.NotificationChannel(SHARED_CHANNEL, "Audio condivisi", android.app.NotificationManager.IMPORTANCE_HIGH)
@@ -346,12 +349,12 @@ class Session(private val context: Context, private val store: Store, private va
         val open = android.app.PendingIntent.getActivity(
             context, 0, android.content.Intent(context, MainActivity::class.java), android.app.PendingIntent.FLAG_IMMUTABLE,
         )
-        val from = if (origin.source == "whatsapp") "Vocale di WhatsApp" else "Audio"
+        val from = origin.title
         nm.notify(
             t.at.hashCode(),
             android.app.Notification.Builder(context, SHARED_CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_mic)
-                .setContentTitle(if (origin.toNote) "$from · nei Pensieri" else from)
+                .setContentTitle(from)
                 .setContentText(t.text)
                 .setStyle(android.app.Notification.BigTextStyle().bigText(t.text))
                 .setContentIntent(open)

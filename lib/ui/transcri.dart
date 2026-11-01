@@ -43,8 +43,8 @@ Future<bool> transcriReady(BuildContext context) async {
 /// Il nido di Transcri: la sua casa tonda dentro l'isola di destra del Dock. Lì sta seduto, respira,
 /// sbatte gli occhi e si guarda intorno. Toccando il nido esce e vola al bordo; toccandolo di
 /// nuovo torna, atterra con un sobbalzo e il nido si illumina. Quando è fuori resta il suo contorno.
-/// Tenendolo premuto ascolta restando qui: l'anello intorno diventa rosso e si muove con la voce.
-/// Se poi lo trascini fuori, o esci dall'app, continua ad ascoltare dal bordo.
+/// Tenendolo premuto ascolta restando qui: il suo cerchio diventa rosso e si allarga con la voce, come
+/// la pillola. Se lo trascini fuori, o esci dall'app, continua dal bordo; se torna qui, continua da qui.
 class TranscriNest extends StatefulWidget {
   const TranscriNest({super.key, required this.on, required this.limitedUntil, required this.onChanged, this.onNeedKey, this.onAsleep});
 
@@ -94,23 +94,22 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
     Core.live.addListener(_liveChanged);
   }
 
-  /// Cosa si vede intorno a lui nel Dock: null se non sta lavorando qui.
-  String? _ring;
-  String _lastPhase = 'IDLE';
+  String _phase = 'IDLE';
 
   void _liveChanged() {
     final live = Core.live.value;
-    final out = shownOn ?? widget.on;
-    final ring = !out && const {'RECORDING', 'PROCESSING', 'SUCCESS'}.contains(live.phase) ? live.phase : null;
-    if (ring != _ring) setState(() => _ring = ring);
+    if (live.phase == _phase) return;
     // Fuori lo dice la pillola; qui nessuno lo direbbe. L'audio resta in coda.
-    if (live.phase == 'ERROR' && _lastPhase != 'ERROR' && !out && live.error != null) {
+    if (live.phase == 'ERROR' && !(shownOn ?? widget.on) && live.error != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(live.error!)));
     }
-    _lastPhase = live.phase;
+    setState(() => _phase = live.phase);
   }
 
-  bool get _listening => _ring == 'RECORDING' && !(shownOn ?? widget.on);
+  /// Cosa sta facendo qui nel Dock: null se è fermo, o se è fuori e lo dice la pillola.
+  String? get _working => !(shownOn ?? widget.on) && const {'RECORDING', 'PROCESSING', 'SUCCESS'}.contains(_phase) ? _phase : null;
+
+  bool get _listening => _working == 'RECORDING';
 
   /// Comincia ad ascoltare restando nel Dock.
   Future<void> listen() async {
@@ -326,7 +325,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
               clipBehavior: Clip.none,
               alignment: Alignment.center,
               children: [
-                if (_listening) const _VoiceRing(phase: 'RECORDING', size: _Transcri.w),
+                if (_listening) const VoiceCircle(phase: 'RECORDING', size: _Transcri.w + 12),
                 _Transcri(away: false, sleeping: false, land: _land),
               ],
             ),
@@ -434,7 +433,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
             clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
-              if (_ring != null && _carried == null && !on) _VoiceRing(phase: _ring!, size: slot),
+              if (_working != null && _carried == null) VoiceCircle(phase: _working!, size: slot),
               nest,
             ],
           ),
@@ -444,106 +443,13 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
   }
 
   /// Il fondo del nido: con lui a casa prende i suoi colori, tutto; quando esce si spegne. Niente alone.
+  /// Mentre lavora il fondo è il suo cerchio, sotto: il nido si fa da parte.
   Gradient _fill(Color base, bool home) => LinearGradient(
     colors: [
       for (final c in transcriColors)
-        !home
-            ? base
-            : Color.alphaBlend(
-                switch (_ring) {
-                  'RECORDING' => Tokens.red.withValues(alpha: 0.26),
-                  'SUCCESS' => Tokens.green.withValues(alpha: 0.26),
-                  _ => c.withValues(alpha: 0.24),
-                },
-                base,
-              ),
+        _working != null ? base.withValues(alpha: 0) : (home ? Color.alphaBlend(c.withValues(alpha: 0.24), base) : base),
     ],
   );
-}
-
-/// L'anello intorno a Transcri mentre lavora nel Dock. Rosso che si muove con la voce quando ascolta,
-/// i suoi colori che girano quando trascrive, verde per un attimo quando ha finito.
-class _VoiceRing extends StatefulWidget {
-  const _VoiceRing({required this.phase, required this.size});
-
-  final String phase;
-  final double size;
-
-  @override
-  State<_VoiceRing> createState() => _VoiceRingState();
-}
-
-class _VoiceRingState extends State<_VoiceRing> with SingleTickerProviderStateMixin {
-  late final _time = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat();
-
-  /// Il volume arriva a scatti: l'anello lo insegue, così si muove morbido.
-  double _level = 0;
-
-  @override
-  void dispose() {
-    _time.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: AnimatedBuilder(
-        animation: _time,
-        builder: (context, _) {
-          _level += (Core.live.value.level - _level) * 0.2;
-          final seconds = (_time.lastElapsedDuration?.inMilliseconds ?? 0) / 1000;
-          return CustomPaint(
-            size: Size.square(widget.size),
-            painter: _RingPainter(widget.phase, _level, seconds),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _RingPainter extends CustomPainter {
-  _RingPainter(this.phase, this.level, this.t);
-
-  final String phase;
-  final double level, t;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final listening = phase == 'RECORDING';
-    final base = size.width / 2 + 1.5 + (listening ? level * 5 : 0);
-    // Due onde lente che scorrono in versi opposti: la forma non si ripete e non sembra un ingranaggio.
-    final wave = listening ? 0.5 + level * 3.2 : 0.5;
-    final path = Path();
-    const steps = 72;
-    for (var i = 0; i <= steps; i++) {
-      final a = i / steps * math.pi * 2;
-      final r = base + wave * (math.sin(3 * a + t * 2.3) * 0.6 + math.sin(5 * a - t * 1.6) * 0.4);
-      final p = c + Offset(math.cos(a) * r, math.sin(a) * r);
-      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
-    }
-    path.close();
-    final pen = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = listening ? 2.4 + level * 1.4 : 2.4;
-    switch (phase) {
-      case 'RECORDING':
-        pen.color = Tokens.red;
-      case 'SUCCESS':
-        pen.color = Tokens.green;
-      default:
-        pen.shader = SweepGradient(
-          colors: [...transcriColors, transcriColors.first],
-          transform: GradientRotation(t * 3),
-        ).createShader(Rect.fromCircle(center: c, radius: base));
-    }
-    canvas.drawPath(path, pen);
-  }
-
-  @override
-  bool shouldRepaint(_RingPainter old) => old.phase != phase || old.level != level || old.t != t;
 }
 
 /// Transcri a casa: una capsula bianca con due occhi. Respira, ogni tanto sbatte gli occhi,

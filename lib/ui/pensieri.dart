@@ -29,7 +29,7 @@ Future<void> openNote(BuildContext context, [Note? note]) async {
   if (result.isEmpty) {
     // Svuotata: una nota vuota non serve a niente.
     if (existed) await Core.deleteNote(start.id);
-  } else if (result.title != start.title || result.text != start.text) {
+  } else if (result.title != start.title || result.text != start.text || result.summary != start.summary) {
     await Core.saveNote(result);
   }
   Core.refresh();
@@ -586,7 +586,9 @@ class NoteCard extends StatelessWidget {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Expanded(child: Text(dayLabel(note.updated), style: monoStyle(context))),
+                  Expanded(
+                    child: Text('${dayLabel(note.updated)}, ${hm(note.updated)}', style: monoStyle(context), overflow: TextOverflow.ellipsis),
+                  ),
                   if (note.source != null) ...[SourceIcon(note.source), const SizedBox(width: 6)],
                   TopicsBadge(state: note.topics),
                 ],
@@ -901,7 +903,7 @@ class _NoteEditorState extends State<NoteEditor> {
     super.dispose();
   }
 
-  Note get _current => widget.note.edited(title: _title.text, text: _text.text);
+  Note get _current => widget.note.edited(title: _title.text, text: _text.text, summary: _summaryOf == _text.text ? _summary : null);
 
   Future<void> _checkDictation() async {
     final h = await Core.history();
@@ -929,20 +931,39 @@ class _NoteEditorState extends State<NoteEditor> {
     _set(_text.text.replaceRange(sel.start, sel.end, s), sel.start + s.length);
   }
 
-  /// Una nota nata da un audio resta fedele; il riassunto lo chiedi tu. «Annulla» riporta il testo di prima.
+  /// Una nota nata da un audio resta fedele; il riassunto lo chiedi tu. Sta accanto al testo e non lo tocca:
+  /// il tasto passa dall'uno all'altro. Se poi cambi il testo, il riassunto vecchio non vale più.
   bool _summarizing = false;
+  bool _showSummary = false;
+  late String? _summary = widget.note.summary;
+  late String _summaryOf = widget.note.text;
 
   Future<void> _summarize() async {
     if (_summarizing || _text.text.trim().isEmpty) return;
     HapticFeedback.selectionClick();
-    setState(() => _summarizing = true);
-    try {
-      final short = await Core.summarize(_text.text);
-      if (mounted) _set(short, short.length);
-    } on PlatformException {
-      if (mounted) _say('Riassunto non riuscito');
+    if (_showSummary) {
+      setState(() => _showSummary = false);
+      return _say('Testo intero');
     }
-    if (mounted) setState(() => _summarizing = false);
+    if (_summary == null || _summaryOf != _text.text) {
+      setState(() => _summarizing = true);
+      try {
+        final of = _text.text;
+        final short = await Core.summarize(of);
+        _summary = short;
+        _summaryOf = of;
+      } on PlatformException {
+        if (mounted) {
+          setState(() => _summarizing = false);
+          _say('Riassunto non riuscito');
+        }
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _summarizing = false);
+    }
+    setState(() => _showSummary = true);
+    _say('Riassunto');
   }
 
   void _pasteDictation() {
@@ -1054,8 +1075,16 @@ class _NoteEditorState extends State<NoteEditor> {
                                 ),
                               ),
                               const SizedBox(height: 12),
+                              if (_showSummary)
+                                Expanded(
+                                  child: SingleChildScrollView(child: Text(_summary ?? '', style: Theme.of(context).textTheme.bodyLarge)),
+                                ),
                               Expanded(
-                                child: TextField(
+                                flex: _showSummary ? 0 : 1,
+                                child: Visibility(
+                                  visible: !_showSummary,
+                                  maintainState: true,
+                                  child: TextField(
                                   controller: _text,
                                   undoController: _undo,
                                   scrollController: _scroll,
@@ -1068,6 +1097,7 @@ class _NoteEditorState extends State<NoteEditor> {
                                   expands: true,
                                   textAlignVertical: TextAlignVertical.top,
                                   decoration: plain.copyWith(hintText: 'Scrivi…'),
+                                  ),
                                 ),
                               ),
                             ],
@@ -1118,6 +1148,7 @@ class _NoteEditorState extends State<NoteEditor> {
                 onTopics: () => _setLevel(_text.level == 4 ? 0 : _text.level + 1),
                 onSummarize: widget.note.source == null ? null : _summarize,
                 summarizing: _summarizing,
+                summaryOn: _showSummary,
               ),
             ],
           ),
@@ -1140,6 +1171,7 @@ class NoteToolbar extends StatelessWidget {
     required this.onTopics,
     this.onSummarize,
     this.summarizing = false,
+    this.summaryOn = false,
   });
 
   final UndoHistoryController undo;
@@ -1154,6 +1186,9 @@ class NoteToolbar extends StatelessWidget {
   /// Riassumere: solo le note nate da un audio.
   final VoidCallback? onSummarize;
   final bool summarizing;
+
+  /// Si sta leggendo il riassunto: il tasto è acceso e riporta al testo intero.
+  final bool summaryOn;
 
   @override
   Widget build(BuildContext context) {
@@ -1188,10 +1223,10 @@ class NoteToolbar extends StatelessWidget {
             if (onSummarize != null)
               IconButton(
                 onPressed: onSummarize,
-                tooltip: 'Riassumi',
+                tooltip: summaryOn ? 'Torna al testo intero' : 'Riassumi',
                 icon: summarizing
-                    ? SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: tk.muted))
-                    : Icon(Icons.short_text_rounded, color: tk.text),
+                    ? const SizedBox.square(dimension: 24, child: VoiceCircle(phase: 'PROCESSING', size: 24))
+                    : Icon(Icons.short_text_rounded, color: summaryOn ? Tokens.blue : tk.text),
               ),
             const Spacer(),
             AnimatedSwitcher(

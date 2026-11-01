@@ -75,6 +75,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       _liveChanged();
       hasKey = s.hasKey;
       transcriColors = [s.accentA, s.accentB];
+      transcriRed = s.stateRed;
+      transcriGreen = s.stateGreen;
       if (s.accentMain != Tokens.blue) Tokens.useAccent(s.accentMain, s.accentSecond);
       limitedUntil = s.limited == null ? null : s.resetAt;
     });

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../core/native.dart';
 import 'common.dart';
@@ -281,6 +282,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ],
                   ),
+                  const _Permissions(),
+                  const SizedBox(height: 16),
                   SettingsGroup(
                     label: 'Aiuto',
                     children: [
@@ -1223,6 +1226,88 @@ class SettingsGroup extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// I permessi, tutti in un posto: si vede quali sono accesi e, toccandoli, si va ad accenderli.
+class _Permissions extends StatefulWidget {
+  const _Permissions();
+
+  @override
+  State<_Permissions> createState() => _PermissionsState();
+}
+
+class _PermissionsState extends State<_Permissions> with WidgetsBindingObserver {
+  bool? mic, notifications, overlay;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Si torna dalle impostazioni di Android: il permesso può essere cambiato.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _load();
+  }
+
+  Future<void> _load() async {
+    final m = await Permission.microphone.isGranted;
+    final n = await Permission.notification.isGranted;
+    final o = await Core.canDrawOverlays();
+    if (mounted) {
+      setState(() {
+        mic = m;
+        notifications = n;
+        overlay = o;
+      });
+    }
+  }
+
+  /// Se è spento lo chiede; se Android non lo chiede più, o è già acceso, si apre la sua pagina.
+  Future<void> _fix(Permission p) async {
+    if (!(await p.isGranted) && (await p.request()).isGranted) return _load();
+    await openAppSettings();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String state(bool? on) => on == null ? '' : (on ? 'Attivo' : 'Da attivare');
+    return SettingsGroup(
+      label: 'Permessi',
+      children: [
+        SettingsRow(
+          icon: Icons.mic_rounded,
+          color: Tokens.blue,
+          title: 'Microfono',
+          value: state(mic),
+          onTap: () => _fix(Permission.microphone),
+        ),
+        SettingsRow(
+          icon: Icons.notifications_rounded,
+          color: Tokens.blue,
+          title: 'Notifiche',
+          value: state(notifications),
+          onTap: () => _fix(Permission.notification),
+        ),
+        SettingsRow(
+          icon: Icons.layers_rounded,
+          color: Tokens.blue,
+          title: 'Sopra le altre app',
+          subtitle: 'Per stare sul bordo dello schermo',
+          value: state(overlay),
+          onTap: Core.openOverlaySettings,
+        ),
+      ],
     );
   }
 }

@@ -82,6 +82,7 @@ class MainActivity : FlutterActivity() {
                     val key = store.apiKey ?: return@setMethodCallHandler result.error("nokey", "Manca la chiave", null)
                     background(result) {
                         Groq(key).cleanLong(call.argument<String>("text")!!, store.cleanupModel, store.promptFor("riassunto"), store.words)
+                            .also { store.countUse(store.cleanupModel) }
                     }
                 }
                 "introSeen" -> {
@@ -138,7 +139,7 @@ class MainActivity : FlutterActivity() {
                         Note(
                             id, call.argument<String>("title") ?: "", call.argument<String>("text") ?: "",
                             call.argument<Number>("created")!!.toLong(), call.argument<Number>("updated")!!.toLong(),
-                            call.argument<String>("source"),
+                            call.argument<String>("source"), call.argument<String>("summary"),
                         )
                     )
                     // Il «commit»: salvata la nota, i suoi argomenti si rifanno in fondo (solo le frasi nuove).
@@ -350,6 +351,9 @@ class MainActivity : FlutterActivity() {
             "accentB" to getColor(android.R.color.system_accent3_300),
             // Lo stesso tono pieno dei bottoni della pillola: l'app e Transcri hanno un colore solo.
             "accentMain" to getColor(android.R.color.system_accent1_400),
+            // Gli stessi rosso e verde della pillola: Transcri è uguale dovunque.
+            "stateRed" to PillService.stateColor(this, PillService.RED),
+            "stateGreen" to PillService.stateColor(this, PillService.GREEN),
             "accentSecond" to getColor(android.R.color.system_accent3_400),
             "dayEnd" to dayEnd,
             "hourLimit" to Store.HOUR_LIMIT,

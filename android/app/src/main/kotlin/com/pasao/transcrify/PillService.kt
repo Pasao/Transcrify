@@ -63,6 +63,9 @@ sealed interface Stage {
 
     /** Mentre si trascina: la X in basso che può inghiottire la pillola. */
     data object Dismiss : Stage
+
+    /** Il testo di un audio condiviso: si apre dalla pillola, sopra l'app in cui sei. */
+    data object Message : Stage
 }
 
 /**
@@ -157,7 +160,10 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         wm = getSystemService(WindowManager::class.java)
         store = Store(this)
-        session = Session(this, store, scope).also { it.onHistoryChanged = { listener?.invoke() } }
+        session = Session(this, store, scope).also {
+            it.onHistoryChanged = { listener?.invoke() }
+            it.onShared = { t, origin -> if (out) showMessage(t, origin) else it.notifyShared(t, origin) }
+        }
         pillRight = store.pillRight
         readAccent()
         instance = this
@@ -268,6 +274,22 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     /** Uscito apposta per un audio condiviso: finito il lavoro, se nessuno l'ha toccato, se ne torna a casa. */
     private var outForShared = false
 
+    /** I testi degli audio condivisi ancora da leggere: il primo è quello che si vede. */
+    val messages = androidx.compose.runtime.mutableStateListOf<Pair<Transcription, Origin>>()
+
+    private fun showMessage(t: Transcription, origin: Origin) {
+        messages += t to origin
+        if (stage == null) showStage(Stage.Message)
+    }
+
+    /** Se è uscito solo per gli audio condivisi, e li hai letti tutti, torna a casa. */
+    private fun goHomeIfDone() {
+        if (!outForShared || !out || stage != null || messages.isNotEmpty() || session.busy) return
+        if (session.phase == Phase.ERROR || session.phase == Phase.RECORDING) return
+        outForShared = false
+        showStage(Stage.Outro(dismissCenter(), null))
+    }
+
     private fun workShared() {
         if (!out && Settings.canDrawOverlays(this)) {
             homecoming = false
@@ -276,15 +298,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             main.post { TranscriWidget.refresh(this) }
             showStage(Stage.Intro(dismissCenter(), null))
         }
-        session.drainShared {
-            when {
-                !out -> rest()
-                outForShared && stage == null && session.phase != Phase.ERROR && session.phase != Phase.RECORDING -> {
-                    outForShared = false
-                    showStage(Stage.Outro(dismissCenter(), null))
-                }
-            }
-        }
+        session.drainShared { if (out) goHomeIfDone() else rest() }
     }
 
     override fun onDestroy() {
@@ -310,7 +324,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     /** Lo schermo ruota: la pillola resta sul suo bordo, alla stessa altezza in proporzione. */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (stage == Stage.Menu || stage == Stage.Dismiss) removeStage()
+        if (stage == Stage.Menu || stage == Stage.Dismiss || stage == Stage.Message) removeStage()
         readAccent()
         placePill()
     }
@@ -326,22 +340,9 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         // Gli stati restano riconoscibili (rosso ascolta, verde fatto, giallo errore) ma si avvicinano
         // al tono del telefono e si smorzano: non devono stonare col suo colore.
         val accent = getColor(android.R.color.system_accent1_400)
-        Palette.Red = harmonize(0xFFF24822.toInt(), accent)
-        Palette.Green = harmonize(0xFF14AE5C.toInt(), accent)
-        Palette.Yellow = harmonize(0xFFFFCD29.toInt(), accent)
-    }
-
-    /** Sposta la tinta di [color] verso [toward] (al più 15°) e la smorza un poco, come fa Material You. */
-    private fun harmonize(color: Int, toward: Int): androidx.compose.ui.graphics.Color {
-        val a = FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) }
-        val b = FloatArray(3).also { android.graphics.Color.colorToHSV(toward, it) }
-        var diff = b[0] - a[0]
-        if (diff > 180) diff -= 360
-        if (diff < -180) diff += 360
-        a[0] = (a[0] + diff.coerceIn(-15f, 15f) * 0.6f + 360) % 360
-        a[1] *= 0.82f
-        a[2] = minOf(1f, a[2] * 0.97f)
-        return androidx.compose.ui.graphics.Color(android.graphics.Color.HSVToColor(a))
+        Palette.Red = androidx.compose.ui.graphics.Color(stateColor(this, RED))
+        Palette.Green = androidx.compose.ui.graphics.Color(stateColor(this, GREEN))
+        Palette.Yellow = androidx.compose.ui.graphics.Color(stateColor(this, YELLOW))
     }
 
     // --- Geometria, in pixel dello schermo ---
@@ -556,7 +557,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         stage = s
         val params = overlayParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
         // Animazioni e X non prendono tocchi: passano alla pillola o all'app sotto.
-        if (s !is Stage.Menu) params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        if (s !is Stage.Menu && s !is Stage.Message) params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         val view = composeView { StageLayer(this) }
         wm.addView(view, params)
         stageView = view
@@ -573,7 +574,10 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     fun stageDone() {
         flight = null
         when (val s = stage) {
-            is Stage.Outro -> return arrived(if (s.toApp) APP_HANDOFF_MS else WIDGET_HANDOFF_MS)
+            is Stage.Outro -> {
+                if (s.toApp && session.phase == Phase.RECORDING) return backInDock()
+                return arrived(if (s.toApp) APP_HANDOFF_MS else WIDGET_HANDOFF_MS)
+            }
             Stage.Dismiss -> if (absorbing) return arrived(0)
             else -> Unit
         }
@@ -584,6 +588,24 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         stageView = null
         stage = null
         leaving?.postDelayed({ runCatching { wm.removeView(leaving) } }, 48)
+        if (messages.isNotEmpty()) showStage(Stage.Message) else goHomeIfDone()
+    }
+
+    /**
+     * È tornato nel Dock mentre ascoltava: non si ferma, continua da lì. Le finestre sopra le altre
+     * app non servono più; il microfono resta acceso, e per finire basta toccarlo.
+     */
+    private fun backInDock() {
+        val leaving = stageView
+        stageView = null
+        stage = null
+        leaving?.postDelayed({ runCatching { wm.removeView(leaving) } }, APP_HANDOFF_MS)
+        pillView?.let { wm.removeView(it) }
+        pillView = null
+        dismissHot = false
+        nearness = 0f
+        TranscriWidget.refresh(this)
+        listener?.invoke()
     }
 
     /**
@@ -662,6 +684,26 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         /** Avvisato quando cambia quello che Transcri sta facendo: stato e volume, per il Dock. */
         var liveListener: ((Map<String, Any?>) -> Unit)? = null
+
+        const val RED = 0xFFF24822.toInt()
+        const val GREEN = 0xFF14AE5C.toInt()
+        private const val YELLOW = 0xFFFFCD29.toInt()
+
+        /**
+         * Il colore di uno stato, avvicinato al tono del telefono: la tinta si sposta verso l'accento
+         * (al più 15°) e si smorza un poco, come fa Material You. La pillola e il Dock usano questo.
+         */
+        fun stateColor(context: Context, color: Int): Int {
+            val a = FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) }
+            val b = FloatArray(3).also { android.graphics.Color.colorToHSV(context.getColor(android.R.color.system_accent1_400), it) }
+            var diff = b[0] - a[0]
+            if (diff > 180) diff -= 360
+            if (diff < -180) diff += 360
+            a[0] = (a[0] + diff.coerceIn(-15f, 15f) * 0.6f + 360) % 360
+            a[1] *= 0.82f
+            a[2] = minOf(1f, a[2] * 0.97f)
+            return android.graphics.Color.HSVToColor(a)
+        }
 
         /** Comincia ad ascoltare con l'app aperta: è qui che Android concede il microfono anche per dopo. */
         fun listen(context: Context, appendTo: Long?) {

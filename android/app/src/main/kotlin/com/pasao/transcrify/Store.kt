@@ -29,14 +29,15 @@ data class Transcription(val text: String, val at: Long, val purified: Boolean, 
 }
 
 /** Una nota: tua, da rileggere. Il titolo può restare vuoto. */
-data class Note(val id: String, val title: String, val text: String, val created: Long, val updated: Long, val source: String? = null) {
-    fun toJson(): JSONObject = JSONObject().put("id", id).put("title", title).put("text", text).put("created", created).put("updated", updated).put("source", source)
-    fun toMap(): Map<String, Any?> = mapOf("id" to id, "title" to title, "text" to text, "created" to created, "updated" to updated, "source" to source)
+data class Note(val id: String, val title: String, val text: String, val created: Long, val updated: Long, val source: String? = null, val summary: String? = null) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("title", title).put("text", text).put("created", created).put("updated", updated).put("source", source).put("summary", summary)
+    fun toMap(): Map<String, Any?> = mapOf("id" to id, "title" to title, "text" to text, "created" to created, "updated" to updated, "source" to source, "summary" to summary)
 
     companion object {
         fun fromJson(j: JSONObject) = Note(
             j.getString("id"), j.optString("title"), j.optString("text"), j.getLong("created"), j.getLong("updated"),
             if (j.isNull("source")) null else j.getString("source"),
+            if (j.isNull("summary")) null else j.getString("summary"),
         )
     }
 }

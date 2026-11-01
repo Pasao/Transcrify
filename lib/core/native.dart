@@ -29,6 +29,8 @@ class CoreState {
       hourUsed = m['hourUsed'] as int,
       dayUsed = m['dayUsed'] as int,
       accentMain = Color(m['accentMain'] as int),
+      stateRed = Color(m['stateRed'] as int),
+      stateGreen = Color(m['stateGreen'] as int),
       accentSecond = Color(m['accentSecond'] as int),
       accentA = Color(m['accentA'] as int),
       accentB = Color(m['accentB'] as int),
@@ -66,6 +68,9 @@ class CoreState {
   /// Il colore delle azioni nell'app (bottoni, interruttori, barrette): l'accento pieno del telefono.
   final Color accentMain, accentSecond;
 
+  /// Il rosso di quando ascolta e il verde di quando ha finito: gli stessi della pillola.
+  final Color stateRed, stateGreen;
+
   static DateTime? _time(Object? ms) => ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms as int);
 }
 
@@ -90,7 +95,7 @@ class Entry {
 
 /// Una nota: tua, da rileggere. Si scrive a mano (per ora); il titolo può restare vuoto.
 class Note {
-  Note({required this.id, this.title = '', this.text = '', required this.created, required this.updated, this.topics = 'off', this.source});
+  Note({required this.id, this.title = '', this.text = '', required this.created, required this.updated, this.topics = 'off', this.source, this.summary});
 
   Note.fromMap(Map m)
     : id = m['id'] as String,
@@ -99,7 +104,8 @@ class Note {
       created = DateTime.fromMillisecondsSinceEpoch(m['created'] as int),
       updated = DateTime.fromMillisecondsSinceEpoch(m['updated'] as int),
       topics = m['topics'] as String? ?? 'off',
-      source = m['source'] as String?;
+      source = m['source'] as String?,
+      summary = m['summary'] as String?;
 
   /// Una nota nuova, vuota, nata adesso.
   factory Note.blank() {
@@ -117,13 +123,17 @@ class Note {
   /// Da dove arriva, se è nata da un audio condiviso: "whatsapp".
   final String? source;
 
+  /// Il riassunto, se l'hai chiesto. Sta accanto al testo e non lo sostituisce mai.
+  final String? summary;
+
   bool get isEmpty => title.trim().isEmpty && text.trim().isEmpty;
 
-  Note edited({required String title, required String text}) =>
-      Note(id: id, title: title, text: text, created: created, updated: DateTime.now(), source: source);
+  Note edited({required String title, required String text, String? summary}) =>
+      Note(id: id, title: title, text: text, created: created, updated: DateTime.now(), source: source, summary: summary);
 
   Map<String, Object?> toMap() => {
     'source': source,
+    'summary': summary,
     'id': id,
     'title': title,
     'text': text,

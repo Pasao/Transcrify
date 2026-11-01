@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/native.dart';
 import 'theme.dart';
 
 const _days = ['lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato', 'domenica'];
@@ -24,6 +26,105 @@ const _months = [
 /// I colori di Transcri: quelli del telefono (Material You), gli stessi della parte nativa.
 /// Arrivano col primo stato letto; fino ad allora due toni neutri.
 var transcriColors = [const Color(0xFF8AA4FF), const Color(0xFFC3A6F0)];
+
+/// Il rosso di quando ascolta e il verde di quando ha finito: quelli della pillola.
+var transcriRed = Tokens.red, transcriGreen = Tokens.green;
+
+/// Transcri che lavora, dentro l'app: sempre questo cerchio, come la pillola sul bordo.
+/// Quando ascolta è rosso e si allarga appena con la voce; quando trascrive i suoi colori scorrono e
+/// dal bordo escono onde; quando ha finito è verde. Non occupa più spazio: cresce sopra quello che ha intorno.
+class VoiceCircle extends StatefulWidget {
+  const VoiceCircle({super.key, required this.phase, required this.size, this.child});
+
+  /// "RECORDING", "PROCESSING" o "SUCCESS".
+  final String phase;
+  final double size;
+  final Widget? child;
+
+  @override
+  State<VoiceCircle> createState() => _VoiceCircleState();
+}
+
+class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStateMixin {
+  // Lo stesso giro della pillola: 1,6 secondi.
+  late final _flow = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat();
+
+  // Il volume arriva a scatti e gli stati cambiano di colpo: il cerchio li insegue, così non scatta mai.
+  double _voice = 0, _work = 0;
+  Color? _tint;
+
+  @override
+  void dispose() {
+    _flow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: widget.size,
+      child: AnimatedBuilder(
+        animation: _flow,
+        builder: (context, child) {
+          final listening = widget.phase == 'RECORDING';
+          final working = widget.phase == 'PROCESSING';
+          _voice += ((listening ? Core.live.value.level : 0) - _voice) * 0.25;
+          _work += ((working ? 1 : 0) - _work) * 0.12;
+          final target = listening ? transcriRed : (widget.phase == 'SUCCESS' ? transcriGreen : transcriColors.first);
+          _tint = Color.lerp(_tint ?? target, target, 0.14);
+          return CustomPaint(
+            painter: _VoicePainter(_tint!, _voice, _work, _flow.value),
+            child: child,
+          );
+        },
+        child: widget.child == null ? null : Center(child: widget.child),
+      ),
+    );
+  }
+}
+
+class _VoicePainter extends CustomPainter {
+  _VoicePainter(this.tint, this.voice, this.work, this.flow);
+
+  final Color tint;
+  final double voice, work, flow;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final base = size.width / 2 * (1 + voice * 0.14);
+    final path = Path();
+    const steps = 90;
+    for (var i = 0; i <= steps; i++) {
+      final a = i / steps * math.pi * 2;
+      // Le onde vanno solo verso fuori, mai dentro: nessuna ammaccatura, come nella pillola.
+      final r = base * (1 + work * 0.09 * (0.5 + 0.5 * math.sin(3 * a - flow * math.pi * 2)));
+      final p = c + Offset(math.cos(a) * r, math.sin(a) * r);
+      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+    }
+    path.close();
+    canvas.drawPath(path, Paint()..color = tint);
+    if (work > 0.01) {
+      // I due toni che si inseguono dall'alto in basso.
+      final h = size.height;
+      canvas.drawPath(
+        path,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              for (final k in [transcriColors[0], transcriColors[1], transcriColors[0]]) k.withValues(alpha: work.clamp(0.0, 1.0)),
+            ],
+            tileMode: TileMode.repeated,
+          ).createShader(Rect.fromLTWH(0, h * flow - h, size.width, h)),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_VoicePainter old) => old.tint != tint || old.voice != voice || old.work != work || old.flow != flow;
+}
 
 String hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 

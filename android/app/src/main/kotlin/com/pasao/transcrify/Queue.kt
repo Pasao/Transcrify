@@ -20,7 +20,11 @@ data class Pending(
 )
 
 /** Un audio arrivato da «Condividi»: [source] è l'app che lo manda ("whatsapp"), se si riconosce. */
-data class Origin(val source: String?, val toNote: Boolean)
+data class Origin(val source: String?, val toNote: Boolean) {
+    /** Come si presenta quando è pronto. */
+    val title: String
+        get() = (if (source == "whatsapp") "Vocale di WhatsApp" else "Audio") + if (toNote) " · nei Pensieri" else ""
+}
 
 /**
  * Le registrazioni non ancora trascritte. Stanno nei file dell'app, non nella cache:
