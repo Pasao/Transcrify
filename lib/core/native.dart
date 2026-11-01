@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// Lo stato che arriva dal nucleo nativo (Kotlin).
 class CoreState {
@@ -357,7 +358,22 @@ class Core {
   static final fakeWaiting = ValueNotifier<bool>(false);
   static final _fake = <Waiting>[];
 
+  /// Nella prova: le tue scelte non si vedono e non si toccano, quelle fatte lì vivono solo in memoria.
+  static final _previewChoices = <String, Object?>{};
+
+  /// Nella prova i permessi partono tutti spenti, e «darli» è finto: quelli veri restano come sono.
+  static final _previewGranted = <String>{};
+
+  static void previewGrant(String name) => _previewGranted.add(name);
+
+  static Future<bool> micGranted() async => preview.value ? _previewGranted.contains('mic') : Permission.microphone.isGranted;
+
+  static Future<bool> notificationsGranted() async =>
+      preview.value ? _previewGranted.contains('notifications') : Permission.notification.isGranted;
+
   static void setPreview(bool on) {
+    _previewChoices.clear();
+    _previewGranted.clear();
     _previewNotes.clear();
     _previewIntro = false;
     _previewKey = false;
@@ -390,7 +406,27 @@ class Core {
       m['hasKey'] = _previewKey;
       m['maskedKey'] = _previewKey ? 'gsk_••••••••prov' : null;
       m['introSeen'] = _previewIntro;
-      m['words'] = <String>[];
+      m.addAll({
+        'words': <String>[],
+        'purify': false,
+        'mode': 'pulita',
+        'prompt': m['promptDefault'],
+        'defaultPrompt': m['promptDefault'],
+        'customPrompt': false,
+        'sttModel': m['sttDefault'],
+        'llmModel': m['llmDefault'],
+        'sttLimits': <String, String>{},
+        'llmLimits': <String, String>{},
+        'sttUses': 0,
+        'llmUses': 0,
+        'hourUsed': 0,
+        'dayUsed': 0,
+        'hourEnd': null,
+        'dayEnd': null,
+        'limited': null,
+        'resetAt': null,
+        ..._previewChoices,
+      });
     }
     live.value = m['live'] == null ? const Live() : Live.fromMap(m['live'] as Map);
     return CoreState(m);
@@ -437,15 +473,24 @@ class Core {
     }
   }
 
-  static Future<List<TopicModelInfo>> topicModels() async =>
-      ((await _ch.invokeMethod('topicModels')) as List).map((e) => TopicModelInfo(e as Map)).toList();
+  static Future<List<TopicModelInfo>> topicModels() async => ((await _ch.invokeMethod('topicModels')) as List).map((e) {
+    final m = Map<Object?, Object?>.from(e as Map);
+    if (preview.value) m.addAll({'chosen': false, 'state': 'missing', 'done': null, 'total': null, 'error': null});
+    return TopicModelInfo(m);
+  }).toList();
 
   /// Sceglie il modello per gli argomenti (e lo scarica se manca). null = argomenti spenti.
-  static Future<void> chooseTopicModel(String? id) => _ch.invokeMethod('chooseTopicModel', {'id': id});
+  static Future<void> chooseTopicModel(String? id) async {
+    if (!preview.value) await _ch.invokeMethod('chooseTopicModel', {'id': id});
+  }
 
-  static Future<void> cancelTopicModel(String id) => _ch.invokeMethod('cancelTopicModel', {'id': id});
+  static Future<void> cancelTopicModel(String id) async {
+    if (!preview.value) await _ch.invokeMethod('cancelTopicModel', {'id': id});
+  }
 
-  static Future<void> deleteTopicModel(String id) => _ch.invokeMethod('deleteTopicModel', {'id': id});
+  static Future<void> deleteTopicModel(String id) async {
+    if (!preview.value) await _ch.invokeMethod('deleteTopicModel', {'id': id});
+  }
 
   static Future<List<Note>> notes() async => preview.value
       ? ([..._previewNotes]..sort((a, b) => b.updated.compareTo(a.updated)))
@@ -506,7 +551,13 @@ class Core {
 
   static Future<List<GroqModel>> models() async => ((await _ch.invokeMethod('models')) as List).map((e) => GroqModel(e as Map)).toList();
 
-  static Future<void> setModel(String id, {required bool speech}) => _ch.invokeMethod('setModel', {'id': id, 'speech': speech});
+  static Future<void> setModel(String id, {required bool speech}) async {
+    if (preview.value) {
+      _previewChoices[speech ? 'sttModel' : 'llmModel'] = id;
+    } else {
+      await _ch.invokeMethod('setModel', {'id': id, 'speech': speech});
+    }
+  }
 
   /// Fa dire a Groq i limiti di un modello mai usato (li dice solo nelle risposte). Una volta sola per modello.
   static Future<void> probeLimits(String id, {required bool speech}) async {
@@ -517,12 +568,26 @@ class Core {
     }
   }
 
-  static Future<void> setWords(List<String> words) => _ch.invokeMethod('setWords', {'words': words});
+  static Future<void> setWords(List<String> words) async {
+    if (preview.value) {
+      _previewChoices['words'] = words;
+    } else {
+      await _ch.invokeMethod('setWords', {'words': words});
+    }
+  }
 
   /// null = torna al prompt predefinito.
-  static Future<void> setPrompt(String? prompt) => _ch.invokeMethod('setPrompt', {'prompt': prompt});
+  static Future<void> setPrompt(String? prompt) async {
+    if (!preview.value) await _ch.invokeMethod('setPrompt', {'prompt': prompt});
+  }
 
-  static Future<void> setMode(String mode) => _ch.invokeMethod('setMode', {'mode': mode});
+  static Future<void> setMode(String mode) async {
+    if (preview.value) {
+      _previewChoices['mode'] = mode;
+    } else {
+      await _ch.invokeMethod('setMode', {'mode': mode});
+    }
+  }
 
   /// Un guasto finto delle prove: 'offline', 'badKey' o 'noMic'.
   static Future<void> simulate(String what, bool on) => _ch.invokeMethod('simulate', {'what': what, 'on': on});
@@ -532,10 +597,25 @@ class Core {
 
   static Future<void> simulateLimit(bool on) => _ch.invokeMethod('simulateLimit', {'on': on});
 
-  static Future<void> setPurify(bool on) => _ch.invokeMethod('setPurify', {'on': on});
+  static Future<void> setPurify(bool on) async {
+    if (preview.value) {
+      _previewChoices['purify'] = on;
+    } else {
+      await _ch.invokeMethod('setPurify', {'on': on});
+    }
+  }
 
-  static Future<bool> canDrawOverlays() async => await _ch.invokeMethod('canDrawOverlays') as bool;
-  static Future<void> openOverlaySettings() => _ch.invokeMethod('openOverlaySettings');
+  static Future<bool> canDrawOverlays() async =>
+      preview.value ? _previewGranted.contains('overlay') : await _ch.invokeMethod('canDrawOverlays') as bool;
+
+  static Future<void> openOverlaySettings() async {
+    if (preview.value) {
+      previewGrant('overlay');
+      refresh();
+    } else {
+      await _ch.invokeMethod('openOverlaySettings');
+    }
+  }
 
   /// [x], [y] in pixel fisici dello schermo: da lì parte la bolla.
   /// Restituisce 'overlay' se manca il permesso di stare sopra le altre app.

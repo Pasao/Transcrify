@@ -10,12 +10,16 @@ import 'theme.dart';
 
 /// I permessi per dettare: si chiedono qui, la prima volta che serve Transcri.
 Future<bool> transcriReady(BuildContext context) async {
-  if (!await Permission.microphone.isGranted) {
-    final s = await Permission.microphone.request();
-    await Permission.notification.request();
-    if (!s.isGranted) {
-      if (s.isPermanentlyDenied) await openAppSettings();
-      return false;
+  if (!await Core.micGranted()) {
+    if (Core.preview.value) {
+      Core.previewGrant('mic');
+    } else {
+      final s = await Permission.microphone.request();
+      await Permission.notification.request();
+      if (!s.isGranted) {
+        if (s.isPermanentlyDenied) await openAppSettings();
+        return false;
+      }
     }
   }
   if (!await Core.canDrawOverlays()) {

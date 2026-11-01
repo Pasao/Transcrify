@@ -318,7 +318,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           icon: Icons.person_outline_rounded,
                           color: Tokens.blue,
                           title: 'Come un utente nuovo',
-                          subtitle: 'Senza chiave né note, con l\'introduzione. I tuoi dati restano.',
+                          subtitle: 'Senza chiave, note, permessi e scelte, con l\'introduzione. I tuoi dati restano.',
                           trailing: Switch(value: Core.preview.value, onChanged: _setPreview),
                           onTap: () => _setPreview(!Core.preview.value),
                         ),
@@ -1269,8 +1269,8 @@ class _PermissionsState extends State<_Permissions> with WidgetsBindingObserver 
   }
 
   Future<void> _load() async {
-    final m = await Permission.microphone.isGranted;
-    final n = await Permission.notification.isGranted;
+    final m = await Core.micGranted();
+    final n = await Core.notificationsGranted();
     final o = await Core.canDrawOverlays();
     if (mounted) {
       setState(() {
@@ -1282,7 +1282,11 @@ class _PermissionsState extends State<_Permissions> with WidgetsBindingObserver 
   }
 
   /// Se è spento lo chiede; se Android non lo chiede più, o è già acceso, si apre la sua pagina.
-  Future<void> _fix(Permission p) async {
+  Future<void> _fix(Permission p, String preview) async {
+    if (Core.preview.value) {
+      Core.previewGrant(preview);
+      return _load();
+    }
     if (!(await p.isGranted) && (await p.request()).isGranted) return _load();
     await openAppSettings();
   }
@@ -1301,7 +1305,7 @@ class _PermissionsState extends State<_Permissions> with WidgetsBindingObserver 
           title: need('Microfono', mic),
           subtitle: 'Per sentirti mentre detti',
           value: state(mic),
-          onTap: () => _fix(Permission.microphone),
+          onTap: () => _fix(Permission.microphone, 'mic'),
         ),
         SettingsRow(
           icon: Icons.layers_rounded,
@@ -1309,7 +1313,10 @@ class _PermissionsState extends State<_Permissions> with WidgetsBindingObserver 
           title: need('Sopra le altre app', overlay),
           subtitle: 'Per stare sul bordo dello schermo e dettare dentro qualunque app',
           value: state(overlay),
-          onTap: Core.openOverlaySettings,
+          onTap: () async {
+            await Core.openOverlaySettings();
+            _load();
+          },
         ),
         SettingsRow(
           icon: Icons.notifications_rounded,
@@ -1317,7 +1324,7 @@ class _PermissionsState extends State<_Permissions> with WidgetsBindingObserver 
           title: 'Notifiche',
           subtitle: 'Il testo dei vocali condivisi, se Transcri non può stare sopra le altre app',
           value: state(notifications),
-          onTap: () => _fix(Permission.notification),
+          onTap: () => _fix(Permission.notification, 'notifications'),
         ),
         if (mic == false || overlay == false) const _Note('* Senza questi Transcri non può dettare.'),
       ],

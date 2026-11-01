@@ -1328,22 +1328,29 @@ class NoteToolbar extends StatelessWidget {
                     ? const SizedBox.square(dimension: 24, child: VoiceCircle(phase: 'PROCESSING', size: 24))
                     : Icon(Icons.short_text_rounded, color: summaryOn ? Tokens.blue : tk.text),
               ),
-            const Spacer(),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              transitionBuilder: (c, a) => ScaleTransition(
-                scale: a,
-                child: FadeTransition(opacity: a, child: c),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  transitionBuilder: (c, a) => ScaleTransition(
+                    scale: a,
+                    child: FadeTransition(opacity: a, child: c),
+                  ),
+                  child: dictation == null
+                      ? const SizedBox.shrink()
+                      : Tooltip(
+                          key: ValueKey(dictation!.at),
+                          message: 'Incolla la dettatura',
+                          child: FilledButton.icon(
+                            onPressed: onPaste,
+                            style: FilledButton.styleFrom(minimumSize: const Size(0, 40), padding: const EdgeInsets.symmetric(horizontal: 12)),
+                            icon: const Icon(Icons.mic_rounded, size: 18),
+                            label: const Text('Incolla', maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                        ),
+                ),
               ),
-              child: dictation == null
-                  ? const SizedBox.shrink()
-                  : FilledButton.icon(
-                      key: ValueKey(dictation!.at),
-                      onPressed: onPaste,
-                      style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
-                      icon: const Icon(Icons.mic_rounded, size: 18),
-                      label: const Text('Incolla la dettatura'),
-                    ),
             ),
           ],
         ),

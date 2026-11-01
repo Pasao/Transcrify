@@ -335,6 +335,10 @@ class MainActivity : FlutterActivity() {
             "maskedKey" to store.maskedKey,
             "pillOn" to PillService.running,
             "sandbox" to Sandbox.on(this),
+            // I valori di chi apre l'app la prima volta, per la prova «come un utente nuovo».
+            "sttDefault" to Groq.DEFAULT_STT,
+            "llmDefault" to Groq.DEFAULT_LLM,
+            "promptDefault" to Groq.DEFAULT_PROMPT,
             "live" to PillService.instance?.liveNow(),
             "purify" to store.purify,
             "words" to store.words,

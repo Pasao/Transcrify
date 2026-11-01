@@ -171,10 +171,17 @@ class _TrascriviPageState extends State<TrascriviPage> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Text(label, style: display(context, size: 24)),
-                            const SizedBox(width: 10),
-                            Text('${items.length}', style: monoStyle(context, color: tk.faint)),
-                            const Spacer(),
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(label, style: display(context, size: 24), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text('${items.length}', style: monoStyle(context, color: tk.faint)),
+                                ],
+                              ),
+                            ),
                             if (items.length >= 4)
                               TextButton.icon(
                                 style: TextButton.styleFrom(foregroundColor: tk.muted),
@@ -675,7 +682,9 @@ class _ModeTag extends StatelessWidget {
       children: [
         icon,
         const SizedBox(width: 6),
-        Text(_names[mode] ?? mode, style: monoStyle(context, size: 12, color: color)),
+        Flexible(
+          child: Text(_names[mode] ?? mode, style: monoStyle(context, size: 12, color: color), maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
       ],
     );
   }
@@ -765,6 +774,7 @@ class _EntrySheetState extends State<_EntrySheet> {
   @override
   Widget build(BuildContext context) {
     final entry = widget.entry;
+    final tk = context.tk;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: DraggableScrollableSheet(
@@ -772,39 +782,62 @@ class _EntrySheetState extends State<_EntrySheet> {
         controller: _sheet,
         initialChildSize: 0.6,
         maxChildSize: 0.94,
-        builder: (context, scroll) => ListView(
-          controller: scroll,
-          padding: const EdgeInsets.fromLTRB(24, 0, 12, 40),
+        builder: (context, scroll) => Column(
           children: [
-            Row(
-              children: [
-                Text('${dayLabel(entry.at)}, ${hm(entry.at)}', style: monoStyle(context, size: 12)),
-                if (entry.mode != null) ...[const SizedBox(width: 10), _ModeTag(entry.mode!, label: true)],
-                if (entry.source != null) ...[const SizedBox(width: 10), SourceIcon(entry.source)],
-                const Spacer(),
-                _AddVoice(at: entry.at, onStart: _addVoice),
-                DeleteButton(onDelete: widget.onDelete),
-                ListenableBuilder(
-                  listenable: _text,
-                  builder: (context, _) => CopyButton(text: _text.text),
-                ),
-              ],
+            Expanded(
+              child: ListView(
+                controller: scroll,
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(shortStamp(entry.at), style: monoStyle(context, size: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                      if (entry.mode != null) ...[const SizedBox(width: 10), Flexible(child: _ModeTag(entry.mode!, label: true))],
+                      if (entry.source != null) ...[const SizedBox(width: 10), SourceIcon(entry.source)],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _text,
+                    focusNode: _focus,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                    textCapitalization: TextCapitalization.sentences,
+                    keyboardType: TextInputType.multiline,
+                    maxLines: null,
+                    decoration: const InputDecoration(
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(0, 8, 12, 0),
-              child: TextField(
-                controller: _text,
-                focusNode: _focus,
-                style: Theme.of(context).textTheme.bodyLarge,
-                textCapitalization: TextCapitalization.sentences,
-                keyboardType: TextInputType.multiline,
-                maxLines: null,
-                decoration: const InputDecoration(
-                  filled: false,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
+            // Sempre lì, anche in fondo a un testo lungo e sopra la tastiera.
+            Container(
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: tk.border)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 10, 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _AddVoice(at: entry.at, onStart: _addVoice),
+                      ),
+                      DeleteButton(onDelete: widget.onDelete),
+                      ListenableBuilder(
+                        listenable: _text,
+                        builder: (context, _) => CopyButton(text: _text.text),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -815,8 +848,8 @@ class _EntrySheetState extends State<_EntrySheet> {
   }
 }
 
-/// «Aggiungi a voce»: un microfono che, mentre ascolta e trascrive, diventa il cerchio di Transcri.
-/// Accanto, ferma, la X per buttare. Il testo arriva in fondo.
+/// «Aggiungi a voce», a sinistra nella barra: mentre ascolta e trascrive diventa il cerchio di Transcri,
+/// con accanto cosa sta facendo. Il testo arriva in fondo.
 class _AddVoice extends StatelessWidget {
   const _AddVoice({required this.at, required this.onStart});
 
@@ -826,21 +859,19 @@ class _AddVoice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tk = context.tk;
+    Widget saying(String text) => Flexible(
+      child: Padding(
+        padding: const EdgeInsets.only(left: 10),
+        child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium),
+      ),
+    );
     return ValueListenableBuilder<Live>(
       valueListenable: Core.live,
       builder: (context, live, _) {
         final mine = live.appendTo == at.millisecondsSinceEpoch;
         if (mine && live.listening) {
           return Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-                padding: EdgeInsets.zero,
-                onPressed: Core.discardListening,
-                tooltip: 'Butta',
-                icon: Icon(Icons.close_rounded, size: 20, color: tk.muted),
-              ),
               Tooltip(
                 message: 'Ferma e aggiungi',
                 child: InkResponse(
@@ -848,32 +879,36 @@ class _AddVoice extends StatelessWidget {
                     HapticFeedback.mediumImpact();
                     Core.stopListening();
                   },
-                  child: const Padding(
-                    padding: EdgeInsets.all(3),
-                    child: VoiceCircle(
-                      phase: 'RECORDING',
-                      size: 34,
-                      child: Icon(Icons.stop_rounded, size: 20, color: Colors.white),
-                    ),
+                  child: const VoiceCircle(
+                    phase: 'RECORDING',
+                    size: 34,
+                    child: Icon(Icons.stop_rounded, size: 20, color: Colors.white),
                   ),
                 ),
+              ),
+              saying('Ti ascolto'),
+              IconButton(
+                constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                padding: EdgeInsets.zero,
+                onPressed: Core.discardListening,
+                tooltip: 'Butta',
+                icon: Icon(Icons.close_rounded, size: 20, color: tk.muted),
               ),
             ],
           );
         }
         if (mine && live.phase == 'PROCESSING') {
-          return const Padding(
-            padding: EdgeInsets.all(3),
-            child: VoiceCircle(phase: 'PROCESSING', size: 34),
-          );
+          return Row(children: [const VoiceCircle(phase: 'PROCESSING', size: 34), saying('Sto trascrivendo')]);
         }
-        return IconButton(
-          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-          padding: EdgeInsets.zero,
-          // Mentre detta altrove aspetta: Transcri fa una cosa alla volta.
-          onPressed: live.listening || live.phase == 'PROCESSING' ? null : onStart,
-          tooltip: 'Aggiungi a voce',
-          icon: Icon(Icons.mic_none_rounded, size: 21, color: tk.muted),
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: tk.muted),
+            // Mentre detta altrove aspetta: Transcri fa una cosa alla volta.
+            onPressed: live.listening || live.phase == 'PROCESSING' ? null : onStart,
+            icon: const Icon(Icons.mic_none_rounded, size: 21),
+            label: const Text('Aggiungi a voce', maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
         );
       },
     );
