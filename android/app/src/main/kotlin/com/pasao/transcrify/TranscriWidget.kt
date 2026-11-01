@@ -53,6 +53,9 @@ class TranscriWidget : AppWidgetProvider() {
         /** Da questa larghezza (dp) il widget è 2 × 1: il cerchio con lui e, accanto, cosa fa. */
         const val WIDE_FROM_DP = 140f
 
+        /** Da questa larghezza (dp) è 4 × 1: c'è posto anche per il bottone che apre l'app. */
+        const val LONG_FROM_DP = 280f
+
         /** Ridisegna tutti i widget: Transcri vivo se è a casa, il suo contorno tratteggiato se è fuori. */
         fun refresh(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
@@ -62,14 +65,17 @@ class TranscriWidget : AppWidgetProvider() {
                 val away = PillService.running
                 // Due disegni, e il launcher sceglie quello che entra nella casella.
                 val small = views(context, id, look, away, wide = false)
+                val long = SizeF(LONG_FROM_DP, 40f) to views(context, id, look, away, wide = true, open = true)
                 val views = if (look.text) {
-                    RemoteViews(mapOf(SizeF(40f, 40f) to small, SizeF(WIDE_FROM_DP, 40f) to views(context, id, look, away, wide = true)))
-                } else small
+                    RemoteViews(mapOf(SizeF(40f, 40f) to small, SizeF(WIDE_FROM_DP, 40f) to views(context, id, look, away, wide = true), long))
+                } else {
+                    RemoteViews(mapOf(SizeF(40f, 40f) to small, long))
+                }
                 manager.updateAppWidget(id, views)
             }
         }
 
-        private fun views(context: Context, id: Int, look: WidgetLook, away: Boolean, wide: Boolean) =
+        private fun views(context: Context, id: Int, look: WidgetLook, away: Boolean, wide: Boolean, open: Boolean = false) =
             RemoteViews(context.packageName, if (wide) R.layout.widget_wide else R.layout.widget_small).apply {
                 val (bg, text) = when (look.style) {
                     WidgetLook.LIGHT -> R.drawable.widget_bg_light to R.color.widget_light_text
@@ -83,6 +89,13 @@ class TranscriWidget : AppWidgetProvider() {
                     setColorStateList(R.id.widget_line, "setTextColor", text)
                     setTextViewText(R.id.widget_title, if (away) "È fuori" else "Detta")
                     setTextViewText(R.id.widget_line, if (away) "Tocca per richiamarlo" else "Tocca e parla, poi incolla dove vuoi")
+                    setViewVisibility(R.id.widget_words, if (look.text) View.VISIBLE else View.INVISIBLE)
+                    setViewVisibility(R.id.widget_open, if (open) View.VISIBLE else View.GONE)
+                    if (open) {
+                        setColorStateList(R.id.widget_open, "setImageTintList", text)
+                        setColorStateList(R.id.widget_open, "setBackgroundTintList", text)
+                        setOnClickPendingIntent(R.id.widget_open, openApp(context, id))
+                    }
                 } else {
                     setTextViewText(R.id.widget_title, if (away) "Richiama" else "Detta")
                     setViewVisibility(R.id.widget_title, if (look.text) View.VISIBLE else View.GONE)
@@ -92,6 +105,14 @@ class TranscriWidget : AppWidgetProvider() {
                 setViewVisibility(R.id.widget_away, if (away) View.VISIBLE else View.GONE)
                 setOnClickPendingIntent(R.id.widget_root, tap(context, id))
             }
+
+        private fun openApp(context: Context, id: Int) = PendingIntent.getActivity(
+            context, OPEN_REQUEST + id,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+        private const val OPEN_REQUEST = 100_000
 
         // Ogni widget passa il suo id: serve per leggere il suo fattore di scala e il suo aspetto (vedi WidgetTrampoline).
         private fun tap(context: Context, id: Int) = PendingIntent.getActivity(
@@ -126,7 +147,7 @@ class WidgetTrampoline : Activity() {
             val w = b.width() * ratio
             val h = b.height() * ratio
             val look = if (id == AppWidgetManager.INVALID_APPWIDGET_ID) WidgetLook() else WidgetLook.of(this, id)
-            val wide = look.text && w / d >= TranscriWidget.WIDE_FROM_DP
+            val wide = w / d >= TranscriWidget.LONG_FROM_DP || (look.text && w / d >= TranscriWidget.WIDE_FROM_DP)
             // Dov'è Transcri nel disegno: nel 2 × 1 a sinistra, grande (10 dp + metà del suo posto da 56),
             // nel 1 × 1 al centro, un po' più su per lasciare posto alla parola sotto.
             val cx = if (wide) b.left + 38f * d * ratio else b.left + w / 2f
@@ -135,7 +156,7 @@ class WidgetTrampoline : Activity() {
             val hh = (if (wide) 23f else 15f) * d * ratio
             Rect(cx - hw, cy - hh, cx + hw, cy + hh)
         }
-        val pill = PillService.instance?.takeIf { !it.homecoming }
+        val pill = PillService.instance?.takeIf { !it.homecoming && it.out }
         val ready = Settings.canDrawOverlays(this) &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
             Store(this).apiKey != null

@@ -39,6 +39,97 @@ String dayLabel(DateTime d) {
   return '${d.day} ${_months[d.month - 1]} ${d.year}';
 }
 
+/// La barra delle cose scelte: quante sono, e cosa farne. Come in Samsung Note, in fondo, sopra il Dock.
+class SelectionBar extends StatelessWidget {
+  const SelectionBar({super.key, required this.label, required this.onClose, required this.actions});
+
+  /// "1 nota", "3 trascrizioni".
+  final String label;
+  final VoidCallback onClose;
+  final List<(IconData, String, VoidCallback)> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
+      decoration: BoxDecoration(color: const Color(0xFF242424), borderRadius: BorderRadius.circular(32), boxShadow: islandShadow),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onClose,
+            icon: const Icon(Icons.close_rounded, color: Colors.white),
+            tooltip: 'Annulla',
+          ),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+          for (final (icon, name, onTap) in actions)
+            IconButton(
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                onTap();
+              },
+              tooltip: name,
+              icon: Icon(icon, color: name == 'Elimina' ? const Color(0xFFFF8A70) : Colors.white),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Il simbolino di un testo arrivato da fuori: una nuvoletta con la cornetta, per i vocali di WhatsApp.
+class SourceIcon extends StatelessWidget {
+  const SourceIcon(this.source, {super.key, this.size = 14});
+
+  final String? source;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    if (source != 'whatsapp') return const SizedBox.shrink();
+    final color = context.tk.muted;
+    return Tooltip(
+      message: 'Da WhatsApp',
+      child: SizedBox.square(
+        dimension: size,
+        child: CustomPaint(
+          painter: _BubblePainter(color),
+          child: Center(child: Icon(Icons.call_rounded, size: size * 0.52, color: color)),
+        ),
+      ),
+    );
+  }
+}
+
+class _BubblePainter extends CustomPainter {
+  _BubblePainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width;
+    final pen = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = s * 0.09
+      ..strokeJoin = StrokeJoin.round;
+    final circle = Path()..addOval(Rect.fromCircle(center: Offset(s * 0.52, s * 0.48), radius: s * 0.42));
+    final tail = Path()
+      ..moveTo(s * 0.26, s * 0.76)
+      ..lineTo(s * 0.08, s * 0.94)
+      ..lineTo(s * 0.46, s * 0.89);
+    canvas.drawPath(Path.combine(PathOperation.union, circle, tail), pen);
+  }
+
+  @override
+  bool shouldRepaint(_BubblePainter old) => old.color != color;
+}
+
 /// Copia: diventa una ✓ verde per un attimo.
 class CopyButton extends StatefulWidget {
   const CopyButton({super.key, required this.text});

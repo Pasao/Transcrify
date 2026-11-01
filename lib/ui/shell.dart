@@ -40,6 +40,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     Core.addListener(_load);
+    Core.live.addListener(_liveChanged);
     _load();
   }
 
@@ -47,6 +48,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     Core.removeListener(_load);
+    Core.live.removeListener(_liveChanged);
     super.dispose();
   }
 
@@ -70,6 +72,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     setState(() {
       waiting = w.length;
       pillOn = s.pillOn;
+      _liveChanged();
       hasKey = s.hasKey;
       transcriColors = [s.accentA, s.accentB];
       if (s.accentMain != Tokens.blue) Tokens.useAccent(s.accentMain, s.accentSecond);
@@ -112,6 +115,22 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       ),
     );
     Core.refresh();
+  }
+
+  final _nest = GlobalKey<TranscriNestState>();
+
+  /// Transcri sta ascoltando dal Dock.
+  final _heard = ValueNotifier<bool>(false);
+
+  void _liveChanged() => _heard.value = Core.live.value.listening && Core.live.value.appendTo == null && !pillOn;
+
+  /// L'azione accanto a Transcri: mentre ascolta si può buttare; altrimenti dipende dal potere.
+  (IconData, String, VoidCallback)? _action(bool heard) {
+    if (heard) return (Icons.close_rounded, 'Butta', Core.discardListening);
+    return switch (power) {
+      Power.pensieri => (Icons.edit_rounded, 'Scrivi', () => openNote(context)),
+      Power.trascrivi => pillOn ? null : (Icons.mic_rounded, 'Detta qui', () => _nest.currentState?.listen()),
+    };
   }
 
   void _go(Power p) => setState(() {
@@ -186,22 +205,27 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
               bottom: 0,
               child: SafeArea(
                 top: false,
-                child: Dock(
-                  power: power,
-                  onSwitch: () => setState(() => switching = !switching),
-                  onStep: (by) => _go(power.step(by)),
-                  onWrite: power == Power.pensieri ? () => openNote(context) : null,
-                  pages: power == Power.pensieri
-                      ? const [(Icons.notes_rounded, 'Note'), (Icons.bubble_chart_rounded, 'Argomenti')]
-                      : const [],
-                  page: thoughts,
-                  onPage: (i) => setState(() => thoughts = i),
-                  nest: TranscriNest(
-                    on: pillOn,
-                    limitedUntil: limitedUntil,
-                    onChanged: Core.refresh,
-                    onNeedKey: hasKey ? null : _needKey,
-                    onAsleep: () => showStatus(context),
+                child: ValueListenableBuilder<bool>(
+                  // Solo quando comincia o smette di ascoltare: il volume non ridisegna tutto il Dock.
+                  valueListenable: _heard,
+                  builder: (context, heard, _) => Dock(
+                    power: power,
+                    onSwitch: () => setState(() => switching = !switching),
+                    onStep: (by) => _go(power.step(by)),
+                    action: _action(heard),
+                    pages: power == Power.pensieri
+                        ? const [(Icons.notes_rounded, 'Note'), (Icons.bubble_chart_rounded, 'Argomenti')]
+                        : const [],
+                    page: thoughts,
+                    onPage: (i) => setState(() => thoughts = i),
+                    nest: TranscriNest(
+                      key: _nest,
+                      on: pillOn,
+                      limitedUntil: limitedUntil,
+                      onChanged: Core.refresh,
+                      onNeedKey: hasKey ? null : _needKey,
+                      onAsleep: () => showStatus(context),
+                    ),
                   ),
                 ),
               ),

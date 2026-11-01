@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import '../core/native.dart';
 import 'common.dart';
 import 'mode_icon.dart';
 import 'theme.dart';
+import 'transcri.dart';
 
 /// Trascrivi: quello che hai dettato, giorno per giorno. Oggi sta in basso, vicino al pollice.
 class TrascriviPage extends StatefulWidget {
@@ -50,14 +52,47 @@ class _TrascriviPageState extends State<TrascriviPage> {
   /// Si cancellano davvero solo quando il messaggio "Annulla" se ne va.
   final _deleting = <DateTime>{};
 
-  Future<void> _delete(Entry e) async {
+  Future<void> _delete(List<Entry> gone) async {
     setState(() {
-      _deleting.add(e.at);
+      _deleting.addAll(gone.map((e) => e.at));
       entries = entries?.where((x) => !_deleting.contains(x.at)).toList();
     });
-    if (!await undoable(context, 'Trascrizione eliminata')) await Core.deleteEntry(e.at);
-    _deleting.remove(e.at);
+    if (!await undoable(context, gone.length == 1 ? 'Trascrizione eliminata' : '${gone.length} trascrizioni eliminate')) {
+      for (final e in gone) {
+        await Core.deleteEntry(e.at);
+      }
+    }
+    _deleting.removeAll(gone.map((e) => e.at));
     _load();
+  }
+
+  /// Le trascrizioni scelte tenendole premute. Finché ce n'è almeno una, toccarne un'altra la sceglie invece di aprirla.
+  final selected = <DateTime>{};
+
+  void _toggle(Entry e) => setState(() => selected.contains(e.at) ? selected.remove(e.at) : selected.add(e.at));
+
+  List<Entry> get _chosen => [
+    for (final e in entries ?? <Entry>[])
+      if (selected.contains(e.at)) e,
+  ];
+
+  String get _chosenText => _chosen.map((e) => e.text).join('\n\n');
+
+  Future<void> _copyChosen() async {
+    await Clipboard.setData(ClipboardData(text: _chosenText));
+    HapticFeedback.mediumImpact();
+    setState(selected.clear);
+  }
+
+  Future<void> _shareChosen() async {
+    await Core.share(_chosenText);
+    setState(selected.clear);
+  }
+
+  void _deleteChosen() {
+    final gone = _chosen;
+    setState(selected.clear);
+    _delete(gone);
   }
 
   void _open(Entry e) {
@@ -68,7 +103,7 @@ class _TrascriviPageState extends State<TrascriviPage> {
         entry: e,
         onDelete: () async {
           Navigator.pop(sheet);
-          await _delete(e);
+          await _delete([e]);
         },
       ),
     );
@@ -92,7 +127,7 @@ class _TrascriviPageState extends State<TrascriviPage> {
   Widget build(BuildContext context) {
     final tk = context.tk;
     final list = entries;
-    return list == null
+    final page = list == null
         ? const SizedBox.shrink()
         : list.isEmpty
         // Da vuota la pagina non scorre: non c'è niente sotto.
@@ -152,8 +187,11 @@ class _TrascriviPageState extends State<TrascriviPage> {
                                             key: ValueKey(e.at),
                                             entry: e,
                                             width: w,
-                                            onOpen: () => _open(e),
-                                            onDelete: () => _delete(e),
+                                            selected: selected.contains(e.at),
+                                            selecting: selected.isNotEmpty,
+                                            onOpen: selected.isEmpty ? () => _open(e) : () => _toggle(e),
+                                            onSelect: () => _toggle(e),
+                                            onDelete: () => _delete([e]),
                                           ),
                                       ],
                                     );
@@ -170,8 +208,11 @@ class _TrascriviPageState extends State<TrascriviPage> {
                                   itemBuilder: (_, i) => _MiniCard(
                                     key: ValueKey(items[i].at),
                                     entry: items[i],
-                                    onOpen: () => _open(items[i]),
-                                    onDelete: () => _delete(items[i]),
+                                    selected: selected.contains(items[i].at),
+                                    selecting: selected.isNotEmpty,
+                                    onOpen: selected.isEmpty ? () => _open(items[i]) : () => _toggle(items[i]),
+                                    onSelect: () => _toggle(items[i]),
+                                    onDelete: () => _delete([items[i]]),
                                   ),
                                 ),
                               ),
@@ -183,6 +224,27 @@ class _TrascriviPageState extends State<TrascriviPage> {
               ),
             ),
           );
+    if (selected.isEmpty) return page;
+    // Le azioni sulle trascrizioni scelte, in fondo, sopra il Dock: le stesse delle note.
+    return Stack(
+      children: [
+        page,
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: widget.bottom + 8,
+          child: SelectionBar(
+            label: selected.length == 1 ? '1 trascrizione' : '${selected.length} trascrizioni',
+            onClose: () => setState(selected.clear),
+            actions: [
+              (Icons.content_copy_rounded, 'Copia', _copyChosen),
+              (Icons.share_rounded, 'Condividi', _shareChosen),
+              (Icons.delete_outline_rounded, 'Elimina', _deleteChosen),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -253,14 +315,27 @@ class _Ghost extends StatelessWidget {
 }
 
 /// Scheda piccola nel carosello del giorno.
-/// Tenendo premuto il cestino la scheda si fa rossa, trema e sparisce.
+/// Tenendola premuta la scegli, come una nota. Tenendo premuto il cestino la scheda si fa rossa, trema e sparisce.
 class _MiniCard extends StatefulWidget {
-  const _MiniCard({super.key, required this.entry, required this.onOpen, required this.onDelete, this.width = 240});
+  const _MiniCard({
+    super.key,
+    required this.entry,
+    required this.onOpen,
+    required this.onSelect,
+    required this.onDelete,
+    this.selected = false,
+    this.selecting = false,
+    this.width = 240,
+  });
 
   final Entry entry;
   final double width;
   final VoidCallback onOpen;
+  final VoidCallback onSelect;
   final VoidCallback onDelete;
+
+  /// È tra quelle scelte; [selecting]: se ne stanno scegliendo, il cestino si fa da parte.
+  final bool selected, selecting;
 
   @override
   State<_MiniCard> createState() => _MiniCardState();
@@ -336,15 +411,17 @@ class _MiniCardState extends State<_MiniCard> with SingleTickerProviderStateMixi
       width: widget.width,
       height: 176,
       child: Material(
-        color: tk.surface,
-        borderRadius: BorderRadius.circular(18),
+        color: widget.selected ? Tokens.blue.withValues(alpha: 0.14) : tk.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: widget.selected ? Tokens.blue : Colors.transparent, width: 1.5),
+        ),
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
           onTap: onOpen,
-          onLongPress: () async {
-            await Clipboard.setData(ClipboardData(text: entry.text));
-            // Il messaggio "copiato" lo mostra già Android: qui basta la vibrazione.
+          onLongPress: () {
             HapticFeedback.mediumImpact();
+            widget.onSelect();
           },
           child: Padding(
             // Il cestino non sta attaccato all'angolo: lo stesso respiro del testo, a destra e sotto.
@@ -373,10 +450,14 @@ class _MiniCardState extends State<_MiniCard> with SingleTickerProviderStateMixi
                             child: Text(hm(entry.at), style: monoStyle(context), overflow: TextOverflow.clip),
                           ),
                           if (entry.mode != null) ...[const SizedBox(width: 8), _ModeTag(entry.mode!)],
+                          if (entry.source != null) ...[const SizedBox(width: 8), SourceIcon(entry.source)],
                         ],
                       ),
                     ),
-                    DeleteButton(onDelete: widget.onDelete, onHoldStart: _holdStart, onHoldEnd: _holdEnd),
+                    if (widget.selecting)
+                      const SizedBox(height: 40)
+                    else
+                      DeleteButton(onDelete: widget.onDelete, onHoldStart: _holdStart, onHoldEnd: _holdEnd),
                   ],
                 ),
               ],
@@ -413,38 +494,203 @@ class _ModeTag extends StatelessWidget {
   }
 }
 
-/// Il testo intero, aperto dal basso. Copia ed elimina stanno in alto: con i testi lunghi sono subito lì.
-class _EntrySheet extends StatelessWidget {
+/// Il testo intero, aperto dal basso: si può cambiare e si salva da solo.
+/// Copia, elimina e «aggiungi a voce» stanno in alto: con i testi lunghi sono subito lì.
+class _EntrySheet extends StatefulWidget {
   const _EntrySheet({required this.entry, required this.onDelete});
 
   final Entry entry;
   final VoidCallback onDelete;
 
   @override
+  State<_EntrySheet> createState() => _EntrySheetState();
+}
+
+class _EntrySheetState extends State<_EntrySheet> {
+  late final _text = TextEditingController(text: widget.entry.text);
+  final _sheet = DraggableScrollableController();
+  final _focus = FocusNode();
+
+  /// Il testo com'è salvato: quello che arriva a voce si riconosce perché lo allunga.
+  late String _saved = widget.entry.text;
+  Timer? _saving;
+
+  @override
+  void initState() {
+    super.initState();
+    _text.addListener(_edited);
+    Core.addListener(_reload);
+    // Scrivendo serve tutto lo spazio che resta sopra la tastiera.
+    _focus.addListener(() {
+      if (_focus.hasFocus) _sheet.animateTo(0.94, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+    });
+  }
+
+  @override
+  void dispose() {
+    _saving?.cancel();
+    _save();
+    Core.removeListener(_reload);
+    Core.refresh();
+    _text.dispose();
+    _sheet.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _edited() {
+    _saving?.cancel();
+    _saving = Timer(const Duration(milliseconds: 500), _save);
+  }
+
+  /// Un testo svuotato non si salva: per eliminarlo c'è il cestino.
+  void _save() {
+    final now = _text.text;
+    if (now == _saved || now.trim().isEmpty) return;
+    _saved = now;
+    Core.editEntry(widget.entry.at, now);
+  }
+
+  /// Sono arrivate parole a voce: si attaccano in fondo, senza toccare quello che stai scrivendo.
+  Future<void> _reload() async {
+    final list = await Core.history();
+    if (!mounted) return;
+    final now = list.where((e) => e.at == widget.entry.at).firstOrNull?.text;
+    if (now == null || now == _saved) return;
+    final added = now.startsWith(_saved) ? now.substring(_saved.length) : null;
+    final cursor = _text.selection;
+    _saved = now;
+    if (added == null) {
+      _text.text = now;
+    } else {
+      _text.value = _text.value.copyWith(text: _text.text + added, selection: cursor.isValid ? cursor : null, composing: TextRange.empty);
+    }
+  }
+
+  Future<void> _addVoice() async {
+    _saving?.cancel();
+    _save();
+    if (!await transcriReady(context)) return;
+    HapticFeedback.heavyImpact();
+    await Core.listen(appendTo: widget.entry.at);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.6,
-      maxChildSize: 0.94,
-      builder: (context, scroll) => ListView(
-        controller: scroll,
-        padding: const EdgeInsets.fromLTRB(24, 0, 12, 40),
-        children: [
-          Row(
-            children: [
-              Text('${dayLabel(entry.at)}, ${hm(entry.at)}', style: monoStyle(context, size: 12)),
-              if (entry.mode != null) ...[const SizedBox(width: 10), _ModeTag(entry.mode!, label: true)],
-              const Spacer(),
-              DeleteButton(onDelete: onDelete),
-              CopyButton(text: entry.text),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(0, 8, 12, 0),
-            child: SelectableText(entry.text, style: Theme.of(context).textTheme.bodyLarge),
-          ),
-        ],
+    final entry = widget.entry;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: DraggableScrollableSheet(
+        expand: false,
+        controller: _sheet,
+        initialChildSize: 0.6,
+        maxChildSize: 0.94,
+        builder: (context, scroll) => ListView(
+          controller: scroll,
+          padding: const EdgeInsets.fromLTRB(24, 0, 12, 40),
+          children: [
+            Row(
+              children: [
+                Text('${dayLabel(entry.at)}, ${hm(entry.at)}', style: monoStyle(context, size: 12)),
+                if (entry.mode != null) ...[const SizedBox(width: 10), _ModeTag(entry.mode!, label: true)],
+                if (entry.source != null) ...[const SizedBox(width: 10), SourceIcon(entry.source)],
+                const Spacer(),
+                _AddVoice(at: entry.at, onStart: _addVoice),
+                DeleteButton(onDelete: widget.onDelete),
+                ListenableBuilder(
+                  listenable: _text,
+                  builder: (context, _) => CopyButton(text: _text.text),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 8, 12, 0),
+              child: TextField(
+                controller: _text,
+                focusNode: _focus,
+                style: Theme.of(context).textTheme.bodyLarge,
+                textCapitalization: TextCapitalization.sentences,
+                keyboardType: TextInputType.multiline,
+                maxLines: null,
+                decoration: const InputDecoration(
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+/// «Aggiungi a voce»: un microfono che, mentre ascolta, diventa il tasto per fermare (rosso, col respiro
+/// della voce) con accanto la X per buttare. Mentre trascrive gira un cerchio; il testo arriva in fondo.
+class _AddVoice extends StatelessWidget {
+  const _AddVoice({required this.at, required this.onStart});
+
+  final DateTime at;
+  final VoidCallback onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final tk = context.tk;
+    return ValueListenableBuilder<Live>(
+      valueListenable: Core.live,
+      builder: (context, live, _) {
+        final mine = live.appendTo == at.millisecondsSinceEpoch;
+        if (mine && live.listening) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                padding: EdgeInsets.zero,
+                onPressed: Core.discardListening,
+                tooltip: 'Butta',
+                icon: Icon(Icons.close_rounded, size: 20, color: tk.muted),
+              ),
+              Tooltip(
+                message: 'Ferma e aggiungi',
+                child: InkResponse(
+                  onTap: () {
+                    HapticFeedback.mediumImpact();
+                    Core.stopListening();
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 90),
+                    width: 34 + live.level * 6,
+                    height: 34 + live.level * 6,
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: const BoxDecoration(color: Tokens.red, shape: BoxShape.circle),
+                    child: const Icon(Icons.stop_rounded, size: 20, color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+        if (mine && live.phase == 'PROCESSING') {
+          return SizedBox.square(
+            dimension: 40,
+            child: Center(
+              child: SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: tk.muted)),
+            ),
+          );
+        }
+        return IconButton(
+          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+          padding: EdgeInsets.zero,
+          // Mentre detta altrove aspetta: Transcri fa una cosa alla volta.
+          onPressed: live.listening || live.phase == 'PROCESSING' ? null : onStart,
+          tooltip: 'Aggiungi a voce',
+          icon: Icon(Icons.mic_none_rounded, size: 21, color: tk.muted),
+        );
+      },
     );
   }
 }

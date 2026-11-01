@@ -41,6 +41,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.snapshotFlow
@@ -88,6 +89,8 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private val finish = Runnable {
         finishing = scope.launch {
             snapshotFlow { session.busy }.first { !it }
+            // Nel Dock il verde di «fatto» si vede solo se il servizio resta acceso ancora un attimo.
+            if (!out && session.phase == Phase.SUCCESS) delay(1400)
             stopSelf()
         }
     }
@@ -169,6 +172,10 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 }
             }
         }
+        // L'app disegna Transcri nel Dock che ascolta: le serve lo stato e il volume della voce.
+        scope.launch {
+            snapshotFlow { liveNow() }.collect { liveListener?.invoke(it) }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -176,13 +183,25 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             stopSelf()
             return START_NOT_STICKY
         }
+        // Il tipo microfono senza il permesso farebbe chiudere l'app: per un audio condiviso non serve.
+        val mic = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
         startForeground(
             NOTIFICATION_ID, notification(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or (if (mic) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)
         )
         // Rilanciato mentre stava rientrando: resta acceso.
         main.removeCallbacks(finish)
         finishing?.cancel()
+        when (intent?.action) {
+            ACTION_LISTEN -> {
+                listen(if (intent.hasExtra(EXTRA_APPEND)) intent.getLongExtra(EXTRA_APPEND, 0) else null)
+                return START_NOT_STICKY
+            }
+            ACTION_SHARED -> {
+                workShared()
+                return START_NOT_STICKY
+            }
+        }
         homecoming = false
         if (pillView == null) addPill()
         // Il widget si svuota quando la bolla lo copre già.
@@ -195,7 +214,81 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         return START_NOT_STICKY
     }
 
+    // --- Dentro l'app: Transcri ascolta senza uscire dal Dock ---
+
+    /** Fuori dal Dock, con la sua pillola sul bordo. Dentro l'app il servizio può lavorare anche senza. */
+    val out get() = pillView != null
+
+    /** Quello che fa adesso, per l'app. */
+    fun liveNow() = mapOf(
+        "phase" to session.phase.name,
+        "level" to (session.level * 50).roundToInt() / 50.0,
+        "appendTo" to session.appendingTo,
+        "error" to session.error,
+    )
+
+    /** Ascolta: dal Dock, senza finestre sopra le altre app; se è già fuori, lo vedi sulla sua pillola. */
+    private fun listen(appendTo: Long?) {
+        session.start(appendTo)
+        if (!out && session.phase != Phase.RECORDING) rest()
+    }
+
+    /** Ferma e manda quello che ha sentito. Se era nel Dock, il servizio si spegne appena ha finito. */
+    fun stopListening() {
+        session.stopAndSend()
+        if (!out) rest()
+    }
+
+    /** Butta quello che ha sentito. */
+    fun discardListening() {
+        session.discard()
+        if (!out) rest()
+    }
+
+    /**
+     * L'app va via mentre Transcri ascolta: il microfono non si è mai fermato, e lui esce dal Dock
+     * e vola al bordo col suo colore da ascolto. Da lì si continua come sempre.
+     */
+    fun appLeft(nest: Rect?) {
+        if (out || session.phase != Phase.RECORDING || !Settings.canDrawOverlays(this)) return
+        main.removeCallbacks(finish)
+        finishing?.cancel()
+        addPill()
+        main.post { TranscriWidget.refresh(this) }
+        showStage(Stage.Intro(nest?.center ?: dismissCenter(), nest))
+        listener?.invoke()
+    }
+
+    /** Si spegne appena non ha più niente da fare. */
+    private fun rest() {
+        main.removeCallbacks(finish)
+        main.post(finish)
+    }
+
+    /** Uscito apposta per un audio condiviso: finito il lavoro, se nessuno l'ha toccato, se ne torna a casa. */
+    private var outForShared = false
+
+    private fun workShared() {
+        if (!out && Settings.canDrawOverlays(this)) {
+            homecoming = false
+            addPill()
+            outForShared = true
+            main.post { TranscriWidget.refresh(this) }
+            showStage(Stage.Intro(dismissCenter(), null))
+        }
+        session.drainShared {
+            when {
+                !out -> rest()
+                outForShared && stage == null && session.phase != Phase.ERROR && session.phase != Phase.RECORDING -> {
+                    outForShared = false
+                    showStage(Stage.Outro(dismissCenter(), null))
+                }
+            }
+        }
+    }
+
     override fun onDestroy() {
+        liveListener?.invoke(mapOf("phase" to Phase.IDLE.name, "level" to 0.0, "appendTo" to null, "error" to null))
         main.removeCallbacks(finish)
         val refreshed = homecoming
         session.release()
@@ -556,13 +649,31 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         private const val WIDGET_HANDOFF_MS = 60L
         private const val NOTIFICATION_ID = 7
         private const val ACTION_STOP = "stop"
+        private const val ACTION_LISTEN = "listen"
+        private const val ACTION_SHARED = "shared"
+        private const val EXTRA_APPEND = "append"
         private const val EXTRA_X = "x"
         private const val EXTRA_Y = "y"
         private const val EXTRA_HOME = "home"
 
         var instance: PillService? = null; private set
         /** Fuori casa: acceso e non sta già rientrando. */
-        val running get() = instance?.homecoming == false
+        val running get() = instance?.let { !it.homecoming && it.out } == true
+
+        /** Avvisato quando cambia quello che Transcri sta facendo: stato e volume, per il Dock. */
+        var liveListener: ((Map<String, Any?>) -> Unit)? = null
+
+        /** Comincia ad ascoltare con l'app aperta: è qui che Android concede il microfono anche per dopo. */
+        fun listen(context: Context, appendTo: Long?) {
+            context.startForegroundService(
+                Intent(context, PillService::class.java).setAction(ACTION_LISTEN).apply { appendTo?.let { putExtra(EXTRA_APPEND, it) } }
+            )
+        }
+
+        /** Ci sono audio condivisi in coda: Transcri esce a lavorarci. */
+        fun workShared(context: Context) {
+            context.startForegroundService(Intent(context, PillService::class.java).setAction(ACTION_SHARED))
+        }
 
         /** Avvisato quando la pillola si accende, si spegne o salva una trascrizione. */
         var listener: (() -> Unit)? = null

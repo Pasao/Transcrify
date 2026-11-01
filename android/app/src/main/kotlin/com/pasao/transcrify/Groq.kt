@@ -51,13 +51,28 @@ class Groq(private val key: String) {
                 }
                 field("model", model)
                 field("response_format", "json")
-                out.writeBytes("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.m4a\"\r\n")
-                out.writeBytes("Content-Type: audio/mp4\r\n\r\n")
+                // I vocali di WhatsApp sono Opus dentro un file Ogg: Groq li riconosce da questo nome.
+                val ext = audio.extension.lowercase().let { if (it == "opus" || it == "oga") "ogg" else it }
+                out.writeBytes("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.$ext\"\r\n")
+                out.writeBytes("Content-Type: ${if (ext == "m4a") "audio/mp4" else "audio/$ext"}\r\n\r\n")
                 audio.inputStream().use { it.copyTo(out) }
                 out.writeBytes("\r\n--$boundary--\r\n")
             }
         }
         return JSONObject(body).optString("text").trim()
+    }
+
+    /**
+     * Pulisce un testo di qualunque lunghezza: quelli lunghi a pezzi, tagliati tra una frase e l'altra.
+     * Una risposta sola ha un tetto di token, e oltre quello il testo finirebbe tagliato.
+     */
+    fun cleanLong(raw: String, model: String, prompt: String, words: List<String>): String {
+        val chunks = mutableListOf(StringBuilder())
+        for (sentence in raw.split(Regex("""(?<=[.!?…])\s+"""))) {
+            if (chunks.last().isNotEmpty() && chunks.last().length + sentence.length > CLEAN_CHUNK) chunks += StringBuilder()
+            chunks.last().append(sentence).append(' ')
+        }
+        return chunks.joinToString("\n\n") { clean(it.toString().trim(), model, prompt, words) }
     }
 
     fun clean(raw: String, model: String, prompt: String, words: List<String>, maxTokens: Int = 6000): String {
@@ -78,8 +93,10 @@ class Groq(private val key: String) {
             c.setRequestProperty("Content-Type", "application/json")
             c.outputStream.use { it.write(payload.toString().toByteArray()) }
         }
-        val text = JSONObject(body).getJSONArray("choices").getJSONObject(0)
-            .getJSONObject("message").optString("content")
+        val choice = JSONObject(body).getJSONArray("choices").getJSONObject(0)
+        // Tagliata dal tetto: meglio il testo grezzo intero di uno pulito a metà.
+        if (choice.optString("finish_reason") == "length") throw GroqError("Risposta tagliata")
+        val text = choice.getJSONObject("message").optString("content")
         // Alcuni modelli ragionano ad alta voce dentro <think>: non fa parte del testo.
         val clean = text.replace(Regex("(?s)<think>.*?</think>"), "").trim()
         if (clean.isEmpty()) throw GroqError("Risposta vuota")
@@ -169,6 +186,9 @@ class Groq(private val key: String) {
 
     companion object {
         private const val BASE = "https://api.groq.com/openai/v1/"
+
+        /** Quanti caratteri si puliscono in una chiamata: stanno larghi sotto il tetto di token della risposta. */
+        private const val CLEAN_CHUNK = 8000
         const val DEFAULT_STT = "whisper-large-v3"
         const val DEFAULT_LLM = "openai/gpt-oss-120b"
 

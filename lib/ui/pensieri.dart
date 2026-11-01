@@ -165,7 +165,7 @@ class _PensieriPageState extends State<PensieriPage> {
           right: 16,
           bottom: widget.bottom + 8,
           child: SelectionBar(
-            count: selected.length,
+            label: selected.length == 1 ? '1 nota' : '${selected.length} note',
             onClose: () => setState(selected.clear),
             actions: [
               (Icons.content_copy_rounded, 'Copia', _copy),
@@ -466,47 +466,6 @@ class _Hint extends StatelessWidget {
   }
 }
 
-/// La barra delle note scelte: quante sono, e cosa farne. Come in Samsung Note, fuori dalla nota.
-class SelectionBar extends StatelessWidget {
-  const SelectionBar({super.key, required this.count, required this.onClose, required this.actions});
-
-  final int count;
-  final VoidCallback onClose;
-  final List<(IconData, String, VoidCallback)> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
-      decoration: BoxDecoration(color: const Color(0xFF242424), borderRadius: BorderRadius.circular(32), boxShadow: islandShadow),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: onClose,
-            icon: const Icon(Icons.close_rounded, color: Colors.white),
-            tooltip: 'Annulla',
-          ),
-          Expanded(
-            child: Text(
-              count == 1 ? '1 nota' : '$count note',
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-          ),
-          for (final (icon, label, onTap) in actions)
-            IconButton(
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                onTap();
-              },
-              tooltip: label,
-              icon: Icon(icon, color: label == 'Elimina' ? const Color(0xFFFF8A70) : Colors.white),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 /// La barra per cercare: tonda, in cima alla pagina.
 class SearchField extends StatelessWidget {
   const SearchField({super.key, required this.controller, required this.hint});
@@ -628,6 +587,7 @@ class NoteCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(child: Text(dayLabel(note.updated), style: monoStyle(context))),
+                  if (note.source != null) ...[SourceIcon(note.source), const SizedBox(width: 6)],
                   TopicsBadge(state: note.topics),
                 ],
               ),
@@ -969,6 +929,22 @@ class _NoteEditorState extends State<NoteEditor> {
     _set(_text.text.replaceRange(sel.start, sel.end, s), sel.start + s.length);
   }
 
+  /// Una nota nata da un audio resta fedele; il riassunto lo chiedi tu. «Annulla» riporta il testo di prima.
+  bool _summarizing = false;
+
+  Future<void> _summarize() async {
+    if (_summarizing || _text.text.trim().isEmpty) return;
+    HapticFeedback.selectionClick();
+    setState(() => _summarizing = true);
+    try {
+      final short = await Core.summarize(_text.text);
+      if (mounted) _set(short, short.length);
+    } on PlatformException {
+      if (mounted) _say('Riassunto non riuscito');
+    }
+    if (mounted) setState(() => _summarizing = false);
+  }
+
   void _pasteDictation() {
     final d = _dictation;
     if (d == null) return;
@@ -1140,6 +1116,8 @@ class _NoteEditorState extends State<NoteEditor> {
                 onPaste: _pasteDictation,
                 topics: _text.usable ? _text.level : null,
                 onTopics: () => _setLevel(_text.level == 4 ? 0 : _text.level + 1),
+                onSummarize: widget.note.source == null ? null : _summarize,
+                summarizing: _summarizing,
               ),
             ],
           ),
@@ -1160,6 +1138,8 @@ class NoteToolbar extends StatelessWidget {
     required this.onPaste,
     required this.topics,
     required this.onTopics,
+    this.onSummarize,
+    this.summarizing = false,
   });
 
   final UndoHistoryController undo;
@@ -1170,6 +1150,10 @@ class NoteToolbar extends StatelessWidget {
   /// La grana degli argomenti (0–3), o null se non ci sono per questo testo: allora il tasto non c'è.
   final int? topics;
   final VoidCallback onTopics;
+
+  /// Riassumere: solo le note nate da un audio.
+  final VoidCallback? onSummarize;
+  final bool summarizing;
 
   @override
   Widget build(BuildContext context) {
@@ -1200,6 +1184,14 @@ class NoteToolbar extends StatelessWidget {
                 onPressed: onTopics,
                 tooltip: 'Argomenti (o pizzica la nota)',
                 icon: GrainIcon(level: topics!),
+              ),
+            if (onSummarize != null)
+              IconButton(
+                onPressed: onSummarize,
+                tooltip: 'Riassumi',
+                icon: summarizing
+                    ? SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: tk.muted))
+                    : Icon(Icons.short_text_rounded, color: tk.text),
               ),
             const Spacer(),
             AnimatedSwitcher(

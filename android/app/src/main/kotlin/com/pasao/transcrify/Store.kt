@@ -15,25 +15,29 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Una trascrizione salvata. */
-data class Transcription(val text: String, val at: Long, val purified: Boolean, val mode: String? = null) {
-    fun toJson(): JSONObject = JSONObject().put("text", text).put("at", at).put("purified", purified).put("mode", mode)
+data class Transcription(val text: String, val at: Long, val purified: Boolean, val mode: String? = null, val source: String? = null) {
+    fun toJson(): JSONObject = JSONObject().put("text", text).put("at", at).put("purified", purified).put("mode", mode).put("source", source)
 
     companion object {
         fun fromJson(j: JSONObject) = Transcription(
             j.getString("text"), j.getLong("at"), j.optBoolean("purified"),
             // Le trascrizioni di prima dei modi erano tutte "pulite".
             if (j.isNull("mode")) (if (j.optBoolean("purified")) "pulita" else null) else j.getString("mode"),
+            if (j.isNull("source")) null else j.getString("source"),
         )
     }
 }
 
 /** Una nota: tua, da rileggere. Il titolo può restare vuoto. */
-data class Note(val id: String, val title: String, val text: String, val created: Long, val updated: Long) {
-    fun toJson(): JSONObject = JSONObject().put("id", id).put("title", title).put("text", text).put("created", created).put("updated", updated)
-    fun toMap(): Map<String, Any> = mapOf("id" to id, "title" to title, "text" to text, "created" to created, "updated" to updated)
+data class Note(val id: String, val title: String, val text: String, val created: Long, val updated: Long, val source: String? = null) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("title", title).put("text", text).put("created", created).put("updated", updated).put("source", source)
+    fun toMap(): Map<String, Any?> = mapOf("id" to id, "title" to title, "text" to text, "created" to created, "updated" to updated, "source" to source)
 
     companion object {
-        fun fromJson(j: JSONObject) = Note(j.getString("id"), j.optString("title"), j.optString("text"), j.getLong("created"), j.getLong("updated"))
+        fun fromJson(j: JSONObject) = Note(
+            j.getString("id"), j.optString("title"), j.optString("text"), j.getLong("created"), j.getLong("updated"),
+            if (j.isNull("source")) null else j.getString("source"),
+        )
     }
 }
 
@@ -194,6 +198,19 @@ class Store(context: Context) {
 
     @Synchronized
     fun removeFromHistory(at: Long) = writeHistory(history().filter { it.at != at })
+
+    /** Il testo l'hai cambiato tu: tutto il resto resta com'è. */
+    @Synchronized
+    fun editEntry(at: Long, text: String) = writeHistory(history().map { if (it.at == at) it.copy(text = text) else it })
+
+    /** Nuove parole in fondo a una trascrizione. Null se nel frattempo è stata eliminata. */
+    @Synchronized
+    fun appendToEntry(at: Long, text: String): Transcription? {
+        val entry = history().firstOrNull { it.at == at } ?: return null
+        val longer = entry.copy(text = entry.text.trimEnd() + "\n\n" + text)
+        writeHistory(history().map { if (it.at == at) longer else it })
+        return longer
+    }
 
     private fun writeHistory(list: List<Transcription>) {
         val tmp = File(historyFile.parentFile, "history.tmp")

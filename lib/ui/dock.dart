@@ -27,7 +27,7 @@ class Dock extends StatelessWidget {
     required this.onSwitch,
     required this.onStep,
     required this.nest,
-    this.onWrite,
+    this.action,
     this.pages = const [],
     this.page = 0,
     this.onPage,
@@ -47,8 +47,8 @@ class Dock extends StatelessWidget {
   /// La casa di Transcri.
   final Widget nest;
 
-  /// Scrivere a mano, se il potere lo permette (in Pensieri sì).
-  final VoidCallback? onWrite;
+  /// L'azione accanto a Transcri: scrivere in Pensieri, dettare in Trascrivi, buttare mentre ascolta.
+  final (IconData, String, VoidCallback)? action;
 
   /// Le pagine del potere (in Pensieri: Note e Argomenti), in mezzo. Vuote se il potere ne ha una sola.
   final List<(IconData, String)> pages;
@@ -109,16 +109,17 @@ class Dock extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // In Pensieri la matita esce da Transcri: l'isola si allunga verso sinistra.
+                // L'azione esce da Transcri: l'isola si allunga verso sinistra.
                 AnimatedSize(
                   duration: const Duration(milliseconds: 280),
                   curve: Curves.easeOutCubic,
-                  child: onWrite == null
-                      ? const SizedBox.shrink()
-                      : Padding(
-                          padding: const EdgeInsets.only(right: (dockIsland - dockRound) / 2),
-                          child: RoundAction(icon: Icons.edit_rounded, label: 'Scrivi', onTap: onWrite!),
-                        ),
+                  child: switch (action) {
+                    null => const SizedBox.shrink(),
+                    (final icon, final label, final onTap) => Padding(
+                      padding: const EdgeInsets.only(right: (dockIsland - dockRound) / 2),
+                      child: RoundAction(icon: icon, label: label, onTap: onTap),
+                    ),
+                  },
                 ),
                 nest,
               ],

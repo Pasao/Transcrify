@@ -74,11 +74,15 @@ class Entry {
     : text = m['text'] as String,
       at = DateTime.fromMillisecondsSinceEpoch(m['at'] as int),
       purified = m['purified'] as bool,
-      mode = m['mode'] as String?;
+      mode = m['mode'] as String?,
+      source = m['source'] as String?;
 
   final String text;
   final DateTime at;
   final bool purified;
+
+  /// Da dove arriva, se è un audio condiviso: "whatsapp". Null se l'hai dettata tu.
+  final String? source;
 
   /// Il modo di pulizia usato ("fedele", "pulita", "riassunto"), null se è il testo così com'è.
   final String? mode;
@@ -86,7 +90,7 @@ class Entry {
 
 /// Una nota: tua, da rileggere. Si scrive a mano (per ora); il titolo può restare vuoto.
 class Note {
-  Note({required this.id, this.title = '', this.text = '', required this.created, required this.updated, this.topics = 'off'});
+  Note({required this.id, this.title = '', this.text = '', required this.created, required this.updated, this.topics = 'off', this.source});
 
   Note.fromMap(Map m)
     : id = m['id'] as String,
@@ -94,7 +98,8 @@ class Note {
       text = m['text'] as String,
       created = DateTime.fromMillisecondsSinceEpoch(m['created'] as int),
       updated = DateTime.fromMillisecondsSinceEpoch(m['updated'] as int),
-      topics = m['topics'] as String? ?? 'off';
+      topics = m['topics'] as String? ?? 'off',
+      source = m['source'] as String?;
 
   /// Una nota nuova, vuota, nata adesso.
   factory Note.blank() {
@@ -109,12 +114,16 @@ class Note {
   /// "ready" (pronti per questo testo) o "stale" (la nota è cambiata: si rifanno al prossimo salvataggio).
   final String topics;
 
+  /// Da dove arriva, se è nata da un audio condiviso: "whatsapp".
+  final String? source;
+
   bool get isEmpty => title.trim().isEmpty && text.trim().isEmpty;
 
   Note edited({required String title, required String text}) =>
-      Note(id: id, title: title, text: text, created: created, updated: DateTime.now());
+      Note(id: id, title: title, text: text, created: created, updated: DateTime.now(), source: source);
 
-  Map<String, Object> toMap() => {
+  Map<String, Object?> toMap() => {
+    'source': source,
     'id': id,
     'title': title,
     'text': text,
@@ -229,6 +238,28 @@ class GroqModel {
   final bool speech;
 }
 
+/// Cosa sta facendo Transcri adesso: "IDLE", "RECORDING", "PROCESSING", "SUCCESS", "ERROR", "LIMITED".
+class Live {
+  const Live({this.phase = 'IDLE', this.level = 0, this.appendTo, this.error});
+
+  Live.fromMap(Map m)
+    : phase = m['phase'] as String,
+      level = (m['level'] as num).toDouble(),
+      appendTo = (m['appendTo'] as num?)?.toInt(),
+      error = m['error'] as String?;
+
+  final String phase;
+
+  /// Il volume della voce, da 0 a 1.
+  final double level;
+
+  /// La trascrizione a cui si sta aggiungendo (in millisecondi, come la sua data), se c'è.
+  final int? appendTo;
+  final String? error;
+
+  bool get listening => phase == 'RECORDING';
+}
+
 /// Tutte le chiamate al nucleo nativo passano da qui.
 class Core {
   static const _ch = MethodChannel('transcrify/core');
@@ -239,6 +270,7 @@ class Core {
   static void _listen() => _ch.setMethodCallHandler((call) async {
     if (call.method == 'changed') refresh();
     if (call.method == 'nestHot') _nestHot?.call(call.arguments as bool);
+    if (call.method == 'live') live.value = Live.fromMap(call.arguments as Map);
   });
 
   /// Chi vuole sapere quando la pillola cambia qualcosa (si accende, si spegne, trascrive).
@@ -249,6 +281,17 @@ class Core {
   }
 
   static void removeListener(VoidCallback cb) => _changed.remove(cb);
+
+  /// Quello che Transcri sta facendo adesso: lo stato e il volume della voce.
+  static final live = ValueNotifier<Live>(const Live());
+
+  /// Comincia ad ascoltare dentro l'app. Se esci, Transcri vola fuori e continua.
+  /// [appendTo]: quello che senti finisce in fondo a questa trascrizione.
+  static Future<void> listen({DateTime? appendTo}) => _ch.invokeMethod('listen', {'appendTo': appendTo?.millisecondsSinceEpoch});
+
+  static Future<void> stopListening() => _ch.invokeMethod('stopListening');
+
+  static Future<void> discardListening() => _ch.invokeMethod('discardListening');
 
   /// Fa rileggere tutto a chi è iscritto: quando cambia qualcosa, o al ritorno nell'app.
   static void refresh() {
@@ -332,6 +375,7 @@ class Core {
       m['introSeen'] = _previewIntro;
       m['words'] = <String>[];
     }
+    live.value = m['live'] == null ? const Live() : Live.fromMap(m['live'] as Map);
     return CoreState(m);
   }
 
@@ -360,6 +404,13 @@ class Core {
   static Future<void> deleteEntry(DateTime at) async {
     if (!preview.value) await _ch.invokeMethod('deleteHistory', {'at': at.millisecondsSinceEpoch});
   }
+
+  static Future<void> editEntry(DateTime at, String text) async {
+    if (!preview.value) await _ch.invokeMethod('editHistory', {'at': at.millisecondsSinceEpoch, 'text': text});
+  }
+
+  /// Il riassunto di un testo, fatto col modello di pulizia. Lancia un errore se non riesce.
+  static Future<String> summarize(String text) async => await _ch.invokeMethod('summarize', {'text': text}) as String;
 
   static Future<void> setIntroSeen() async {
     if (preview.value) {

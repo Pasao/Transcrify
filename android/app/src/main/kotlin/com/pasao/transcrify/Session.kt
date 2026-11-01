@@ -12,10 +12,12 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,9 +62,15 @@ class Session(private val context: Context, private val store: Store, private va
 
     /** Registrazioni che aspettano la rete (o un nuovo tentativo). */
     val queue = Queue(context)
-    private val transcriber = Transcriber(store, queue)
+    private val transcriber = Transcriber(context, store, queue)
     var waiting by androidx.compose.runtime.mutableIntStateOf(queue.all().size); private set
     private var flushing = false
+
+    /** La trascrizione a cui si attacca quello che stai dettando, se l'hai aperta con «Aggiungi a voce». */
+    var appendingTo by mutableStateOf<Long?>(null); private set
+
+    /** Sta lavorando sugli audio condivisi: chi spegne il servizio aspetta anche loro. */
+    private var draining by mutableStateOf(false)
 
     /** Avvisato a ogni nuova trascrizione (per aggiornare l'app se è aperta). */
     var onHistoryChanged: () -> Unit = {}
@@ -129,8 +137,9 @@ class Session(private val context: Context, private val store: Store, private va
         purify = store.purify
     }
 
-    fun start() {
+    fun start(appendTo: Long? = null) {
         if (phase == Phase.RECORDING || phase == Phase.PROCESSING) return
+        appendingTo = appendTo
         refreshLimits()
         if (phase == Phase.LIMITED) return
         if (Simulated.noMic || context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -225,7 +234,7 @@ class Session(private val context: Context, private val store: Store, private va
     fun wrapUp() = stopAndSend()
 
     /** Sta trascrivendo una registrazione appena fatta. */
-    val busy get() = phase == Phase.PROCESSING
+    val busy get() = phase == Phase.PROCESSING || draining
 
     /**
      * Ferma il microfono e mette l'audio in coda, se c'è qualcosa da trascrivere.
@@ -253,7 +262,7 @@ class Session(private val context: Context, private val store: Store, private va
             say("Non ho sentito niente")
             return null
         }
-        val item = queue.add(recording, duration / 1000, if (purify) mode else null)
+        val item = queue.add(recording, duration / 1000, if (purify) mode else null, appendingTo)
         waiting = queue.all().size
         onHistoryChanged()
         return item
@@ -275,31 +284,80 @@ class Session(private val context: Context, private val store: Store, private va
     private fun process(item: Pending) {
         phase = Phase.PROCESSING
         error = null
+        scope.launch { work(item) }
+    }
+
+    /** Il lavoro su un audio, fino alla fine. Dice se è andato a buon fine. */
+    private suspend fun work(item: Pending): Boolean {
+        phase = Phase.PROCESSING
+        error = null
         working.add(item.id)
-        scope.launch {
-            val outcome = withContext(Dispatchers.IO) { transcriber.run(item) }
-            working.remove(item.id)
-            waiting = queue.all().size
-            onHistoryChanged()
-            when (outcome) {
-                is Transcriber.Outcome.Done -> {
-                    val t = outcome.result
-                    if (t == null) {
-                        refreshLimits()
-                        say("Non ho sentito niente")
-                        return@launch
-                    }
-                    copy(t.text)
-                    hasLast = true
-                    phase = Phase.SUCCESS
-                    delay(1500)
-                    if (phase == Phase.SUCCESS) refreshLimits()
+        val outcome = withContext(Dispatchers.IO) { transcriber.run(item) }
+        working.remove(item.id)
+        waiting = queue.all().size
+        onHistoryChanged()
+        when (outcome) {
+            is Transcriber.Outcome.Done -> {
+                val t = outcome.result
+                if (t == null) {
+                    refreshLimits()
+                    say("Non ho sentito niente")
+                    return true
                 }
-                // Senza rete: l'audio è salvato, e si riprova quando si vuole.
-                Transcriber.Outcome.Offline -> fail("Niente rete. L'audio è salvato", Fix.RETRY)
-                is Transcriber.Outcome.Failed -> fail(outcome.message, Fix.RETRY)
+                // Quello che detti lo incolli altrove; un audio condiviso lo vuoi leggere, e gli appunti non si toccano.
+                if (item.origin != null) showShared(t, item.origin) else copy(t.text)
+                if (item.origin?.toNote != true) hasLast = true
+                phase = Phase.SUCCESS
+                delay(1500)
+                if (phase == Phase.SUCCESS) refreshLimits()
+                return true
             }
+            // Senza rete: l'audio è salvato, e si riprova quando si vuole.
+            Transcriber.Outcome.Offline -> fail("Niente rete. L'audio è salvato", Fix.RETRY)
+            is Transcriber.Outcome.Failed -> fail(outcome.message, Fix.RETRY)
         }
+        return false
+    }
+
+    /**
+     * Trascrive gli audio condivisi, uno alla volta, appena Transcri è libero: se stai dettando
+     * aspettano che tu finisca. Se uno fallisce si ferma: restano in coda e l'app li mostra.
+     */
+    fun drainShared(onDone: () -> Unit) {
+        if (draining) return
+        draining = true
+        scope.launch {
+            while (true) {
+                snapshotFlow { phase }.first { it != Phase.RECORDING && it != Phase.PROCESSING }
+                val item = queue.all().firstOrNull { it.origin != null } ?: break
+                if (!work(item)) break
+            }
+            draining = false
+            onDone()
+        }
+    }
+
+    /** Il testo di un audio condiviso, leggibile lì dove sei: la notifica si apre e si legge tutto. */
+    private fun showShared(t: Transcription, origin: Origin) {
+        val nm = context.getSystemService(android.app.NotificationManager::class.java)
+        nm.createNotificationChannel(
+            android.app.NotificationChannel(SHARED_CHANNEL, "Audio condivisi", android.app.NotificationManager.IMPORTANCE_HIGH)
+        )
+        val open = android.app.PendingIntent.getActivity(
+            context, 0, android.content.Intent(context, MainActivity::class.java), android.app.PendingIntent.FLAG_IMMUTABLE,
+        )
+        val from = if (origin.source == "whatsapp") "Vocale di WhatsApp" else "Audio"
+        nm.notify(
+            t.at.hashCode(),
+            android.app.Notification.Builder(context, SHARED_CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_mic)
+                .setContentTitle(if (origin.toNote) "$from · nei Pensieri" else from)
+                .setContentText(t.text)
+                .setStyle(android.app.Notification.BigTextStyle().bigText(t.text))
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .build(),
+        )
     }
 
     /** Trascrive quello che è rimasto in coda, quando lo chiedi dall'app. Non tocca gli appunti. */
@@ -310,6 +368,7 @@ class Session(private val context: Context, private val store: Store, private va
         scope.launch {
             var done = 0
             for (item in queue.all()) {
+                if (item.id in working) continue
                 working.add(item.id)
                 val outcome = withContext(Dispatchers.IO) { transcriber.run(item) }
                 working.remove(item.id)
@@ -395,6 +454,7 @@ class Session(private val context: Context, private val store: Store, private va
     companion object {
         // Il piano gratuito di Groq accetta file fino a 25 MB: ci si ferma prima.
         private const val MAX_MB = 24f
+        private const val SHARED_CHANNEL = "audio_condivisi"
 
         /** Quanti tratti ha l'onda. */
         const val WAVE = 22

@@ -30,7 +30,7 @@ class MainActivity : FlutterActivity() {
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "state" -> result.success(state())
-                "history" -> result.success(store.history().map { mapOf("text" to it.text, "at" to it.at, "purified" to it.purified, "mode" to it.mode) })
+                "history" -> result.success(store.history().map { mapOf("text" to it.text, "at" to it.at, "purified" to it.purified, "mode" to it.mode, "source" to it.source) })
                 // Quello che si sta trascrivendo adesso non è "in attesa": compare solo se fallisce.
                 "pending" -> result.success(queue.all().filter { it.id !in (PillService.instance?.session?.working ?: emptySet()) }.map {
                     mapOf("id" to it.id, "at" to it.at, "seconds" to it.seconds, "mode" to it.mode)
@@ -47,7 +47,7 @@ class MainActivity : FlutterActivity() {
                     } else {
                         // Transcri è chiuso: ci pensa l'app, un audio alla volta.
                         background(result) {
-                            val t = Transcriber(store, queue)
+                            val t = Transcriber(this, store, queue)
                             var done = 0
                             for (item in queue.all()) {
                                 val o = t.run(item)
@@ -60,6 +60,29 @@ class MainActivity : FlutterActivity() {
                 "deleteHistory" -> {
                     store.removeFromHistory(call.argument<Number>("at")!!.toLong())
                     result.success(null)
+                }
+                "editHistory" -> {
+                    store.editEntry(call.argument<Number>("at")!!.toLong(), call.argument<String>("text")!!)
+                    result.success(null)
+                }
+                "listen" -> {
+                    // Parte con l'app davanti: Android poi lascia il microfono acceso anche fuori.
+                    PillService.listen(this, call.argument<Number>("appendTo")?.toLong())
+                    result.success(null)
+                }
+                "stopListening" -> {
+                    PillService.instance?.stopListening()
+                    result.success(null)
+                }
+                "discardListening" -> {
+                    PillService.instance?.discardListening()
+                    result.success(null)
+                }
+                "summarize" -> {
+                    val key = store.apiKey ?: return@setMethodCallHandler result.error("nokey", "Manca la chiave", null)
+                    background(result) {
+                        Groq(key).cleanLong(call.argument<String>("text")!!, store.cleanupModel, store.promptFor("riassunto"), store.words)
+                    }
                 }
                 "introSeen" -> {
                     store.introSeen = true
@@ -115,6 +138,7 @@ class MainActivity : FlutterActivity() {
                         Note(
                             id, call.argument<String>("title") ?: "", call.argument<String>("text") ?: "",
                             call.argument<Number>("created")!!.toLong(), call.argument<Number>("updated")!!.toLong(),
+                            call.argument<String>("source"),
                         )
                     )
                     // Il «commit»: salvata la nota, i suoi argomenti si rifanno in fondo (solo le frasi nuove).
@@ -243,6 +267,7 @@ class MainActivity : FlutterActivity() {
         // La pillola avvisa quando cambia qualcosa: Flutter rilegge.
         PillService.listener = { main.post { channel.invokeMethod("changed", null) } }
         PillService.hotListener = { hot -> main.post { channel.invokeMethod("nestHot", hot) } }
+        PillService.liveListener = { live -> main.post { channel.invokeMethod("live", live) } }
         // Una nota ha i suoi argomenti: Flutter rilegge (l'indicatore nella lista, la nota aperta).
         topics.listener = { main.post { channel.invokeMethod("changed", null) } }
         // Le note scritte prima di scegliere il modello, o cambiate mentre l'app era chiusa.
@@ -259,13 +284,29 @@ class MainActivity : FlutterActivity() {
     // Fuori dall'app il nido non si vede: si rientra nella casa che compare in basso.
     override fun onPause() {
         resumed = false
+        PillService.appNest?.let { lastNest = it }
         PillService.appNest = null
         super.onPause()
+    }
+
+    /** Dov'era il nido quando l'app è andata via: se Transcri stava ascoltando, esce da lì. */
+    private var lastNest: androidx.compose.ui.geometry.Rect? = null
+
+    // Il tasto Home arriva prima della fine dell'animazione; onStop copre tutti gli altri modi di uscire.
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        PillService.instance?.appLeft(PillService.appNest ?: lastNest)
+    }
+
+    override fun onStop() {
+        PillService.instance?.appLeft(lastNest)
+        super.onStop()
     }
 
     override fun onDestroy() {
         PillService.listener = null
         PillService.hotListener = null
+        PillService.liveListener = null
         PillService.appNest = null
         super.onDestroy()
     }
@@ -278,6 +319,7 @@ class MainActivity : FlutterActivity() {
             "introSeen" to store.introSeen,
             "maskedKey" to store.maskedKey,
             "pillOn" to PillService.running,
+            "live" to PillService.instance?.liveNow(),
             "purify" to store.purify,
             "words" to store.words,
             "prompt" to store.prompt,

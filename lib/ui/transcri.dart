@@ -8,9 +8,43 @@ import '../core/native.dart';
 import 'common.dart';
 import 'theme.dart';
 
+/// I permessi per dettare: si chiedono qui, la prima volta che serve Transcri.
+Future<bool> transcriReady(BuildContext context) async {
+  if (!await Permission.microphone.isGranted) {
+    final s = await Permission.microphone.request();
+    await Permission.notification.request();
+    if (!s.isGranted) {
+      if (s.isPermanentlyDenied) await openAppSettings();
+      return false;
+    }
+  }
+  if (!await Core.canDrawOverlays()) {
+    if (!context.mounted) return false;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Un ultimo permesso'),
+        content: const Text(
+          'Per stare sul bordo dello schermo, Transcrify deve poter “mostrare sopra altre app”. '
+          'Nella prossima schermata attivalo e torna qui.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Non ora')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Apri')),
+        ],
+      ),
+    );
+    if (go == true) await Core.openOverlaySettings();
+    return false;
+  }
+  return true;
+}
+
 /// Il nido di Transcri: la sua casa tonda dentro l'isola di destra del Dock. Lì sta seduto, respira,
 /// sbatte gli occhi e si guarda intorno. Toccando il nido esce e vola al bordo; toccandolo di
 /// nuovo torna, atterra con un sobbalzo e il nido si illumina. Quando è fuori resta il suo contorno.
+/// Tenendolo premuto ascolta restando qui: l'anello intorno diventa rosso e si muove con la voce.
+/// Se poi lo trascini fuori, o esci dall'app, continua ad ascoltare dal bordo.
 class TranscriNest extends StatefulWidget {
   const TranscriNest({super.key, required this.on, required this.limitedUntil, required this.onChanged, this.onNeedKey, this.onAsleep});
 
@@ -27,10 +61,10 @@ class TranscriNest extends StatefulWidget {
   final VoidCallback onChanged;
 
   @override
-  State<TranscriNest> createState() => _TranscriNestState();
+  State<TranscriNest> createState() => TranscriNestState();
 }
 
-class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMixin {
+class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixin {
   static const _outroMs = 640; // come OUTRO_MS nel nativo
   /// Quanto è grande la casa: la stessa misura delle altre isole del Dock.
   static const slot = dockRound;
@@ -57,10 +91,39 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
     Core.onNestHot((hot) {
       if (mounted) setState(() => _hot = hot);
     });
+    Core.live.addListener(_liveChanged);
+  }
+
+  /// Cosa si vede intorno a lui nel Dock: null se non sta lavorando qui.
+  String? _ring;
+  String _lastPhase = 'IDLE';
+
+  void _liveChanged() {
+    final live = Core.live.value;
+    final out = shownOn ?? widget.on;
+    final ring = !out && const {'RECORDING', 'PROCESSING', 'SUCCESS'}.contains(live.phase) ? live.phase : null;
+    if (ring != _ring) setState(() => _ring = ring);
+    // Fuori lo dice la pillola; qui nessuno lo direbbe. L'audio resta in coda.
+    if (live.phase == 'ERROR' && _lastPhase != 'ERROR' && !out && live.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(live.error!)));
+    }
+    _lastPhase = live.phase;
+  }
+
+  bool get _listening => _ring == 'RECORDING' && !(shownOn ?? widget.on);
+
+  /// Comincia ad ascoltare restando nel Dock.
+  Future<void> listen() async {
+    if (_blocked) return widget.onAsleep?.call();
+    if (widget.onNeedKey != null) return widget.onNeedKey!();
+    if (!await transcriReady(context)) return;
+    HapticFeedback.heavyImpact();
+    await Core.listen();
   }
 
   @override
   void dispose() {
+    Core.live.removeListener(_liveChanged);
     Core.onNestHot(null);
     Core.setNest(null);
     _carried?.remove();
@@ -78,38 +141,6 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
     final br = box.localToGlobal(box.size.bottomRight(Offset.zero)) * ratio;
     final c = Offset((tl.dx + br.dx) / 2, (tl.dy + br.dy) / 2);
     return (c, [tl.dx, tl.dy, br.dx, br.dy]);
-  }
-
-  /// I permessi si chiedono qui, la prima volta che serve Transcri.
-  Future<bool> _permissions() async {
-    if (!await Permission.microphone.isGranted) {
-      final s = await Permission.microphone.request();
-      await Permission.notification.request();
-      if (!s.isGranted) {
-        if (s.isPermanentlyDenied) await openAppSettings();
-        return false;
-      }
-    }
-    if (!await Core.canDrawOverlays()) {
-      if (!mounted) return false;
-      final go = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Un ultimo permesso'),
-          content: const Text(
-            'Per stare sul bordo dello schermo, Transcrify deve poter “mostrare sopra altre app”. '
-            'Nella prossima schermata attivalo e torna qui.',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Non ora')),
-            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Apri')),
-          ],
-        ),
-      );
-      if (go == true) await Core.openOverlaySettings();
-      return false;
-    }
-    return true;
   }
 
   /// Spento solo se i minuti sono finiti e Transcri è a casa: richiamarlo si può sempre.
@@ -131,6 +162,13 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
   /// Il rilascio: il nido rimbalza e, nel rimbalzo, Transcri parte (o torna).
   /// Funziona anche a metà di un volo: il nuovo parte da dove si trova la bolla.
   void _release() {
+    // Sta ascoltando qui: il tocco ferma e manda.
+    if (_listening) {
+      HapticFeedback.mediumImpact();
+      _press.animateBack(0, duration: const Duration(milliseconds: 520), curve: Curves.elasticOut);
+      Core.stopListening();
+      return;
+    }
     if (_blocked) {
       HapticFeedback.selectionClick();
       return widget.onAsleep?.call();
@@ -192,7 +230,7 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
   }
 
   Future<void> _launch(int g) async {
-    if (!await _permissions()) return;
+    if (!await transcriReady(context)) return;
     if (g != _gen) return;
     await _swell.animateTo(1, curve: Curves.easeOutCubic);
     if (g != _gen || !mounted) return;
@@ -227,11 +265,53 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
   OverlayEntry? _carried;
   Offset _carryAt = Offset.zero;
 
+  /// Il dito è ancora giù: se si alza mentre si chiedono i permessi, non c'è più niente da portare.
+  bool _holding = false;
+
+  /// Teneva premuto mentre già ascoltava: se non lo porta via, al rilascio si ferma.
+  bool _stopOnRelease = false;
+
+  void _holdStart(Offset at) {
+    _holding = true;
+    _carryAt = at;
+    _stopOnRelease = _listening;
+    if (_listening) {
+      HapticFeedback.mediumImpact();
+    } else if (!(shownOn ?? widget.on) && !busy) {
+      listen();
+    }
+  }
+
+  void _holdMove(LongPressMoveUpdateDetails d) {
+    if (_carried == null && d.offsetFromOrigin.distance > 14) _grab(d.globalPosition);
+    _carry(d.globalPosition);
+  }
+
+  void _holdEnd(Offset at) {
+    _holding = false;
+    if (_carried != null) {
+      _drop(at);
+    } else if (_stopOnRelease) {
+      Core.stopListening();
+    }
+  }
+
+  void _panStart(Offset at) {
+    _holding = true;
+    _stopOnRelease = false;
+    _grab(at);
+  }
+
+  void _panEnd() {
+    _holding = false;
+    _drop(_carryAt);
+  }
+
   Future<void> _grab(Offset at) async {
     if (_blocked || (shownOn ?? widget.on) || busy) return;
     if (widget.onNeedKey != null) return widget.onNeedKey!();
-    if (!await _permissions()) return;
-    if (!mounted) return;
+    if (!await transcriReady(context)) return;
+    if (!mounted || !_holding) return;
     HapticFeedback.mediumImpact();
     _press.animateBack(0);
     _carryAt = at;
@@ -240,7 +320,17 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
         left: _carryAt.dx - _Transcri.w / 2,
         top: _carryAt.dy - _Transcri.h / 2,
         child: IgnorePointer(
-          child: Transform.scale(scale: 1.15, child: _Transcri(away: false, sleeping: false, land: _land)),
+          child: Transform.scale(
+            scale: 1.15,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                if (_listening) const _VoiceRing(phase: 'RECORDING', size: _Transcri.w),
+                _Transcri(away: false, sleeping: false, land: _land),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -258,6 +348,13 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
     if (entry == null) return;
     final ratio = MediaQuery.devicePixelRatioOf(context);
     final c = at * ratio;
+    // Lasciato sopra casa sua: non è uscito.
+    if ((c - _home().$1).distance < slot * ratio) {
+      entry.remove();
+      _carried = null;
+      setState(() {});
+      return;
+    }
     final hw = _Transcri.w * ratio / 2, hh = _Transcri.h * ratio / 2;
     final g = ++_gen;
     busy = true;
@@ -294,14 +391,9 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
           animation: _swell,
           // Un po' più piccolo della sua casa: intorno resta un anello del suo colore, che si vede.
           builder: (context, child) => Transform.scale(scale: _inNest * (1 + 0.3 * _swell.value), child: child),
-          child: GestureDetector(
-            onLongPressStart: (d) => _grab(d.globalPosition),
-            onLongPressMoveUpdate: (d) => _carry(d.globalPosition),
-            onLongPressEnd: (d) => _drop(d.globalPosition),
-            child: KeyedSubtree(
-              key: _transcriKey,
-              child: _Transcri(away: on || _carried != null, sleeping: sleeping, land: _land),
-            ),
+          child: KeyedSubtree(
+            key: _transcriKey,
+            child: _Transcri(away: on || _carried != null, sleeping: sleeping, land: _land),
           ),
         ),
       ),
@@ -318,6 +410,14 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
       onTapDown: (_) => _down(),
       onTapUp: (_) => _release(),
       onTapCancel: _cancel,
+      // Tenuto fermo ascolta; mosso subito lo porti fuori. Come la pillola sul bordo.
+      onLongPressStart: (d) => _holdStart(d.globalPosition),
+      onLongPressMoveUpdate: _holdMove,
+      onLongPressEnd: (d) => _holdEnd(d.globalPosition),
+      onPanStart: (d) => _panStart(d.globalPosition),
+      onPanUpdate: (d) => _carry(d.globalPosition),
+      onPanEnd: (_) => _panEnd(),
+      onPanCancel: _panEnd,
       child: AnimatedBuilder(
         animation: _press,
         builder: (context, child) {
@@ -330,15 +430,120 @@ class _TranscriNestState extends State<TranscriNest> with TickerProviderStateMix
           scale: _hot ? 1.04 : 1,
           duration: const Duration(milliseconds: 280),
           curve: Curves.easeOutBack,
-          child: nest,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              if (_ring != null && _carried == null && !on) _VoiceRing(phase: _ring!, size: slot),
+              nest,
+            ],
+          ),
         ),
       ),
     );
   }
 
   /// Il fondo del nido: con lui a casa prende i suoi colori, tutto; quando esce si spegne. Niente alone.
-  Gradient _fill(Color base, bool home) =>
-      LinearGradient(colors: [for (final c in transcriColors) home ? Color.alphaBlend(c.withValues(alpha: 0.24), base) : base]);
+  Gradient _fill(Color base, bool home) => LinearGradient(
+    colors: [
+      for (final c in transcriColors)
+        !home
+            ? base
+            : Color.alphaBlend(
+                switch (_ring) {
+                  'RECORDING' => Tokens.red.withValues(alpha: 0.26),
+                  'SUCCESS' => Tokens.green.withValues(alpha: 0.26),
+                  _ => c.withValues(alpha: 0.24),
+                },
+                base,
+              ),
+    ],
+  );
+}
+
+/// L'anello intorno a Transcri mentre lavora nel Dock. Rosso che si muove con la voce quando ascolta,
+/// i suoi colori che girano quando trascrive, verde per un attimo quando ha finito.
+class _VoiceRing extends StatefulWidget {
+  const _VoiceRing({required this.phase, required this.size});
+
+  final String phase;
+  final double size;
+
+  @override
+  State<_VoiceRing> createState() => _VoiceRingState();
+}
+
+class _VoiceRingState extends State<_VoiceRing> with SingleTickerProviderStateMixin {
+  late final _time = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat();
+
+  /// Il volume arriva a scatti: l'anello lo insegue, così si muove morbido.
+  double _level = 0;
+
+  @override
+  void dispose() {
+    _time.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _time,
+        builder: (context, _) {
+          _level += (Core.live.value.level - _level) * 0.2;
+          final seconds = (_time.lastElapsedDuration?.inMilliseconds ?? 0) / 1000;
+          return CustomPaint(
+            size: Size.square(widget.size),
+            painter: _RingPainter(widget.phase, _level, seconds),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  _RingPainter(this.phase, this.level, this.t);
+
+  final String phase;
+  final double level, t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final listening = phase == 'RECORDING';
+    final base = size.width / 2 + 1.5 + (listening ? level * 5 : 0);
+    // Due onde lente che scorrono in versi opposti: la forma non si ripete e non sembra un ingranaggio.
+    final wave = listening ? 0.5 + level * 3.2 : 0.5;
+    final path = Path();
+    const steps = 72;
+    for (var i = 0; i <= steps; i++) {
+      final a = i / steps * math.pi * 2;
+      final r = base + wave * (math.sin(3 * a + t * 2.3) * 0.6 + math.sin(5 * a - t * 1.6) * 0.4);
+      final p = c + Offset(math.cos(a) * r, math.sin(a) * r);
+      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+    }
+    path.close();
+    final pen = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = listening ? 2.4 + level * 1.4 : 2.4;
+    switch (phase) {
+      case 'RECORDING':
+        pen.color = Tokens.red;
+      case 'SUCCESS':
+        pen.color = Tokens.green;
+      default:
+        pen.shader = SweepGradient(
+          colors: [...transcriColors, transcriColors.first],
+          transform: GradientRotation(t * 3),
+        ).createShader(Rect.fromCircle(center: c, radius: base));
+    }
+    canvas.drawPath(path, pen);
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) => old.phase != phase || old.level != level || old.t != t;
 }
 
 /// Transcri a casa: una capsula bianca con due occhi. Respira, ogni tanto sbatte gli occhi,

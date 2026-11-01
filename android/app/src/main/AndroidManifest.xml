@@ -75,6 +75,40 @@
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
+        <!-- Un audio condiviso da un'altra app, per esempio un vocale di WhatsApp. Non si vede: mette
+             l'audio in coda e si chiude. Compare due volte nel «Condividi», una per ogni destinazione. -->
+        <activity
+            android:name=".ShareAudio"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity-alias
+            android:name=".ShareAsTranscription"
+            android:exported="true"
+            android:label="Trascrizione"
+            android:targetActivity=".ShareAudio">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".ShareAsThought"
+            android:exported="true"
+            android:label="Pensiero"
+            android:targetActivity=".ShareAudio">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+            </intent-filter>
+        </activity-alias>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
