@@ -6,11 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/native.dart';
+import '../core/ricerca.dart';
 import 'common.dart';
+import 'molecole/lista_categoria.dart';
+import 'molecole/riga_trovata.dart';
 import 'molecole/pezzo_argomento.dart';
 import 'molecole/scheda_argomento.dart';
 import 'molecole/stato_vuoto.dart';
 import 'theme.dart';
+import 'trascrivi.dart';
 
 /// Apre una nota (o una nuova, vuota) e ci pensa lui a salvarla quando torni indietro.
 /// Se l'hai eliminata, per qualche secondo la puoi riavere.
@@ -117,16 +121,48 @@ class _PensieriPageState extends State<PensieriPage> {
     Core.addListener(_load);
     // Solo quando cambia il testo cercato (non il cursore).
     _search.addListener(() {
-      if (_search.text != _cercato) setState(() => _cercato = _search.text);
+      if (_search.text == _cercato) return;
+      setState(() => _cercato = _search.text);
+      _attesa?.cancel();
+      _attesa = Timer(Durata.normale, _cerca);
     });
+    Ricerca.comeFrasi.addListener(_ridisegna);
     _load();
   }
 
+  void _ridisegna() => setState(() {});
+
   String _cercato = '';
+
+  /// Si cerca quando smetti di scrivere per un attimo, non a ogni lettera.
+  Timer? _attesa;
+
+  /// Quello che ha trovato il motore per [_cercato]; null finché non ha risposto.
+  List<Trovato>? _trovati;
+
+  /// Le trascrizioni, per mostrare quelle trovate (solo nella lista di frasi).
+  Map<String, Entry> _voci = {};
+
+  bool get _cercando => _cercato.trim().isNotEmpty && _trovati != null;
+
+  Future<void> _cerca() async {
+    final q = _cercato;
+    if (q.trim().isEmpty) return setState(() => _trovati = null);
+    final r = await Ricerca.cerca(q);
+    final voci = await Core.history();
+    // Nel frattempo hai scritto altro: questa risposta è vecchia.
+    if (!mounted || q != _cercato) return;
+    setState(() {
+      _trovati = r;
+      _voci = {for (final e in voci) '${e.at.millisecondsSinceEpoch}': e};
+    });
+  }
 
   @override
   void dispose() {
     Core.removeListener(_load);
+    Ricerca.comeFrasi.removeListener(_ridisegna);
+    _attesa?.cancel();
     _search.dispose();
     _scroll.dispose();
     super.dispose();
@@ -138,24 +174,36 @@ class _PensieriPageState extends State<PensieriPage> {
     if (mounted && !listEquals(list, notes)) setState(() => notes = list);
   }
 
-  /// Le note che contengono tutte le parole cercate, nel titolo o nel testo, senza badare alle maiuscole.
-  /// Si rifà solo se cambiano le note o le parole (non quando scegli una nota).
+  /// Le note trovate, nell'ordine del motore (prima per parola, poi per senso). Senza ricerca, tutte.
   List<Note> _found(List<Note> all) {
-    if (identical(all, _trovateIn) && _cercato == _trovatePer) return _trovate;
-    final words = _cercato.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-    _trovateIn = all;
-    _trovatePer = _cercato;
-    return _trovate = words.isEmpty
-        ? all
-        : all.where((n) {
-            final hay = '${n.title}\n${n.text}'.toLowerCase();
-            return words.every(hay.contains);
-          }).toList();
+    if (!_cercando) return all;
+    final perId = {for (final n in all) n.id: n};
+    return [
+      for (final x in _trovati!)
+        if (x.nota && perId[x.id] != null) perId[x.id]!,
+    ];
   }
 
-  List<Note>? _trovateIn;
-  String? _trovatePer;
-  List<Note> _trovate = const [];
+  /// Le frasi trovate, da note e trascrizioni insieme: la frase, e sotto da dove viene.
+  List<Widget> _frasi(List<Note> all) {
+    final perId = {for (final n in all) n.id: n};
+    return [
+      for (final x in _trovati ?? const <Trovato>[])
+        if ((x.nota ? perId[x.id]?.text : _voci[x.id]?.text) case final testo? when x.frase.end <= testo.length)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Spazio.s3),
+            child: RigaTrovata(
+              frase: x.frase.textInside(testo).trim(),
+              cercato: _cercato,
+              nota: x.nota,
+              daDove: x.nota
+                  ? (perId[x.id]!.title.trim().isEmpty ? shortStamp(perId[x.id]!.updated) : perId[x.id]!.title.trim())
+                  : 'Trascrizione · ${shortStamp(_voci[x.id]!.at)}',
+              onApri: () => x.nota ? openNote(context, perId[x.id]) : openEntry(context, _voci[x.id]!),
+            ),
+          ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -163,6 +211,7 @@ class _PensieriPageState extends State<PensieriPage> {
     if (all == null) return const SizedBox.shrink();
     final tk = context.col;
     final shown = _found(all);
+    final frasi = _cercando && Ricerca.comeFrasi.value ? _frasi(all) : null;
     if (all.isEmpty) {
       return StatoVuoto(frase: 'Le tue note stanno qui.\nScrivine una con la matita, in basso.', bottom: widget.bottom);
     }
@@ -177,10 +226,12 @@ class _PensieriPageState extends State<PensieriPage> {
         ),
         SliverPadding(
           padding: EdgeInsets.fromLTRB(16, 0, 16, widget.bottom + 24 + ConSelezione.spazio(selected.isNotEmpty)),
-          sliver: shown.isEmpty
+          sliver: (frasi?.isEmpty ?? shown.isEmpty)
               ? SliverToBoxAdapter(
-                  child: _Hint(top: 'Niente con «${_search.text.trim()}».', bottom: 'Prova con un\'altra parola.', color: tk.testoSecondario),
+                  child: _Hint(top: 'Niente con «${_search.text.trim()}».', bottom: 'Prova a dirlo con altre parole.', color: tk.testoSecondario),
                 )
+              : frasi != null
+              ? SliverList.list(children: frasi)
               : Masonry(
                   children: [
                     for (final n in shown)
@@ -235,27 +286,54 @@ class _ArgomentiPageState extends State<ArgomentiPage> {
   void initState() {
     super.initState();
     Core.addListener(_load);
+    Ricerca.perCategorie.addListener(_ridisegna);
     _load();
   }
 
   @override
   void dispose() {
     Core.removeListener(_load);
+    Ricerca.perCategorie.removeListener(_ridisegna);
     super.dispose();
   }
 
   Future<void> _load() async {
     final a = await Core.albums();
+    final c = await Ricerca.categorie();
     final n = await Core.notes();
     if (!mounted) return;
     // Se non è cambiato niente, non si ridisegna niente.
-    if (listEquals(a, albums) && listEquals(n, _lette)) return;
+    if (listEquals(a, albums) && listEquals(n, _lette) && listEquals(c, _categorie)) return;
     _lette = n;
     setState(() {
       albums = a;
+      _categorie = c;
       notes = {for (final x in n) x.id: x};
     });
   }
+
+  /// Le categorie fisse (la scelta del 3 nov), con le loro frasi chiave.
+  List<Categoria>? _categorie;
+
+  void _ridisegna() => setState(() {});
+
+  /// Ogni categoria come lista di frasi chiave; toccandone una si apre la nota.
+  Widget _perCategorie(List<Categoria> tutte) => ListView.separated(
+    padding: EdgeInsets.fromLTRB(Spazio.s4, Spazio.s2, Spazio.s4, widget.bottom + Spazio.s6),
+    itemCount: tutte.length,
+    separatorBuilder: (_, _) => const SizedBox(height: Spazio.s5),
+    itemBuilder: (context, i) {
+      final frasi = [
+        for (final f in tutte[i].frasi)
+          if (notes[f.note] case final n? when f.range.end <= n.text.length) (nota: n, testo: f.range.textInside(n.text).trim()),
+      ];
+      return ListaCategoria(
+        nome: tutte[i].nome,
+        frasi: [for (final f in frasi) f.testo],
+        onApri: (k) => openNote(context, frasi[k].nota),
+      );
+    },
+  );
 
   /// Le note come sono arrivate l'ultima volta.
   List<Note>? _lette;
@@ -264,6 +342,8 @@ class _ArgomentiPageState extends State<ArgomentiPage> {
   Widget build(BuildContext context) {
     final list = albums;
     if (list == null) return const SizedBox.shrink();
+    final categorie = _categorie;
+    if (Ricerca.perCategorie.value && categorie != null && categorie.isNotEmpty) return _perCategorie(categorie);
     if (list.isEmpty) {
       final ready = notes.values.where((n) => n.topics == 'ready').length;
       return StatoVuoto(
@@ -700,14 +780,34 @@ class _NoteEditorState extends State<NoteEditor> {
   String? _label;
   Timer? _labelTimer;
 
+  /// Il testo com'era all'ultimo salvataggio: gli argomenti che arrivano sono di questo.
+  late String _salvato = widget.note.text;
+
+  /// La grana chiesta mentre gli argomenti si facevano: appena arrivano si accende.
+  int? _livelloAtteso;
+
   Future<void> _loadTopics() async {
-    if (widget.note.isEmpty) return;
+    if (_salvato.trim().isEmpty) return;
     final t = await Core.noteTopics(widget.note.id);
     if (!mounted) return;
     setState(() {
       _text.topics = t;
-      _text.topicsFor = widget.note.text;
+      _text.topicsFor = _salvato;
     });
+    final atteso = _livelloAtteso;
+    if (_text.usable && atteso != null) {
+      _livelloAtteso = null;
+      _setLevel(atteso);
+    }
+  }
+
+  /// Hai cambiato la nota e chiedi gli argomenti: si salva adesso (è il suo «commit») e arrivano appena pronti.
+  Future<void> _salvaPerArgomenti(int level) async {
+    _livelloAtteso = level;
+    _salvato = _text.text;
+    _say('Salvo e divido per argomento…');
+    await Core.saveNote(_current);
+    Core.refresh();
   }
 
   void _say(String s) {
@@ -720,12 +820,11 @@ class _NoteEditorState extends State<NoteEditor> {
 
   void _setLevel(int level) {
     if (!_text.usable) {
-      // Il motivo, invece di niente: gli argomenti si fanno quando salvi.
-      _say(switch (widget.note.topics) {
-        'pending' => 'Sto dividendo per argomento…',
-        'off' when !widget.note.isEmpty => 'Accendi «Dividi per argomento» nelle impostazioni',
-        _ => 'Gli argomenti arrivano quando salvi',
-      });
+      if (widget.note.topics == 'off' && !widget.note.isEmpty) return _say('Accendi «Dividi per argomento» nelle impostazioni');
+      if (_text.text.trim().isEmpty) return _say('Scrivi qualcosa, poi lo divido per argomento');
+      if (_livelloAtteso != null && _salvato == _text.text) return _say('Sto dividendo per argomento…');
+      // Gli argomenti si fanno sul testo salvato: si salva adesso, senza chiederti niente.
+      _salvaPerArgomenti(level.clamp(1, 4));
       return;
     }
     // Gli argomenti stanno sul testo intero: il riassunto si fa da parte.
@@ -839,6 +938,9 @@ class _NoteEditorState extends State<NoteEditor> {
         final short = await Core.summarize(of);
         _summary = short;
         _summaryOf = of;
+        // Si salva subito: la prossima volta il riassunto è già lì, anche se l'app si chiude prima di uscire dalla nota.
+        _salvato = of;
+        await Core.saveNote(_current);
       } on PlatformException {
         if (mounted) {
           setState(() => _summarizing = false);

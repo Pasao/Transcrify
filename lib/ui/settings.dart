@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../core/native.dart';
+import '../core/ricerca.dart';
 import 'mode_icon.dart';
 import 'onboarding.dart';
 import 'theme.dart';
@@ -168,6 +169,16 @@ class _SettingsPageState extends State<SettingsPage> {
     final tiers = speech ? ModelTiers.speech(ids) : ModelTiers.text(ids, current);
     return tiers.labelOf(current) ?? _short(current);
   }
+
+  /// Un interruttore delle prove: acceso o spento, legato a una scelta che vive finché l'app è aperta.
+  Widget _interruttore(IconData icona, String titolo, String sotto, ValueNotifier<bool> scelta) => SettingsRow(
+    icon: icona,
+    color: context.col.azione,
+    title: titolo,
+    subtitle: sotto,
+    trailing: Switch(value: scelta.value, onChanged: (on) => setState(() => scelta.value = on)),
+    onTap: () => setState(() => scelta.value = !scelta.value),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -336,17 +347,9 @@ class _SettingsPageState extends State<SettingsPage> {
                           trailing: Switch(value: st.simulateLimit, onChanged: _setLimit),
                           onTap: () => _setLimit(!st.simulateLimit),
                         ),
-                        SettingsRow(
-                          icon: Icons.pinch_rounded,
-                          color: context.col.azione,
-                          title: 'Pizzico al contrario',
-                          subtitle: 'Stringere le dita = più argomenti',
-                          trailing: Switch(
-                            value: Core.pinchReversed.value,
-                            onChanged: (on) => setState(() => Core.pinchReversed.value = on),
-                          ),
-                          onTap: () => setState(() => Core.pinchReversed.value = !Core.pinchReversed.value),
-                        ),
+                        _interruttore(Icons.pinch_rounded, 'Pizzico al contrario', 'Stringere le dita = più argomenti', Core.pinchReversed),
+                        _interruttore(Icons.format_list_bulleted_rounded, 'Ricerca come frasi', 'Le frasi trovate, da note e trascrizioni; spento: le schede delle note', Ricerca.comeFrasi),
+                        _interruttore(Icons.category_rounded, 'Argomenti per categorie', 'Categorie fisse con le frasi chiave; spento: gli album del motore', Ricerca.perCategorie),
                         SettingsRow(
                           icon: Icons.wifi_off_rounded,
                           color: context.col.azione,

@@ -103,19 +103,7 @@ class _TrascriviPageState extends State<TrascriviPage> {
     _delete(gone);
   }
 
-  void _open(Entry e) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheet) => _EntrySheet(
-        entry: e,
-        onDelete: () async {
-          Navigator.pop(sheet);
-          await _delete([e]);
-        },
-      ),
-    );
-  }
+  void _open(Entry e) => openEntry(context, e, onDelete: () => _delete([e]));
 
   final _scroll = ScrollController();
 
@@ -630,6 +618,24 @@ class _ModeTag extends StatelessWidget {
 
 /// Il testo intero, aperto dal basso: si può cambiare e si salva da solo.
 /// Copia, elimina e «aggiungi a voce» stanno in alto: con i testi lunghi sono subito lì.
+/// Apre una trascrizione nella sua scheda (da Trascrivi o da una ricerca). [onDelete] arriva a scheda chiusa;
+/// senza, la trascrizione si elimina subito.
+void openEntry(BuildContext context, Entry e, {Future<void> Function()? onDelete}) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    builder: (sheet) => _EntrySheet(
+      entry: e,
+      onDelete: () async {
+        Navigator.pop(sheet);
+        if (onDelete != null) return onDelete();
+        await Core.deleteEntry(e.at);
+        Core.refresh();
+      },
+    ),
+  );
+}
+
 class _EntrySheet extends StatefulWidget {
   const _EntrySheet({required this.entry, required this.onDelete});
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'native.dart';
@@ -32,22 +33,34 @@ class Categoria {
 
   final String nome;
   final List<({String note, TextRange range})> frasi;
+
+  @override
+  bool operator ==(Object other) => other is Categoria && other.nome == nome && listEquals(other.frasi, frasi);
+
+  @override
+  int get hashCode => Object.hash(nome, Object.hashAll(frasi));
 }
 
 /// La ricerca e le categorie, fatte dal motore sul telefono.
 abstract final class Ricerca {
   static const _ch = MethodChannel('transcrify/core');
 
+  /// Nelle prove, per scegliere: i risultati come schede di note (false) o come frasi trovate, note e trascrizioni insieme (true).
+  static final comeFrasi = ValueNotifier<bool>(false);
+
+  /// Nelle prove: gli Argomenti come categorie fisse (true) o come album fatti dal motore (false).
+  static final perCategorie = ValueNotifier<bool>(true);
+
   /// Prima quelle con tutte le parole, poi quelle vicine per senso (se il modello degli argomenti c'è).
   static Future<List<Trovato>> cerca(String testo) async {
     if (Core.preview.value || testo.trim().isEmpty) return [];
-    final out = await _ch.invokeMethod('cerca', {'testo': testo}) as List;
+    final out = await _ch.invokeMethod('cerca', {'testo': testo}) as List? ?? const [];
     return [for (final m in out.cast<Map>()) Trovato(m)];
   }
 
   static Future<List<Categoria>> categorie() async {
     if (Core.preview.value) return [];
-    final out = await _ch.invokeMethod('categorie') as List;
+    final out = await _ch.invokeMethod('categorie') as List? ?? const [];
     return [for (final m in out.cast<Map>()) Categoria(m)];
   }
 }
