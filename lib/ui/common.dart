@@ -137,10 +137,11 @@ String dayLabel(DateTime d) {
 }
 
 /// Giorno e ora in poco spazio, per le schede strette: «Oggi, 22:46», «28 ott, 14:47».
+/// Di un altro anno, l'anno al posto dell'ora: «28 ott 2025».
 String shortStamp(DateTime d) {
   final day = dayLabel(d);
   final short = day == 'Oggi' || day == 'Ieri' ? day : '${d.day} ${_months[d.month - 1].substring(0, 3)}';
-  return '$short, ${hm(d)}';
+  return d.year == DateTime.now().year ? '$short, ${hm(d)}' : '$short ${d.year}';
 }
 
 /// Una lista con, sopra, la barra delle cose scelte. La struttura resta la stessa con o senza barra:
