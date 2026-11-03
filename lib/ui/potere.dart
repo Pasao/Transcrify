@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 enum Power {
   // Il microfono è il tasto per dettare, accanto a Transcri: il potere ha il suo segno, l'onda della voce.
   trascrivi('Trascrivi', Icons.graphic_eq_rounded),
-  pensieri('Pensieri', Icons.cloud_rounded);
+  pensieri('Note', Icons.cloud_rounded);
 
   const Power(this.label, this.icon);
 

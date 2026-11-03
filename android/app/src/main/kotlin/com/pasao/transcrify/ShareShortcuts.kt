@@ -25,7 +25,7 @@ object ShareShortcuts {
             .build()
         context.getSystemService(ShortcutManager::class.java)?.dynamicShortcuts = listOf(
             // Sopra Samsung ne mostra una per app: il pensiero, perché la trascrizione sta già tra le app.
-            shortcut(THOUGHT, "Transcrify pensiero", "THOUGHT", R.drawable.ic_share_thought, 0),
+            shortcut(THOUGHT, "Transcrify nota", "THOUGHT", R.drawable.ic_share_thought, 0),
             shortcut("trascrizione", "Transcrify trascrizione", "TRANSCRIPTION", R.drawable.ic_share_transcription, 1),
         )
     }

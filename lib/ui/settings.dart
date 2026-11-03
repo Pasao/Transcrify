@@ -154,7 +154,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
     Core.refresh();
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('«Nota di prova» è nei Pensieri')));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('«Nota di prova» è nelle Note')));
   }
 
   static String _short(String model) => model.substring(model.lastIndexOf('/') + 1);

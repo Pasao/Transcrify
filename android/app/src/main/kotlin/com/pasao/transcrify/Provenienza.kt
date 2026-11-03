@@ -58,7 +58,7 @@ object Provenienza {
             origin.vocale -> "Vocale di $app"
             else -> "Audio da $app"
         }
-        return base + if (origin.toNote) " · nei Pensieri" else ""
+        return base + if (origin.toNote) " · nelle Note" else ""
     }
 
     private fun ricorda(ctx: Context, p: String) = runCatching {
