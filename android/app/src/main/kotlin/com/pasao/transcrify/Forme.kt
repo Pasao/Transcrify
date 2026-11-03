@@ -12,5 +12,6 @@ object Forme {
     val scheda = RoundedCornerShape(18.dp)
 
     /** raggio/foglio (28): i riquadri grandi. */
-    val foglio = RoundedCornerShape(28.dp)
+    val raggioFoglio = 28.dp
+    val foglio = RoundedCornerShape(raggioFoglio)
 }

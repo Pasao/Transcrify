@@ -95,9 +95,9 @@ private fun Schermo(onFatto: () -> Unit) {
                     drawRect(c.surface)
                     val m = 16.dp.toPx()
                     drawRoundRect(
-                        Color.Black, topLeft = androidx.compose.ui.geometry.Offset(m, 0f),
-                        size = androidx.compose.ui.geometry.Size(size.width - 2 * m, size.height),
-                        cornerRadius = CornerRadius(28.dp.toPx()), blendMode = BlendMode.Clear,
+                        Color.Black, androidx.compose.ui.geometry.Offset(m, 0f),
+                        androidx.compose.ui.geometry.Size(size.width - 2 * m, size.height),
+                        CornerRadius(Forme.raggioFoglio.toPx()), blendMode = BlendMode.Clear,
                     )
                     drawContent()
                 },
