@@ -89,6 +89,13 @@ class Entry {
 
   /// Il modo di pulizia usato ("fedele", "pulita", "riassunto"), null se è il testo così com'è.
   final String? mode;
+
+  /// Uguale se non è cambiato niente: rileggendo dal nativo, la lista si ridisegna solo se serve.
+  @override
+  bool operator ==(Object other) => other is Entry && other.at == at && other.text == text && other.purified == purified && other.mode == mode && other.source == source;
+
+  @override
+  int get hashCode => Object.hash(at, text, purified, mode, source);
 }
 
 /// Una nota: tua, da rileggere. Si scrive a mano (per ora); il titolo può restare vuoto.
@@ -125,6 +132,14 @@ class Note {
   final String? summary;
 
   bool get isEmpty => title.trim().isEmpty && text.trim().isEmpty;
+
+  /// Uguale se non è cambiato niente (anche lo stato degli argomenti): la lista si ridisegna solo se serve.
+  @override
+  bool operator ==(Object other) =>
+      other is Note && other.id == id && other.updated == updated && other.created == created && other.topics == topics && other.title == title && other.text == text && other.source == source && other.summary == summary;
+
+  @override
+  int get hashCode => Object.hash(id, updated, topics, title, text);
 
   Note edited({required String title, required String text, String? summary}) =>
       Note(id: id, title: title, text: text, created: created, updated: DateTime.now(), source: source, summary: summary);
@@ -201,6 +216,12 @@ class Album {
   final List<({String note, TextRange range})> pieces;
 
   int get notes => pieces.map((p) => p.note).toSet().length;
+
+  @override
+  bool operator ==(Object other) => other is Album && other.id == id && other.name == name && other.concetto == concetto && other.concettoNome == concettoNome && listEquals(other.pieces, pieces);
+
+  @override
+  int get hashCode => Object.hash(id, name, concetto, concettoNome, pieces.length);
 }
 
 /// Un modello per gli argomenti: si chiama «più preciso» o «più leggero»; il nome vero è scritto piccolo.
@@ -297,8 +318,12 @@ class Core {
   /// Nome e icona dell'app di un audio condiviso: si chiedono una volta per app, poi restano in memoria.
   static Future<Provenienza> provenienza(String source) => _provenienze[source] ??= _ch
       .invokeMapMethod<String, Object?>('provenienza', {'source': source})
-      .then((m) => Provenienza(m?['nome'] as String?, m?['icona'] as Uint8List?));
+      .then((m) => _pronte[source] = Provenienza(m?['nome'] as String?, m?['icona'] as Uint8List?));
   static final _provenienze = <String, Future<Provenienza>>{};
+
+  /// La provenienza se è già arrivata: una scheda che compare scorrendo ha subito la sua icona.
+  static Provenienza? provenienzaPronta(String source) => _pronte[source];
+  static final _pronte = <String, Provenienza>{};
 
   static final _changed = <VoidCallback>{};
   static ValueChanged<bool>? _nestHot;

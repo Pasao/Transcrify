@@ -73,6 +73,7 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
 - ☑ Mirino: `atomi/mirino.dart`, GrainIcon ora lo disegna
 - ☑ EtichettaGruppo: `atomi/etichetta_gruppo.dart`, usata dai gruppi delle impostazioni
 - ☑ IconaModo, IconaFonte: colori dai token
+- ☑ Anteprima: `atomi/anteprima.dart`, l'inizio del testo su una scheda (righe e «…»); a Flutter arriva solo l'inizio, non la dettatura intera. La usano la scheda di Trascrivi e SchedaNota
 
 ### Il Dock e i poteri
 - ☑ Dock: `dock.dart` compone `molecole/` (isola, medaglione, pillola_pagine, rientra); `potere.dart` a parte.
@@ -97,6 +98,7 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
 - ☑ Pensieri: colori dai token; selettore ed etichetta della grana sul fondo «floater» (`EtichettaSospesa`); i 6 colori degli argomenti = token `argomenti` (via la lista a parte) ☑; SchedaNota con la Scheda ☑
 - ☑ Nota aperta: Mirino, selettore della grana sul fondo «floater», etichetta della grana = EtichettaSospesa
 - ☑ Argomenti a due livelli: il motore raggruppa gli album che si somigliano (`Topics.concetti`, test `conceptsGroupEveryShownAlbumOnce`) e manda `concetto` a ogni album; `molecole/scheda_argomento.dart` (concetto col suo colore, mosaico: il più parlato grande, gli altri piccoli; tessere che crescono col testo, test di overflow); `molecole/pezzo_argomento.dart` (riassunto dei pezzi lunghi con Groq, «Originale»; i corti interi; riassunti tenuti in memoria finché l'app è aperta). Da vedere sul telefono.
+- ☑ Liste fluide (3 nov): Trascrivi e Pensieri costruiscono solo quello che si vede (Trascrivi una lista al contrario, un giorno per riga; Pensieri due colonne pigre, `Masonry` è uno sliver); rileggendo dal nativo si ridisegna solo se qualcosa è cambiato (`==` su Entry, Note, Album); il rosso del cestino tenuto premuto è sopra la scheda, non più un filtro di colore; le letture delle liste nel Kotlin sono fuori dal thread principale. Misure: `test/fluido_test.dart`
 - ☑ Stati vuoti: `molecole/stato_vuoto.dart`, uno solo per Trascrivi, Pensieri, Argomenti
 - ☑ Impostazioni: colori, testi, raggi dai token; le etichette dei gruppi usano EtichettaGruppo (erano due copie)
 - ☑ Chiave trovata: scheda neutra (Scheda), verde solo la spunta, bottone Pieno. ◐ Introduzione: la testata coi colori di Transcri è un'eccezione dichiarata

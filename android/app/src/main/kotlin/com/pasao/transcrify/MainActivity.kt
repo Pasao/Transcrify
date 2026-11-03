@@ -8,6 +8,8 @@ import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 
 /**
@@ -42,7 +44,7 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(mapOf("nome" to Provenienza.nome(this, source), "icona" to png))
                 }
-                "history" -> result.success(store.history().map { mapOf("text" to it.text, "at" to it.at, "purified" to it.purified, "mode" to it.mode, "source" to it.source) })
+                "history" -> background(result, letture) { store.history().map { mapOf("text" to it.text, "at" to it.at, "purified" to it.purified, "mode" to it.mode, "source" to it.source) } }
                 // Quello che si sta trascrivendo adesso non è "in attesa": compare solo se fallisce.
                 "pending" -> result.success(queue.all().filter { it.id !in (PillService.instance?.session?.working ?: emptySet()) }.map {
                     mapOf("id" to it.id, "at" to it.at, "seconds" to it.seconds, "mode" to it.mode)
@@ -157,9 +159,9 @@ class MainActivity : FlutterActivity() {
                     TopicModel.of(call.argument<String>("id"))?.let(topicModels::delete)
                     result.success(null)
                 }
-                "notes" -> result.success(store.notes().map { it.toMap() + ("topics" to topics.state(it.id, it.text)) })
+                "notes" -> background(result, letture) { store.notes().map { it.toMap() + ("topics" to topics.state(it.id, it.text)) } }
                 "noteTopics" -> result.success(topics.topics(call.argument<String>("id")!!))
-                "albums" -> result.success(topics.albums())
+                "albums" -> background(result, letture) { topics.albums() }
                 "share" -> {
                     val send = android.content.Intent(android.content.Intent.ACTION_SEND)
                         .setType("text/plain")
@@ -344,6 +346,7 @@ class MainActivity : FlutterActivity() {
         PillService.hotListener = null
         PillService.liveListener = null
         PillService.appNest = null
+        letture.shutdown()
         super.onDestroy()
     }
 
@@ -402,9 +405,15 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Lavoro di rete fuori dal thread principale; gli errori di Groq tornano come messaggi leggibili. */
-    private fun background(result: MethodChannel.Result, work: () -> Any?) {
-        thread {
+    /**
+     * Le letture delle liste (file + JSON) fuori dal thread principale, che con Flutter è anche quello
+     * dell'interfaccia: leggere lì faceva saltare i fotogrammi. Una alla volta, così arrivano in ordine.
+     */
+    private val letture = Executors.newSingleThreadExecutor()
+
+    /** Lavoro di rete (o una lettura, in [on]) fuori dal thread principale; gli errori di Groq tornano come messaggi leggibili. */
+    private fun background(result: MethodChannel.Result, on: Executor = Executor { thread(block = it::run) }, work: () -> Any?) {
+        on.execute {
             try {
                 val value = work()
                 main.post { result.success(value) }

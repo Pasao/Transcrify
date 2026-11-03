@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -114,9 +115,14 @@ class _PensieriPageState extends State<PensieriPage> {
   void initState() {
     super.initState();
     Core.addListener(_load);
-    _search.addListener(() => setState(() {}));
+    // Solo quando cambia il testo cercato (non il cursore).
+    _search.addListener(() {
+      if (_search.text != _cercato) setState(() => _cercato = _search.text);
+    });
     _load();
   }
+
+  String _cercato = '';
 
   @override
   void dispose() {
@@ -128,18 +134,28 @@ class _PensieriPageState extends State<PensieriPage> {
 
   Future<void> _load() async {
     final list = await Core.notes();
-    if (mounted) setState(() => notes = list);
+    // Il nativo avvisa spesso (la pillola, gli argomenti): se non è cambiato niente, non si ridisegna niente.
+    if (mounted && !listEquals(list, notes)) setState(() => notes = list);
   }
 
   /// Le note che contengono tutte le parole cercate, nel titolo o nel testo, senza badare alle maiuscole.
+  /// Si rifà solo se cambiano le note o le parole (non quando scegli una nota).
   List<Note> _found(List<Note> all) {
-    final words = _search.text.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-    if (words.isEmpty) return all;
-    return all.where((n) {
-      final hay = '${n.title}\n${n.text}'.toLowerCase();
-      return words.every(hay.contains);
-    }).toList();
+    if (identical(all, _trovateIn) && _cercato == _trovatePer) return _trovate;
+    final words = _cercato.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    _trovateIn = all;
+    _trovatePer = _cercato;
+    return _trovate = words.isEmpty
+        ? all
+        : all.where((n) {
+            final hay = '${n.title}\n${n.text}'.toLowerCase();
+            return words.every(hay.contains);
+          }).toList();
   }
+
+  List<Note>? _trovateIn;
+  String? _trovatePer;
+  List<Note> _trovate = const [];
 
   @override
   Widget build(BuildContext context) {
@@ -150,28 +166,34 @@ class _PensieriPageState extends State<PensieriPage> {
     if (all.isEmpty) {
       return StatoVuoto(frase: 'Le tue note stanno qui.\nScrivine una con la matita, in basso.', bottom: widget.bottom);
     }
-    final list = ListView(
+    // Le note si costruiscono solo quando arrivano sullo schermo (Masonry è fatta di due liste pigre).
+    final list = CustomScrollView(
       controller: _scroll,
-      padding: EdgeInsets.fromLTRB(16, 8, 16, widget.bottom + 24 + ConSelezione.spazio(selected.isNotEmpty)),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      children: [
-        SearchField(controller: _search, hint: 'Cerca quello che ricordi'),
-        const SizedBox(height: 14),
-        if (shown.isEmpty)
-          _Hint(top: 'Niente con «${_search.text.trim()}».', bottom: 'Prova con un\'altra parola.', color: tk.testoSecondario)
-        else
-          Masonry(
-            children: [
-              for (final n in shown)
-                NoteCard(
-                  key: ValueKey(n.id),
-                  note: n,
-                  selected: selected.contains(n.id),
-                  onOpen: selected.isEmpty ? () => openNote(context, n) : () => _toggle(n.id),
-                  onSelect: () => _toggle(n.id),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+          sliver: SliverToBoxAdapter(child: SearchField(controller: _search, hint: 'Cerca quello che ricordi')),
+        ),
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, widget.bottom + 24 + ConSelezione.spazio(selected.isNotEmpty)),
+          sliver: shown.isEmpty
+              ? SliverToBoxAdapter(
+                  child: _Hint(top: 'Niente con «${_search.text.trim()}».', bottom: 'Prova con un\'altra parola.', color: tk.testoSecondario),
+                )
+              : Masonry(
+                  children: [
+                    for (final n in shown)
+                      NoteCard(
+                        key: ValueKey(n.id),
+                        note: n,
+                        selected: selected.contains(n.id),
+                        onOpen: selected.isEmpty ? () => openNote(context, n) : () => _toggle(n.id),
+                        onSelect: () => _toggle(n.id),
+                      ),
+                  ],
                 ),
-            ],
-          ),
+        ),
       ],
     );
     // Le azioni sulle note scelte, in fondo, sopra il Dock.
@@ -226,11 +248,17 @@ class _ArgomentiPageState extends State<ArgomentiPage> {
     final a = await Core.albums();
     final n = await Core.notes();
     if (!mounted) return;
+    // Se non è cambiato niente, non si ridisegna niente.
+    if (listEquals(a, albums) && listEquals(n, _lette)) return;
+    _lette = n;
     setState(() {
       albums = a;
       notes = {for (final x in n) x.id: x};
     });
   }
+
+  /// Le note come sono arrivate l'ultima volta.
+  List<Note>? _lette;
 
   @override
   Widget build(BuildContext context) {
@@ -357,6 +385,7 @@ class SearchField extends StatelessWidget {
 }
 
 /// Due colonne: ogni scheda va nella colonna più corta, così le note lunghe sono alte e le corte basse.
+/// È un pezzo di lista (sliver): ogni colonna è una lista pigra, le schede si fanno quando arrivano sullo schermo.
 class Masonry extends StatelessWidget {
   const Masonry({super.key, required this.children, this.gap = 10});
 
@@ -365,24 +394,25 @@ class Masonry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cols = [<Widget>[], <Widget>[]];
+    final cols = [<NoteCard>[], <NoteCard>[]];
     final heights = [0.0, 0.0];
     for (final c in children) {
       final i = heights[0] <= heights[1] ? 0 : 1;
-      cols[i].add(
-        Padding(
-          padding: EdgeInsets.only(bottom: gap),
-          child: c,
-        ),
-      );
+      cols[i].add(c);
       heights[i] += c.estimatedLines + 3;
     }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: Column(children: cols[0])),
-        SizedBox(width: gap),
-        Expanded(child: Column(children: cols[1])),
+    Widget colonna(List<NoteCard> cards) => SliverCrossAxisExpanded(
+      flex: 1,
+      sliver: SliverList.builder(
+        itemCount: cards.length,
+        itemBuilder: (_, i) => Padding(padding: EdgeInsets.only(bottom: gap), child: cards[i]),
+      ),
+    );
+    return SliverCrossAxisGroup(
+      slivers: [
+        colonna(cols[0]),
+        SliverConstrainedCrossAxis(maxExtent: gap, sliver: const SliverToBoxAdapter()),
+        colonna(cols[1]),
       ],
     );
   }
@@ -429,13 +459,7 @@ class NoteCard extends StatelessWidget {
                 Text(note.title.trim(), style: Testo.titoloScheda.copyWith(color: tk.testo), maxLines: 2, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: Spazio.s1),
               ],
-              if (note.text.trim().isNotEmpty)
-                Text(
-                  note.text.trim(),
-                  style: Testo.testo.copyWith(color: tk.testoSecondario),
-                  maxLines: _maxLines,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              if (note.text.trim().isNotEmpty) Anteprima(note.text.trim(), righe: _maxLines, stile: Testo.testo.copyWith(color: tk.testoSecondario)),
               const SizedBox(height: 8),
               Row(
                 children: [

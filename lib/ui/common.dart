@@ -250,6 +250,8 @@ class SourceIcon extends StatelessWidget {
     final source = this.source;
     if (source == null) return const SizedBox.shrink();
     return FutureBuilder<Provenienza>(
+      // Se è già arrivata, c'è dal primo fotogramma: scorrendo, l'icona non lampeggia.
+      initialData: Core.provenienzaPronta(source),
       future: Core.provenienza(source),
       builder: (context, snap) {
         final p = snap.data;
@@ -258,7 +260,16 @@ class SourceIcon extends StatelessWidget {
           message: p?.nome == null ? 'Audio condiviso' : 'Da ${p!.nome}',
           child: icona == null
               ? Icon(Icons.graphic_eq_rounded, size: size, color: context.col.testoSecondario)
-              : ClipOval(child: Image.memory(icona, width: size, height: size, gaplessPlayback: true)),
+              // Decodificata già piccola, alla misura in cui si vede (l'icona dell'app è molto più grande).
+              : ClipOval(
+                  child: Image.memory(
+                    icona,
+                    width: size,
+                    height: size,
+                    cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).ceil(),
+                    gaplessPlayback: true,
+                  ),
+                ),
         );
       },
     );

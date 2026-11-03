@@ -2,6 +2,7 @@
 /// Un file per atomo in ui/atomi/; qui si importano tutti insieme.
 library;
 
+export 'atomi/anteprima.dart';
 export 'atomi/blob_lavoro.dart';
 export 'atomi/bottone.dart';
 export 'atomi/bottone_icona.dart';

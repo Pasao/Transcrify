@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -49,7 +50,10 @@ class _TrascriviPageState extends State<TrascriviPage> {
     final n = ++_loads;
     final list = await Core.history();
     if (!mounted || n != _loads) return;
-    setState(() => entries = list.where((x) => !_deleting.contains(x.at)).toList());
+    final now = list.where((x) => !_deleting.contains(x.at)).toList();
+    // Il nativo avvisa spesso (la pillola, gli argomenti): se non è cambiato niente, non si ridisegna niente.
+    if (listEquals(now, entries) && _giorniDel == _oggi) return;
+    setState(() => entries = now);
   }
 
   /// Le trascrizioni appena cancellate: spariscono subito, ma per qualche secondo si possono riavere.
@@ -115,33 +119,123 @@ class _TrascriviPageState extends State<TrascriviPage> {
 
   final _scroll = ScrollController();
 
-  /// L'intestazione di ogni giorno: serve a sapere quale giorno si sta guardando.
+  /// Ogni giorno: serve a sapere quale giorno si sta guardando.
   final _dayKeys = <String, GlobalKey>{};
 
+  /// Dove sta un giorno nella lista (0 è lo spazio in fondo, 1 oggi): quando arriva un giorno nuovo,
+  /// gli altri tengono le loro schede invece di rifarle.
+  int? _indexOf(Key key) {
+    final g = _groups;
+    for (var i = 0; i < g.length; i++) {
+      if (_dayKeys[g[i].$1] == key) return g.length - i;
+    }
+    return null;
+  }
+
   /// Il giorno al centro della pagina: l'ultimo che comincia sopra quel punto.
+  /// La lista costruisce solo i giorni attorno a quello che si vede: si guardano quelli.
   String? _dayInView(double middle) {
     String? found;
-    for (final (label, _) in _groups(entries ?? const [])) {
+    var foundTop = double.negativeInfinity;
+    for (final (label, _) in _groups) {
       final box = _dayKeys[label]?.currentContext?.findRenderObject() as RenderBox?;
-      if (box == null || box.localToGlobal(Offset.zero).dy > middle) break;
-      found = label;
+      if (box == null || !box.hasSize) continue;
+      final top = box.localToGlobal(Offset.zero).dy;
+      if (top <= middle && top > foundTop) (found, foundTop) = (label, top);
     }
-    return found ?? (entries?.isEmpty ?? true ? null : dayLabel(entries!.last.at));
+    return found ?? (_groups.isEmpty ? null : _groups.first.$1);
   }
 
   /// Le trascrizioni in gruppi per giorno, dal più vecchio (in alto) a oggi (in basso, vicino al pollice).
-  List<(String, List<Entry>)> _groups(List<Entry> list) {
-    final out = <(String, List<Entry>)>[];
-    for (final e in list) {
-      final label = dayLabel(e.at);
-      if (out.isNotEmpty && out.last.$1 == label) {
-        out.last.$2.add(e);
-      } else {
-        out.add((label, [e]));
+  /// Si rifanno solo quando cambiano le trascrizioni, o il giorno («Oggi» diventa «Ieri»).
+  List<(String, List<Entry>)> get _groups {
+    final list = entries ?? const <Entry>[];
+    final oggi = _oggi;
+    if (!identical(list, _giorniDi) || oggi != _giorniDel) {
+      final out = <(String, List<Entry>)>[];
+      for (final e in list) {
+        final label = dayLabel(e.at);
+        if (out.isNotEmpty && out.last.$1 == label) {
+          out.last.$2.add(e);
+        } else {
+          out.add((label, [e]));
+        }
       }
+      _giorni = out.reversed.toList();
+      _giorniDi = list;
+      _giorniDel = oggi;
     }
-    return out.reversed.toList();
+    return _giorni;
   }
+
+  List<(String, List<Entry>)> _giorni = const [];
+  List<Entry>? _giorniDi;
+  DateTime? _giorniDel;
+
+  static DateTime get _oggi {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  /// Un giorno: il titolo, poi le sue schede (in fila, o su due colonne se l'hai aperto).
+  Widget _giorno(String label, List<Entry> items) => Column(
+    key: _dayKeys.putIfAbsent(label, GlobalKey.new),
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(Spazio.s5, Spazio.s6, Spazio.s2, Spazio.s3),
+        child: TitoloGiorno(
+          giorno: label,
+          quante: items.length,
+          aperto: items.length >= 4 ? openDays.contains(label) : null,
+          onApri: () => setState(() => openDays.contains(label) ? openDays.remove(label) : openDays.add(label)),
+        ),
+      ),
+      AnimatedSize(
+        duration: Durata.normale,
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.topCenter,
+        child: openDays.contains(label)
+            // Il giorno aperto: due colonne, si legge tutto senza scorrere di lato.
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    final w = (box.maxWidth - 10) / 2;
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [for (final e in items) _card(e, width: w)],
+                    );
+                  },
+                ),
+              )
+            : SizedBox(
+                height: 176,
+                child: ListView.separated(
+                  // Il giorno esce dallo schermo e torna: le schede restano dove le avevi fatte scorrere.
+                  key: PageStorageKey(label),
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: items.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 10),
+                  itemBuilder: (_, i) => _card(items[i]),
+                ),
+              ),
+      ),
+    ],
+  );
+
+  Widget _card(Entry e, {double? width}) => _MiniCard(
+    key: ValueKey(e.at),
+    entry: e,
+    width: width ?? _MiniCard.larga,
+    selected: selected.contains(e.at),
+    selecting: selected.isNotEmpty,
+    onOpen: selected.isEmpty ? () => _open(e) : () => _toggle(e),
+    onSelect: () => _toggle(e),
+    onDelete: () => _delete([e]),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -152,92 +246,30 @@ class _TrascriviPageState extends State<TrascriviPage> {
         // Da vuota la pagina non scorre: non c'è niente sotto.
         ? StatoVuoto(titolo: 'Oggi', frase: 'Quello che detti compare qui,\ngiorno per giorno.', bottom: widget.bottom)
         // Le schede stanno in basso, dove arriva il pollice; se sono tante, si scorre.
-        : LayoutBuilder(
-            builder: (context, box) => _FastScroll(
-              controller: _scroll,
-              bottom: widget.bottom,
-              dayAt: _dayInView,
-              child: SingleChildScrollView(
+        // Si costruiscono solo i giorni che si vedono (e i vicini); la lista al contrario parte dal fondo, da oggi.
+        : _FastScroll(
+            controller: _scroll,
+            bottom: widget.bottom,
+            dayAt: _dayInView,
+            child: ListView.builder(
               controller: _scroll,
               // Si apre dal fondo: oggi è subito lì.
               reverse: true,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: box.maxHeight),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    for (final (label, items) in _groups(list)) ...[
-                      Padding(
-                        key: _dayKeys.putIfAbsent(label, GlobalKey.new),
-                        padding: const EdgeInsets.fromLTRB(Spazio.s5, Spazio.s6, Spazio.s2, Spazio.s3),
-                        child: TitoloGiorno(
-                          giorno: label,
-                          quante: items.length,
-                          aperto: items.length >= 4 ? openDays.contains(label) : null,
-                          onApri: () => setState(() => openDays.contains(label) ? openDays.remove(label) : openDays.add(label)),
-                        ),
-                      ),
-                      AnimatedSize(
-                        duration: Durata.normale,
-                        curve: Curves.easeOutCubic,
-                        alignment: Alignment.topCenter,
-                        child: openDays.contains(label)
-                            // Il giorno aperto: due colonne, si legge tutto senza scorrere di lato.
-                            ? Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
-                                child: LayoutBuilder(
-                                  builder: (context, box) {
-                                    final w = (box.maxWidth - 10) / 2;
-                                    return Wrap(
-                                      spacing: 10,
-                                      runSpacing: 10,
-                                      children: [
-                                        for (final e in items)
-                                          _MiniCard(
-                                            key: ValueKey(e.at),
-                                            entry: e,
-                                            width: w,
-                                            selected: selected.contains(e.at),
-                                            selecting: selected.isNotEmpty,
-                                            onOpen: selected.isEmpty ? () => _open(e) : () => _toggle(e),
-                                            onSelect: () => _toggle(e),
-                                            onDelete: () => _delete([e]),
-                                          ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                              )
-                            : SizedBox(
-                                height: 176,
-                                child: ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                                  itemCount: items.length,
-                                  separatorBuilder: (_, _) => const SizedBox(width: 10),
-                                  itemBuilder: (_, i) => _MiniCard(
-                                    key: ValueKey(items[i].at),
-                                    entry: items[i],
-                                    selected: selected.contains(items[i].at),
-                                    selecting: selected.isNotEmpty,
-                                    onOpen: selected.isEmpty ? () => _open(items[i]) : () => _toggle(items[i]),
-                                    onSelect: () => _toggle(items[i]),
-                                    onDelete: () => _delete([items[i]]),
-                                  ),
-                                ),
-                              ),
-                      ),
-                    ],
-                    // Mentre scegli, le ultime salgono sopra la barra.
-                    AnimatedContainer(
-                      duration: Durata.normale,
-                      curve: Curva.standard,
-                      height: widget.bottom + 24 + ConSelezione.spazio(selected.isNotEmpty),
-                    ),
-                  ],
-                ),
-              ),
-              ),
+              padding: EdgeInsets.zero,
+              itemCount: _groups.length + 1,
+              findChildIndexCallback: _indexOf,
+              itemBuilder: (context, i) {
+                // Mentre scegli, le ultime salgono sopra la barra.
+                if (i == 0) {
+                  return AnimatedContainer(
+                    duration: Durata.normale,
+                    curve: Curva.standard,
+                    height: widget.bottom + 24 + ConSelezione.spazio(selected.isNotEmpty),
+                  );
+                }
+                final (label, items) = _groups[_groups.length - i];
+                return _giorno(label, items);
+              },
             ),
           );
     // Le azioni sulle trascrizioni scelte, in fondo, sopra il Dock: le stesse delle note.
@@ -424,8 +456,11 @@ class _MiniCard extends StatefulWidget {
     required this.onDelete,
     this.selected = false,
     this.selecting = false,
-    this.width = 240,
+    this.width = larga,
   });
+
+  /// La larghezza nel carosello del giorno.
+  static const larga = 240.0;
 
   final Entry entry;
   final double width;
@@ -492,8 +527,13 @@ class _MiniCardState extends State<_MiniCard> with SingleTickerProviderStateMixi
             opacity: 1 - out,
             child: Transform.scale(
               scale: 1 - out * 0.25,
-              child: ColorFiltered(
-                colorFilter: ColorFilter.mode(context.col.errore.withValues(alpha: red * 0.55), BlendMode.srcATop),
+              // Il rosso sopra la scheda, con la sua forma (la scheda è piena: come colorarla).
+              // Non un filtro di colore: quello costa un livello in più a ogni scheda, anche ferma.
+              child: DecoratedBox(
+                position: DecorationPosition.foreground,
+                decoration: red == 0
+                    ? const BoxDecoration()
+                    : ShapeDecoration(color: context.col.errore.withValues(alpha: red * 0.55), shape: Scheda.forma(context.col).copyWith(side: BorderSide.none)),
                 child: child,
               ),
             ),
@@ -529,12 +569,7 @@ class _MiniCardState extends State<_MiniCard> with SingleTickerProviderStateMixi
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(right: 6),
-                    child: Text(
-                      entry.text,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: Anteprima(entry.text, righe: 4, stile: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4)),
                   ),
                 ),
                 Row(
