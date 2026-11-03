@@ -85,6 +85,25 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
+        <!-- Da 4 × 1 in su, con Transcri a casa: lo fa uscire che detta già (come tenere premuta la pillola).
+             Stesso fondo e stessa tinta di «Apri»; il microfono è quello della notifica. -->
+        <FrameLayout
+            android:id="@+id/widget_record"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/widget_open_bg"
+            android:contentDescription="Detta subito"
+            android:visibility="gone">
+            <ImageView
+                android:id="@+id/widget_record_icon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_stat_mic" />
+        </FrameLayout>
+
         <!-- Da 4 × 1 in su: apre l'app, senza cercarla. Il resto del widget continua a far uscire Transcri. -->
         <LinearLayout
             android:id="@+id/widget_open"

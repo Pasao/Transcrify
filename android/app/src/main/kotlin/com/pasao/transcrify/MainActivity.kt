@@ -292,7 +292,8 @@ class MainActivity : FlutterActivity() {
                             toApp = true,
                         )
                     } else {
-                        PillService.stop(this)
+                        // Senza punto d'arrivo rientra nella casa in basso: quello che stava registrando si manda lo stesso.
+                        pill?.rientra()
                     }
                     result.success(null)
                 }

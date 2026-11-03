@@ -187,8 +187,9 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // «Chiudi» nella notifica: rientra come con la X, e se stava registrando manda quello che ha sentito.
         if (intent?.action == ACTION_STOP) {
-            stopSelf()
+            rientra()
             return START_NOT_STICKY
         }
         // Il tipo microfono senza il permesso farebbe chiudere l'app: per un audio condiviso non serve.
@@ -218,6 +219,8 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val x = intent?.getFloatExtra(EXTRA_X, -1f) ?: -1f
         val y = intent?.getFloatExtra(EXTRA_Y, -1f) ?: -1f
         if (x >= 0 && y >= 0) showStage(Stage.Intro(Offset(x, y), intent?.getFloatArrayExtra(EXTRA_HOME)?.toRect()))
+        // Dal tasto che detta: lo stesso ascolto dell'app (e della pillola tenuta premuta), mentre esce.
+        if (intent?.getBooleanExtra(EXTRA_RECORD, false) == true) listen(null, -1)
         listener?.invoke()
         // Niente riavvio automatico: Android non permette di riaprire il microfono da dietro le quinte.
         return START_NOT_STICKY
@@ -695,6 +698,13 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     /** Dal bottone dell'app: la pillola rientra volando nel punto [to]. */
     fun recall(to: Offset, home: Rect?, toApp: Boolean = false) = showStage(Stage.Outro(to, home, toApp))
 
+    /**
+     * Torna a casa senza sapere dove (un tocco sul widget senza la sua posizione, «Chiudi» nella notifica):
+     * se è fuori rientra nella casa in basso, se è nel Dock si ferma. In tutti e due i casi quello che stava
+     * registrando, anche in pausa, si trascrive e si copia come quando lo fermi tu: non si butta e non resta in attesa.
+     */
+    fun rientra() = if (out) recall(dismissCenter(), null) else stopListening()
+
     fun openAppSettings() {
         startActivity(
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
@@ -746,6 +756,8 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         private const val EXTRA_X = "x"
         private const val EXTRA_Y = "y"
         private const val EXTRA_HOME = "home"
+        /** Esce già in ascolto: lo passa anche il tasto che detta del widget al suo trampolino. */
+        const val EXTRA_RECORD = "record"
 
         var instance: PillService? = null; private set
         /** Fuori casa: acceso e non sta già rientrando. */
@@ -779,11 +791,14 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         /** Avvisato quando, trascinandolo, Transcri arriva sopra il nido dell'app (o se ne allontana). */
         var hotListener: ((Boolean) -> Unit)? = null
 
-        /** [x], [y]: punto dello schermo (px) da cui esce la bolla; [home]: la capsula di casa nel bottone (l, t, r, b). */
-        fun start(context: Context, x: Float, y: Float, home: FloatArray?) {
+        /**
+         * [x], [y]: punto dello schermo (px) da cui esce la bolla; [home]: la capsula di casa nel bottone (l, t, r, b).
+         * [record]: esce già in ascolto (il tasto che detta del widget 4 × 1).
+         */
+        fun start(context: Context, x: Float, y: Float, home: FloatArray?, record: Boolean = false) {
             context.startForegroundService(
                 Intent(context, PillService::class.java).putExtra(EXTRA_X, x).putExtra(EXTRA_Y, y)
-                    .putExtra(EXTRA_HOME, home)
+                    .putExtra(EXTRA_HOME, home).putExtra(EXTRA_RECORD, record)
             )
         }
 

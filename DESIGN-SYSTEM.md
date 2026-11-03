@@ -108,6 +108,13 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
 - ☑ Vocale da parte: «rimpicciolisci» lo mette da parte (`PillService.daParte`), la pillola mostra la rientranza con l'iconcina; il pannello compatto si allarga e in cima ha la riga (onda, titolo, ⤢ riapre, X toglie); resta fuori finché c'è. **Da provare dal vivo** (serve un vocale condiviso).
 - ☑ CasaInBasso: colori dai token (Palette)
 - ☑ Widget: «Richiama»; colori da `WidgetColori.kt` (dai token, gli stessi per widget e anteprima): la pillola colorata col fondo (a tinta unita: il launcher non colora un gradiente da codice), Transcri disegnato coi suoi due toni. Via gli sfondi a gradiente fissi. **Da vedere sulla Home.**
+- ☑ Widget 4 × 1, tasto «Detta subito» (3 nov): accanto ad «Apri», tondo, stesso fondo e stessa tinta (`tasto` in
+  `TranscriWidget.kt`, lo usano tutti e due), il microfono della notifica. C'è solo con Transcri a casa: lui esce dal
+  tasto già in ascolto (`PillService.start(…, record = true)` → lo stesso `listen` dell'app). Senza permessi o chiave
+  si apre l'app, come col tocco normale. **Da vedere sulla Home** (a 280 dp la scritta resta stretta).
+- ☑ Richiamarlo mentre registra non butta niente (3 nov): widget, casa in basso, X, «Chiudi» nella notifica →
+  si ferma e trascrive come col ✓ (`PillService.rientra()` quando non si sa dove rientrare); nel nido dell'app
+  continua ad ascoltare nel Dock. Prima, senza la posizione del widget e con «Chiudi», l'audio restava solo «in attesa».
 
 ## Il suo giro del 2 novembre (sera) e cosa è cambiato
 - Selettore della grana: la riga scelta si colora per intero; la grana è quella della riga sotto il dito
