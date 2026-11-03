@@ -60,6 +60,22 @@ class Engine(
 
     fun piece(id: Long): Pair<String, IntRange>? = pieceAt[id]
 
+    /** Tutti i pezzi delle note: id → (nota, frasi). */
+    val pezzi: Map<Long, Pair<String, IntRange>> get() = pieceAt
+
+    /**
+     * Il senso di una frase intera, ricordato come quelli delle note (su disco, una volta per modello).
+     * Per le categorie: la loro descrizione si chiede al modello solo la prima volta.
+     */
+    fun frase(text: String): FloatArray {
+        val fp = Fingerprint.of(text)
+        memory[fp]?.let { return it.toFloats() }
+        val v = Int8Vec.of(Vec.normalized(embedder.embed(listOf(text)).first()))
+        memory[fp] = v
+        learned(mapOf(fp to v))
+        return v.toFloats()
+    }
+
     val remembered get() = memory.size
 
     /** Ogni frase delle note e delle trascrizioni, per cercare per senso. */

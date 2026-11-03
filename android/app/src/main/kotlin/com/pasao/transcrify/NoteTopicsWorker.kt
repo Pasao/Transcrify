@@ -2,6 +2,7 @@ package com.pasao.transcrify
 
 import android.app.ActivityManager
 import android.content.Context
+import com.pasao.transcrify.engine.Categorie
 import com.pasao.transcrify.engine.Embedder
 import com.pasao.transcrify.engine.Engine
 import com.pasao.transcrify.engine.Keywords
@@ -85,6 +86,7 @@ class NoteTopicsWorker private constructor(context: Context) {
 
     /** Gli album pronti da mostrare (copiati dal thread del lavoro: l'app li legge quando vuole). */
     @Volatile private var albumsSnapshot: List<Map<String, Any>> = emptyList()
+    @Volatile private var categorieSnapshot: List<Map<String, Any>> = emptyList()
 
     init {
         // Appena un modello finisce di scaricarsi, si fanno le note che aspettano.
@@ -125,6 +127,9 @@ class NoteTopicsWorker private constructor(context: Context) {
 
     /** Gli album: argomenti che tornano in più pezzi, con un nome fatto delle loro parole chiave. */
     fun albums(): List<Map<String, Any>> = albumsSnapshot
+
+    /** Le categorie fisse con le frasi chiave dei pezzi che ci stanno dentro, dalla più piena. */
+    fun categorie(): List<Map<String, Any>> = categorieSnapshot
 
     fun request(id: String) {
         if (!pending.add(id)) return
@@ -270,7 +275,8 @@ class NoteTopicsWorker private constructor(context: Context) {
 
     /** Gli album da mostrare, con i loro pezzi come intervalli di caratteri nelle note. */
     private fun snapshotAlbums() {
-        val e = engine ?: return run { albumsSnapshot = emptyList() }
+        val e = engine ?: return run { albumsSnapshot = emptyList(); categorieSnapshot = emptyList() }
+        categorieSnapshot = runCatching { snapshotCategorie(e) }.getOrDefault(emptyList())
         val notes = store.notes().associateBy { it.id }
         // Il grande concetto di ogni album (Argomenti a due livelli: concetto → sotto-argomenti).
         val concettoDi = HashMap<Long, Int>().apply { e.topics.concetti().forEachIndexed { i, g -> g.forEach { put(it, i) } } }
@@ -300,6 +306,31 @@ class NoteTopicsWorker private constructor(context: Context) {
             keywords.top(gruppo.joinToString("\n") { testoDi[it["id"] as Long].orEmpty() }, 1).firstOrNull()?.replaceFirstChar(Char::uppercase)
         }
         albumsSnapshot = albums.map { a -> a + ("concettoNome" to (nomeConcetto[a["concetto"] as Int] ?: (a["name"] as String))) }
+    }
+
+    private fun snapshotCategorie(e: Engine): List<Map<String, Any>> {
+        val m = engineModel ?: return emptyList()
+        val vettori = Categorie.tutte.map { e.frase(Categorie.testo(it)) }
+        val note = store.notes().associateBy { it.id }
+        val dentro = Array(Categorie.tutte.size) { mutableListOf<Triple<Note, Int, Int>>() }
+        for ((pid, posto) in e.pezzi) {
+            val (noteId, frasi) = posto
+            val n = note[noteId] ?: continue
+            val r = results[noteId] ?: continue
+            val v = e.topics.vettore(pid)?.toFloats() ?: continue
+            val c = Categorie.di(v, vettori, m.profile.cercaMinimo, m.profile.categoriaScarto)
+            if (c < 0) continue
+            // La frase chiave del pezzo: è il riassunto, toccandola si apre la nota.
+            val k = r.keys.firstOrNull { it in frasi } ?: frasi.first
+            if (k * 2 + 1 >= r.spans.size) continue
+            dentro[c].add(Triple(n, r.spans[k * 2], r.spans[k * 2 + 1]))
+        }
+        return Categorie.tutte.indices.filter { dentro[it].isNotEmpty() }.sortedByDescending { dentro[it].size }.map { i ->
+            mapOf(
+                "nome" to Categorie.tutte[i].nome,
+                "pieces" to dentro[i].sortedByDescending { it.first.updated }.map { (n, a, b) -> mapOf("note" to n.id, "start" to a, "end" to b) },
+            )
+        }
     }
 
     /** Il motore del modello scelto, con le sue frasi su disco. Se il modello cambia si ricomincia: i vettori di modelli diversi non si mescolano. */

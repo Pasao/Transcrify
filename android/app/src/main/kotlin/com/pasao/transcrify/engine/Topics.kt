@@ -154,6 +154,9 @@ class Topics(
 
     fun albumOf(id: Long): Long? = pieces[id]?.album
 
+    /** Il senso di un pezzo (lungo 1, in 8 bit), per metterlo in una categoria. */
+    fun vettore(id: Long): Int8Vec? = pieces[id]?.vec
+
     /** Gli album da mostrare, dal più grande: (album, i suoi pezzi). */
     fun shown(): List<Pair<Long, List<Long>>> =
         albums.values.filter { it.n >= minShown }.sortedByDescending { it.n }.map { it.id to it.members.toList() }

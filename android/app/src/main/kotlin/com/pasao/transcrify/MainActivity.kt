@@ -160,6 +160,7 @@ class MainActivity : FlutterActivity() {
                 "notes" -> result.success(store.notes().map { it.toMap() + ("topics" to topics.state(it.id, it.text)) })
                 "noteTopics" -> result.success(topics.topics(call.argument<String>("id")!!))
                 "albums" -> result.success(topics.albums())
+                "categorie" -> result.success(topics.categorie())
                 "cerca" -> topics.cerca(call.argument<String>("testo").orEmpty()) { trovati -> runOnUiThread { result.success(trovati) } }
                 "share" -> {
                     val send = android.content.Intent(android.content.Intent.ACTION_SEND)

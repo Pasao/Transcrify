@@ -33,6 +33,9 @@ data class EngineProfile(
     val cercaMinimo: Float get() = split - 2 * (pair - split)
     val cercaBanda: Float get() = 3 * (pair - split)
 
+    /** Una categoria vince se supera la seconda almeno di tanto: sennò il pezzo resta fuori. Da tarare anche questa. */
+    val categoriaScarto: Float get() = (pair - split) / 4
+
     fun threshold(grain: Grain): Int = when (grain) {
         Grain.COARSE -> coarse
         Grain.MEDIUM -> medium
