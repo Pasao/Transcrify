@@ -30,12 +30,8 @@ class CoreState {
       llmUses = m['llmUses'] as int,
       hourUsed = m['hourUsed'] as int,
       dayUsed = m['dayUsed'] as int,
-      accentMain = Color(m['accentMain'] as int),
-      stateRed = Color(m['stateRed'] as int),
-      stateGreen = Color(m['stateGreen'] as int),
-      accentSecond = Color(m['accentSecond'] as int),
-      accentA = Color(m['accentA'] as int),
-      accentB = Color(m['accentB'] as int),
+      tokenChiaro = m['tokenChiaro'] as Map,
+      tokenScuro = m['tokenScuro'] as Map,
       hourEnd = _time(m['hourEnd']),
       dayEnd = _time(m['dayEnd']),
       hourLimit = m['hourLimit'] as int,
@@ -67,14 +63,11 @@ class CoreState {
   /// Quando si azzerano i minuti dell'ora e del giorno; null se non hai ancora dettato niente.
   final DateTime? hourEnd, dayEnd;
 
-  /// I colori di Transcri: l'accento del telefono, in due toni.
-  final Color accentA, accentB;
 
-  /// Il colore delle azioni nell'app (bottoni, interruttori, barrette): l'accento pieno del telefono.
-  final Color accentMain, accentSecond;
 
-  /// Il rosso di quando ascolta e il verde di quando ha finito: gli stessi della pillola.
-  final Color stateRed, stateGreen;
+  /// I 26 token del design system, calcolati nel Kotlin (Token.kt, la fonte unica) dal colore del telefono.
+  final Map tokenChiaro, tokenScuro;
+
 
   static DateTime? _time(Object? ms) => ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms as int);
 }
@@ -91,7 +84,7 @@ class Entry {
   final DateTime at;
   final bool purified;
 
-  /// Da dove arriva, se è un audio condiviso: "whatsapp". Null se l'hai dettata tu.
+  /// Da dove arriva, se è un audio condiviso: il pacchetto dell'app (vedi [Core.provenienza]). Null se l'hai dettata tu.
   final String? source;
 
   /// Il modo di pulizia usato ("fedele", "pulita", "riassunto"), null se è il testo così com'è.
@@ -125,7 +118,7 @@ class Note {
   /// "ready" (pronti per questo testo) o "stale" (la nota è cambiata: si rifanno al prossimo salvataggio).
   final String topics;
 
-  /// Da dove arriva, se è nata da un audio condiviso: "whatsapp".
+  /// Da dove arriva, se è nata da un audio condiviso: il pacchetto dell'app (vedi [Core.provenienza]).
   final String? source;
 
   /// Il riassunto, se l'hai chiesto. Sta accanto al testo e non lo sostituisce mai.
@@ -190,6 +183,8 @@ class Album {
   Album(Map m)
     : id = (m['id'] as num).toInt(),
       name = m['name'] as String,
+      concetto = (m['concetto'] as num?)?.toInt() ?? -1,
+      concettoNome = m['concettoNome'] as String? ?? m['name'] as String,
       pieces = [
         for (final p in (m['pieces'] as List).cast<Map>())
           (note: p['note'] as String, range: TextRange(start: p['start'] as int, end: p['end'] as int)),
@@ -197,6 +192,12 @@ class Album {
 
   final int id;
   final String name;
+
+  /// Il grande concetto a cui appartiene (Argomenti a due livelli): gli album con lo stesso numero stanno insieme.
+  final int concetto;
+
+  /// Il nome del concetto: la parola che conta di più in tutti i suoi album.
+  final String concettoNome;
   final List<({String note, TextRange range})> pieces;
 
   int get notes => pieces.map((p) => p.note).toSet().length;
@@ -255,13 +256,15 @@ class GroqModel {
 
 /// Cosa sta facendo Transcri adesso: "IDLE", "RECORDING", "PROCESSING", "SUCCESS", "ERROR", "LIMITED".
 class Live {
-  const Live({this.phase = 'IDLE', this.level = 0, this.appendTo, this.error});
+  const Live({this.phase = 'IDLE', this.level = 0, this.appendTo, this.error, this.paused = false, this.seconds = 0});
 
   Live.fromMap(Map m)
     : phase = m['phase'] as String,
       level = (m['level'] as num).toDouble(),
       appendTo = (m['appendTo'] as num?)?.toInt(),
-      error = m['error'] as String?;
+      error = m['error'] as String?,
+      paused = m['paused'] as bool? ?? false,
+      seconds = (m['seconds'] as num?)?.toInt() ?? 0;
 
   final String phase;
 
@@ -272,12 +275,30 @@ class Live {
   final int? appendTo;
   final String? error;
 
+  /// In pausa (sta ancora ascoltando, ma fermo), e da quanti secondi ascolta.
+  final bool paused;
+  final int seconds;
+
   bool get listening => phase == 'RECORDING';
 }
 
 /// Tutte le chiamate al nucleo nativo passano da qui.
+/// L'app da cui è arrivato un audio condiviso: il nome («WhatsApp») e la sua icona (PNG), se si conoscono.
+class Provenienza {
+  const Provenienza(this.nome, this.icona);
+
+  final String? nome;
+  final Uint8List? icona;
+}
+
 class Core {
   static const _ch = MethodChannel('transcrify/core');
+
+  /// Nome e icona dell'app di un audio condiviso: si chiedono una volta per app, poi restano in memoria.
+  static Future<Provenienza> provenienza(String source) => _provenienze[source] ??= _ch
+      .invokeMapMethod<String, Object?>('provenienza', {'source': source})
+      .then((m) => Provenienza(m?['nome'] as String?, m?['icona'] as Uint8List?));
+  static final _provenienze = <String, Future<Provenienza>>{};
 
   static final _changed = <VoidCallback>{};
   static ValueChanged<bool>? _nestHot;
@@ -307,11 +328,15 @@ class Core {
       _ch.invokeMethod('listen', {'appendTo': appendTo?.millisecondsSinceEpoch, 'cursor': cursor, 'panel': panel});
 
   /// Apre il player del Floater (butta, ferma, pausa, modi) vicino a [rect] (l, t, r, b, in pixel fisici).
+  /// La pagina della trasparenza (nativa): la pillola, il Floater e la casa sul tuo sfondo, con lo slider.
+  static Future<void> openTrasparenza() => _ch.invokeMethod('openTrasparenza');
+
   static Future<void> openPanel(List<double> rect) => _ch.invokeMethod('openPanel', {'rect': rect});
 
   static Future<void> stopListening() => _ch.invokeMethod('stopListening');
 
   static Future<void> discardListening() => _ch.invokeMethod('discardListening');
+  static Future<void> togglePause() => _ch.invokeMethod('togglePause');
 
   /// Fa rileggere tutto a chi è iscritto: quando cambia qualcosa, o al ritorno nell'app.
   static void refresh() {

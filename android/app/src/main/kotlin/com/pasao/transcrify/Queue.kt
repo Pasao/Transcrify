@@ -18,14 +18,15 @@ data class Pending(
     val appendTo: Long? = null,
     val origin: Origin? = null,
     val cursor: Int = -1,
+    /** Il vocale a cui stai rispondendo (la carta aperta nel Floater): al pulitore, perché capisca nomi e riferimenti. */
+    val contesto: String? = null,
 )
 
-/** Un audio arrivato da «Condividi»: [source] è l'app che lo manda ("whatsapp"), se si riconosce. */
-data class Origin(val source: String?, val toNote: Boolean) {
-    /** Come si presenta quando è pronto. */
-    val title: String
-        get() = (if (source == "whatsapp") "Vocale di WhatsApp" else "Audio") + if (toNote) " · nei Pensieri" else ""
-}
+/**
+ * Un audio arrivato da «Condividi»: [source] è il pacchetto dell'app che lo manda, se si riconosce
+ * (nome e icona in [Provenienza]); [vocale] se è un messaggio vocale (Opus/Ogg, come WhatsApp e Telegram).
+ */
+data class Origin(val source: String?, val toNote: Boolean, val vocale: Boolean = true)
 
 /**
  * Le registrazioni non ancora trascritte. Stanno nei file dell'app, non nella cache:
@@ -36,7 +37,7 @@ class Queue(context: Context) {
     private val dir = File(Sandbox.dir(context), "queue").apply { mkdirs() }
 
     @Synchronized
-    fun add(src: File, seconds: Long, mode: String?, appendTo: Long? = null, origin: Origin? = null, cursor: Int = -1): Pending {
+    fun add(src: File, seconds: Long, mode: String?, appendTo: Long? = null, origin: Origin? = null, cursor: Int = -1, contesto: String? = null): Pending {
         val at = System.currentTimeMillis()
         // Più audio condivisi insieme arrivano nello stesso millesimo di secondo.
         var id = at.toString()
@@ -49,9 +50,10 @@ class Queue(context: Context) {
         }
         val meta = JSONObject().put("at", at).put("seconds", seconds).put("mode", mode).put("ext", src.extension)
         appendTo?.let { meta.put("appendTo", it).put("cursor", cursor) }
-        origin?.let { meta.put("shared", true).put("source", it.source).put("toNote", it.toNote) }
+        contesto?.let { meta.put("contesto", it) }
+        origin?.let { meta.put("shared", true).put("source", it.source).put("toNote", it.toNote).put("vocale", it.vocale) }
         File(dir, "$id.json").writeText(meta.toString())
-        return Pending(id, audio, at, seconds, mode, appendTo, origin, cursor)
+        return Pending(id, audio, at, seconds, mode, appendTo, origin, cursor, contesto)
     }
 
     /** Dalla più vecchia alla più nuova. */
@@ -64,8 +66,9 @@ class Queue(context: Context) {
                 id, File(dir, "$id.${j.optString("ext", "m4a")}"), j.getLong("at"), j.optLong("seconds"),
                 if (j.isNull("mode")) null else j.getString("mode"),
                 if (j.has("appendTo")) j.getLong("appendTo") else null,
-                if (j.optBoolean("shared")) Origin(if (j.isNull("source")) null else j.getString("source"), j.optBoolean("toNote")) else null,
+                if (j.optBoolean("shared")) Origin(if (j.isNull("source")) null else j.getString("source"), j.optBoolean("toNote"), j.optBoolean("vocale", true)) else null,
                 j.optInt("cursor", -1),
+                if (j.has("contesto")) j.getString("contesto") else null,
             )
         }.getOrNull()
     }.filter { it.audio.exists() }.sortedWith(compareBy({ it.at }, { it.id }))
@@ -78,6 +81,8 @@ class Queue(context: Context) {
 
 /** Trascrive una registrazione in coda. Lo usano sia Transcri sia l'app (quando Transcri è chiuso). */
 class Transcriber(private val context: Context, private val store: Store, private val queue: Queue) {
+    private val impronte = Impronte(context, store)
+
     sealed interface Outcome {
         /** Fatto; [result] è null se non c'era niente da trascrivere (silenzio). */
         data class Done(val result: Transcription?) : Outcome
@@ -87,6 +92,12 @@ class Transcriber(private val context: Context, private val store: Store, privat
 
     /** Bloccante: va chiamato fuori dal thread principale. */
     fun run(item: Pending): Outcome {
+        // Un vocale condiviso già trascritto (stessa impronta, stessa pulizia): si riprende quella, senza chiamate.
+        val impronta = if (item.origin != null) runCatching { impronte.di(item.audio) }.getOrNull() else null
+        impronta?.let { impronte.cerca(it, item.mode) }?.let { già ->
+            queue.remove(item.id)
+            return Outcome.Done(già)
+        }
         val key = store.apiKey ?: return Outcome.Failed("Manca la chiave Groq")
         val work = File(context.cacheDir, "pezzi-${item.id}")
         return try {
@@ -103,11 +114,12 @@ class Transcriber(private val context: Context, private val store: Store, privat
             var cleaned = false
             if (text.isNotEmpty() && item.mode != null) {
                 // Se la pulizia fallisce si tiene il testo grezzo: meglio di niente.
-                runCatching { groq.cleanLong(text, store.cleanupModel, store.promptFor(item.mode), store.words, store.guardFor(item.mode)) }
+                runCatching { groq.cleanLong(text, store.cleanupModel, conContesto(store.promptFor(item.mode), item.contesto), store.words, store.guardFor(item.mode)) }
                     .onSuccess { text = it; cleaned = true; store.countUse(store.cleanupModel) }
                 store.saveModelLimits(store.cleanupModel, groq.lastLimits)
             }
             val result = if (isHallucination(text)) null else deliver(item, text, cleaned)
+            if (result != null && impronta != null) impronte.ricorda(impronta, item.mode, result)
             store.addUsage(item.seconds)
             queue.remove(item.id)
             Outcome.Done(result)
@@ -164,3 +176,12 @@ class Transcriber(private val context: Context, private val store: Store, privat
         )
     }
 }
+
+/**
+ * Le istruzioni del pulitore, più il vocale a cui stai rispondendo, se c'è: serve a capire nomi e riferimenti,
+ * non a rispondere al posto tuo.
+ */
+fun conContesto(prompt: String, contesto: String?): String = if (contesto.isNullOrBlank()) prompt else prompt + """
+
+Contesto: chi detta sta rispondendo a questo messaggio vocale che ha ricevuto: «$contesto».
+Usalo solo per capire nomi, luoghi e riferimenti nel testo dettato. Non rispondere al messaggio e non aggiungere niente: pulisci solo il testo dettato."""

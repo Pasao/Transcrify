@@ -30,6 +30,18 @@ class MainActivity : FlutterActivity() {
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "state" -> result.success(state())
+                "openTrasparenza" -> {
+                    startActivity(android.content.Intent(this, Trasparenza::class.java))
+                    result.success(null)
+                }
+                // Il nome e l'icona dell'app da cui è arrivato un audio condiviso (PNG), per il simbolino nell'app.
+                "provenienza" -> {
+                    val source = call.argument<String>("source")
+                    val png = Provenienza.icona(this, source)?.let { b ->
+                        java.io.ByteArrayOutputStream().also { b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+                    }
+                    result.success(mapOf("nome" to Provenienza.nome(this, source), "icona" to png))
+                }
                 "history" -> result.success(store.history().map { mapOf("text" to it.text, "at" to it.at, "purified" to it.purified, "mode" to it.mode, "source" to it.source) })
                 // Quello che si sta trascrivendo adesso non è "in attesa": compare solo se fallisce.
                 "pending" -> result.success(queue.all().filter { it.id !in (PillService.instance?.session?.working ?: emptySet()) }.map {
@@ -90,6 +102,10 @@ class MainActivity : FlutterActivity() {
                 }
                 "stopListening" -> {
                     PillService.instance?.stopListening()
+                    result.success(null)
+                }
+                "togglePause" -> {
+                    PillService.instance?.togglePause()
                     result.success(null)
                 }
                 "discardListening" -> {
@@ -370,15 +386,9 @@ class MainActivity : FlutterActivity() {
             "hourUsed" to hour,
             "dayUsed" to day,
             "hourEnd" to hourEnd,
-            // Gli stessi due toni che usa la parte nativa per Transcri.
-            "accentA" to getColor(android.R.color.system_accent1_300),
-            "accentB" to getColor(android.R.color.system_accent3_300),
-            // Lo stesso tono pieno dei bottoni della pillola: l'app e Transcri hanno un colore solo.
-            "accentMain" to getColor(android.R.color.system_accent1_400),
-            // Gli stessi rosso e verde della pillola: Transcri è uguale dovunque.
-            "stateRed" to PillService.stateColor(this, PillService.RED),
-            "stateGreen" to PillService.stateColor(this, PillService.GREEN),
-            "accentSecond" to getColor(android.R.color.system_accent3_400),
+            // I token del design system, dalla fonte unica (Token.kt): gli stessi della pillola e del widget.
+            "tokenChiaro" to Token.dal(Seme.di(this), scuro = false).mappa(),
+            "tokenScuro" to Token.dal(Seme.di(this), scuro = true).mappa(),
             "dayEnd" to dayEnd,
             "hourLimit" to Store.HOUR_LIMIT,
             "dayLimit" to Store.DAY_LIMIT,

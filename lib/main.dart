@@ -10,7 +10,7 @@ Future<void> main() async {
   // Prima di disegnare: i colori del telefono, così l'app non parte blu per poi cambiare.
   try {
     final s = await Core.state();
-    Tokens.useAccent(s.accentMain, s.accentSecond);
+    Colori.usa(s.tokenChiaro, s.tokenScuro);
   } catch (_) {}
   runApp(const TranscrifyApp());
 }
@@ -21,8 +21,8 @@ class TranscrifyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Un colore solo per tutto: se cambia (nuovo sfondo), si ridisegna l'app intera.
-    return ValueListenableBuilder<Color>(
-      valueListenable: Tokens.accent,
+    return ValueListenableBuilder<int>(
+      valueListenable: Colori.versione,
       builder: (context, _, _) => MaterialApp(
         title: 'Transcrify',
         debugShowCheckedModeBanner: false,
@@ -77,7 +77,7 @@ class _RootState extends State<_Root> {
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
+      duration: Durata.normale,
       child: switch (step) {
         _Step.loading => const Paper(key: ValueKey(0), child: Scaffold()),
         _Step.intro => IntroPage(key: const ValueKey(1), onNext: () => setState(() => step = _Step.key), onClose: _home),

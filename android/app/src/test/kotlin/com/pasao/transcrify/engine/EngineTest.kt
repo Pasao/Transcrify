@@ -152,6 +152,21 @@ class EngineTest {
     }
 
     @Test
+    fun conceptsGroupEveryShownAlbumOnce() {
+        val f = Fake(256, 12, 7)
+        val topics = Topics(256)
+        for (id in 0L until 12L * 30) topics.add(id, f.sentence((id % 12).toInt()))
+        topics.maintain()
+        val shown = topics.shown().map { it.first }.toSet()
+        val concetti = topics.concetti()
+        // Ogni album mostrato sta in un concetto, e uno solo.
+        assertEquals(shown, concetti.flatten().toSet())
+        assertEquals(shown.size, concetti.flatten().size)
+        // Argomenti finti tutti diversi tra loro: niente li unisce.
+        assertEquals(shown.size, topics.concetti(quanto = 10f).size)
+    }
+
+    @Test
     fun searchFindsTheRightTopic() {
         val f = Fake(256, 20, 9)
         val topics = Topics(256)

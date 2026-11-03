@@ -4,6 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:transcrify/core/native.dart';
 import 'package:transcrify/ui/common.dart';
 import 'package:transcrify/ui/dock.dart';
+import 'package:transcrify/ui/molecole/intestazione.dart';
+import 'package:transcrify/ui/molecole/riga_in_attesa.dart';
+import 'package:transcrify/ui/molecole/scheda_argomento.dart';
 import 'package:transcrify/ui/pensieri.dart';
 import 'package:transcrify/ui/theme.dart';
 import 'package:transcrify/ui/trascrivi.dart';
@@ -57,14 +60,17 @@ void main() {
     await t.pump();
     await t.pump(const Duration(milliseconds: 300));
     expect(find.text('Elimina'), findsOneWidget);
-    Core.live.value = Live(phase: 'RECORDING', appendTo: old);
-    await t.pump();
-    await t.pump(const Duration(milliseconds: 100));
-    expect(find.text('Ti ascolto'), findsOneWidget);
-    Core.live.value = Live(phase: 'PROCESSING', appendTo: old);
-    await t.pump();
-    await t.pump(const Duration(milliseconds: 100));
-    expect(find.text('Sto trascrivendo'), findsOneWidget);
+    // I ComandiVoce piccoli, col tempo e l'onda accanto; lavorando, il blob.
+    for (final (live, cosa) in [
+      (Live(phase: 'RECORDING', appendTo: old, seconds: 8), find.text('00:08')),
+      (Live(phase: 'RECORDING', appendTo: old, paused: true), find.text('in pausa')),
+      (Live(phase: 'PROCESSING', appendTo: old), find.byType(BlobLavoro)),
+    ]) {
+      Core.live.value = live;
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      expect(cosa, findsOneWidget);
+    }
     Core.live.value = const Live();
     await t.pumpWidget(const SizedBox());
     await t.pump(const Duration(seconds: 3));
@@ -86,13 +92,26 @@ void main() {
             onSlideStart: () {},
             onSlide: (_) {},
             onSlideEnd: () {},
-            onHold: (_) {},
             onSummarize: () {},
           ),
         ),
       ),
     );
     await t.pump(const Duration(milliseconds: 300));
+  });
+
+  // Il suo errore del 2 nov: scegliendo la prima trascrizione «ScrollController attached to multiple scroll views».
+  testWidgets('Scegliere una trascrizione: niente errori, e la barra compare', (t) async {
+    await phone(t);
+    await t.pumpWidget(app(const TrascriviPage(bottom: 76)));
+    await t.pump(const Duration(milliseconds: 100));
+    await t.longPress(find.textContaining('Una trascrizione').first);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(t.takeException(), isNull);
+    expect(find.byType(SelectionBar), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+    await t.pump(const Duration(seconds: 3));
   });
 
   testWidgets('La barra di selezione e il Dock', (t) async {
@@ -109,9 +128,10 @@ void main() {
             ),
             Dock(
               power: Power.pensieri,
-              onSwitch: () {},
-              onStep: (_) {},
-              nest: const SizedBox.square(dimension: dockRound),
+              onTocco: () {},
+              onProssimo: () {},
+              onTira: (_) {},
+              nest: const SizedBox.square(dimension: Misura.tondo),
               action: (Icons.edit_rounded, 'Scrivi', () {}),
               pages: const [(Icons.notes_rounded, 'Note'), (Icons.bubble_chart_rounded, 'Argomenti')],
             ),
@@ -120,5 +140,52 @@ void main() {
       ),
     );
     await t.pump(const Duration(milliseconds: 500));
+  });
+
+  testWidgets("L'intestazione con le registrazioni in attesa, grande e ridotta", (t) async {
+    await phone(t);
+    for (final ridotta in [false, true]) {
+      for (final riprovando in [false, true]) {
+        await t.pumpWidget(
+          app(
+            Intestazione(
+              titolo: 'Impostazioni',
+              ridotta: ridotta,
+              sotto: RigaInAttesa(quante: 12, riprovando: riprovando, onRiprova: () {}, onApri: () {}),
+              accanto: const InAttesaCorto(quante: 12),
+              azioni: [
+                const ChipStato('Dati finti', tipo: TipoChip.azione),
+                IconButton(onPressed: () {}, icon: const Icon(Icons.settings_rounded)),
+              ],
+            ),
+          ),
+        );
+        await t.pump(const Duration(milliseconds: 500));
+      }
+    }
+  });
+
+  testWidgets('Un grande concetto col mosaico dei sotto-argomenti', (t) async {
+    await phone(t);
+    Album album(int id, String name, int n) => Album({
+      'id': id,
+      'name': name,
+      'concetto': 0,
+      'pieces': [for (var i = 0; i < n; i++) {'note': 'n$i', 'start': 0, 'end': 5}],
+    });
+    await t.pumpWidget(
+      app(
+        SingleChildScrollView(
+          child: SchedaArgomento(
+            nome: 'Un concetto con un nome molto lungo che non ci sta',
+            colore: Colors.orange,
+            album: [album(1, 'Riunione · Progetto · Cliente importante', 12), album(2, 'Colleghi simpatici e antipatici', 4), album(3, 'Ferie', 1)],
+            onApri: (_) {},
+          ),
+        ),
+      ),
+    );
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('1 pezzo'), findsOneWidget);
   });
 }

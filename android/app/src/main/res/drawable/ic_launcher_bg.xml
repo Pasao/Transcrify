@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Il fondo dell'icona: i toni chiari dell'accento del telefono, come il widget "del telefono". -->
+<!-- Il fondo dell'icona: scuro e caldo come il Floater (neutro dell'arancione di Transcri, toni 17 → 10). Fisso: il launcher non legge i token. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
@@ -11,9 +11,9 @@
             <gradient
                 android:type="linear"
                 android:startX="0" android:startY="0"
-                android:endX="108" android:endY="108"
-                android:startColor="@android:color/system_accent1_50"
-                android:endColor="@android:color/system_accent3_100" />
+                android:endX="0" android:endY="108"
+                android:startColor="#FF312823"
+                android:endColor="#FF221A15" />
         </aapt:attr>
     </path>
 </vector>

@@ -71,7 +71,7 @@ class TranscriNest extends StatefulWidget {
 class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixin {
   static const _outroMs = 640; // come OUTRO_MS nel nativo
   /// Quanto è grande la casa: la stessa misura delle altre isole del Dock.
-  static const slot = dockRound;
+  static const slot = Misura.tondo;
 
   /// Quanto è grande Transcri dentro la casa: abbastanza margine perché l'anello colorato si legga.
   static const _inNest = 0.76;
@@ -205,10 +205,10 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
 
   // Lo stato mostrato resta quello voluto finché l'app non conferma lo stesso: niente testo che scatta.
   @override
-  void didUpdateWidget(covariant TranscriNest old) {
-    super.didUpdateWidget(old);
+  void didUpdateWidget(covariant TranscriNest oldWidget) {
+    super.didUpdateWidget(oldWidget);
     // Rientrato da solo (trascinato nel nido): atterra come quando lo richiami tu.
-    if (old.on && !widget.on && !busy && shownOn == null) _landed();
+    if (oldWidget.on && !widget.on && !busy && shownOn == null) _landed();
     if (!busy && shownOn != null && shownOn == widget.on) shownOn = null;
   }
 
@@ -320,8 +320,8 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
     _carryAt = at;
     _carried = OverlayEntry(
       builder: (_) => Positioned(
-        left: _carryAt.dx - _Transcri.w / 2,
-        top: _carryAt.dy - _Transcri.h / 2,
+        left: _carryAt.dx - TranscriCorpo.w / 2,
+        top: _carryAt.dy - TranscriCorpo.h / 2,
         child: IgnorePointer(
           child: Transform.scale(
             scale: 1.15,
@@ -329,8 +329,8 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
               clipBehavior: Clip.none,
               alignment: Alignment.center,
               children: [
-                if (_listening) const VoiceCircle(phase: 'RECORDING', size: _Transcri.w + 12),
-                _Transcri(away: false, sleeping: false, land: _land),
+                if (_listening) const VoiceCircle(phase: 'RECORDING', size: TranscriCorpo.w + 12),
+                TranscriCorpo(away: false, sleeping: false, land: _land),
               ],
             ),
           ),
@@ -358,7 +358,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
       setState(() {});
       return;
     }
-    final hw = _Transcri.w * ratio / 2, hh = _Transcri.h * ratio / 2;
+    final hw = TranscriCorpo.w * ratio / 2, hh = TranscriCorpo.h * ratio / 2;
     final g = ++_gen;
     busy = true;
     _wantOut = true;
@@ -396,7 +396,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
           builder: (context, child) => Transform.scale(scale: _inNest * (1 + 0.3 * _swell.value), child: child),
           child: KeyedSubtree(
             key: _transcriKey,
-            child: _Transcri(away: on || _carried != null, sleeping: sleeping, land: _land),
+            child: TranscriCorpo(away: on || _carried != null, sleeping: sleeping, land: _land),
           ),
         ),
       ),
@@ -406,7 +406,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
       curve: Curves.easeOutCubic,
       width: slot,
       height: slot,
-      decoration: BoxDecoration(gradient: _fill(islandColor(context), home), shape: BoxShape.circle),
+      decoration: BoxDecoration(gradient: _fill(context.col.isola, home), shape: BoxShape.circle),
       child: face,
     );
     return GestureDetector(
@@ -450,7 +450,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
   /// Mentre lavora il fondo è il suo cerchio, sotto: il nido si fa da parte.
   Gradient _fill(Color base, bool home) => LinearGradient(
     colors: [
-      for (final c in transcriColors)
+      for (final c in [Colori.adesso.transcriA, Colori.adesso.transcriB])
         _working != null ? base.withValues(alpha: 0) : (home ? Color.alphaBlend(c.withValues(alpha: 0.24), base) : base),
     ],
   );
@@ -459,8 +459,9 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
 /// Transcri a casa: una capsula bianca con due occhi. Respira, ogni tanto sbatte gli occhi,
 /// si guarda intorno e fa un piccolo saltello. Quando è fuori resta il suo contorno;
 /// quando dorme (minuti finiti) ha gli occhi chiusi e sta fermo.
-class _Transcri extends StatefulWidget {
-  const _Transcri({required this.away, required this.sleeping, required this.land});
+class TranscriCorpo extends StatefulWidget {
+  /// Lui, col suo ciclo di vita (respiro, occhi). [land]: il saltello quando atterra (di base niente).
+  const TranscriCorpo({super.key, this.away = false, this.sleeping = false, this.land = kAlwaysDismissedAnimation});
 
   static const w = 46.0, h = 40.0;
   static const radius = 17.0;
@@ -469,10 +470,10 @@ class _Transcri extends StatefulWidget {
   final Animation<double> land;
 
   @override
-  State<_Transcri> createState() => _TranscriState();
+  State<TranscriCorpo> createState() => _TranscriCorpoState();
 }
 
-class _TranscriState extends State<_Transcri> with SingleTickerProviderStateMixin {
+class _TranscriCorpoState extends State<TranscriCorpo> with SingleTickerProviderStateMixin {
   // Un ciclo di vita di 7 secondi: dentro ci sono respiro, battito d'occhi, sguardo e saltello.
   late final _life = AnimationController(vsync: this, duration: const Duration(milliseconds: 7000))..repeat();
 
@@ -485,8 +486,8 @@ class _TranscriState extends State<_Transcri> with SingleTickerProviderStateMixi
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: _Transcri.w,
-      height: _Transcri.h,
+      width: TranscriCorpo.w,
+      height: TranscriCorpo.h,
       child: AnimatedBuilder(
         animation: Listenable.merge([_life, widget.land]),
         builder: (context, _) => CustomPaint(
@@ -495,7 +496,7 @@ class _TranscriState extends State<_Transcri> with SingleTickerProviderStateMixi
             land: widget.land.value,
             away: widget.away,
             sleeping: widget.sleeping,
-            outline: context.tk.faint,
+            outline: context.col.testoSecondario,
           ),
         ),
       ),
@@ -521,7 +522,7 @@ class _TranscriPainter extends CustomPainter {
     final w = size.width, h = size.height;
     if (away) {
       // Il posto vuoto: contorno tratteggiato.
-      final path = Path()..addRRect(RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(_Transcri.radius)));
+      final path = Path()..addRRect(RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(TranscriCorpo.radius)));
       final paint = Paint()
         ..color = outline
         ..style = PaintingStyle.stroke
@@ -552,11 +553,11 @@ class _TranscriPainter extends CustomPainter {
     canvas.translate(w / 2, h);
     canvas.scale(sx, sy);
     canvas.translate(-w / 2, -h - hop * 6);
-    final body = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(_Transcri.radius));
+    final body = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(TranscriCorpo.radius));
     canvas.drawRRect(
       body.shift(const Offset(0, 2)),
       Paint()
-        ..color = Colors.black.withValues(alpha: 0.18)
+        ..color = Colors.black.withValues(alpha: 0.18) // ds:eccezione: il disegno di Transcri (occhi bianchi, la sua ombra)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
     );
     canvas.drawRRect(
@@ -565,14 +566,14 @@ class _TranscriPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [for (final c in transcriColors) c.withValues(alpha: sleeping ? 0.5 : 1)],
+          colors: [for (final c in [Colori.adesso.transcriA, Colori.adesso.transcriB]) c.withValues(alpha: sleeping ? 0.5 : 1)],
         ).createShader(Offset.zero & size),
     );
 
     // Gli occhi: sbatte due volte per ciclo, guarda a destra e poi a sinistra.
     final look = alive ? (_bump(0.40, 0.58) * 2.2 - _bump(0.62, 0.76) * 2.2) : 0.0;
     final blink = alive ? math.max(_bump(0.20, 0.235), _bump(0.71, 0.745)) : 1.0;
-    final eye = Paint()..color = Colors.white;
+    final eye = Paint()..color = Colors.white; // ds:eccezione: il disegno di Transcri (occhi bianchi, la sua ombra)
     // Stesse proporzioni degli occhi che disegna la parte nativa in volo: non cambia personaggio.
     final ey = h * 0.36;
     final r = math.min(w, h) * 0.075;

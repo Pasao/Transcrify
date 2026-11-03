@@ -23,12 +23,7 @@ const _months = [
   'dicembre',
 ];
 
-/// I colori di Transcri: quelli del telefono (Material You), gli stessi della parte nativa.
-/// Arrivano col primo stato letto; fino ad allora due toni neutri.
-var transcriColors = [const Color(0xFF8AA4FF), const Color(0xFFC3A6F0)];
 
-/// Il rosso di quando ascolta e il verde di quando ha finito: quelli della pillola.
-var transcriRed = Tokens.red, transcriGreen = Tokens.green;
 
 /// Transcri che lavora, dentro l'app: sempre questo cerchio, come la pillola sul bordo.
 /// Quando ascolta è rosso e si allarga appena con la voce; quando trascrive i suoi colori scorrono e
@@ -47,7 +42,7 @@ class VoiceCircle extends StatefulWidget {
 
 class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStateMixin {
   // Lo stesso giro della pillola: 1,6 secondi.
-  late final _flow = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat();
+  late final _flow = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat(); // ds:eccezione: il movimento di Transcri
 
   // Il volume arriva a scatti e gli stati cambiano di colpo: il cerchio li insegue, così non scatta mai.
   double _voice = 0, _work = 0;
@@ -70,7 +65,7 @@ class _VoiceCircleState extends State<VoiceCircle> with SingleTickerProviderStat
           final working = widget.phase == 'PROCESSING';
           _voice += ((listening ? Core.live.value.level : 0) - _voice) * 0.25;
           _work += ((working ? 1 : 0) - _work) * 0.12;
-          final target = listening ? transcriRed : (widget.phase == 'SUCCESS' ? transcriGreen : transcriColors.first);
+          final target = listening ? context.col.errore : (widget.phase == 'SUCCESS' ? context.col.successo : context.col.transcriA);
           _tint = Color.lerp(_tint ?? target, target, 0.14);
           return CustomPaint(
             painter: _VoicePainter(_tint!, _voice, _work, _flow.value),
@@ -115,7 +110,7 @@ class _VoicePainter extends CustomPainter {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              for (final k in [transcriColors[0], transcriColors[1], transcriColors[0]]) k.withValues(alpha: work.clamp(0.0, 1.0)),
+              for (final k in [Colori.adesso.transcriA, Colori.adesso.transcriB, Colori.adesso.transcriA]) k.withValues(alpha: work.clamp(0.0, 1.0)),
             ],
             tileMode: TileMode.repeated,
           ).createShader(Rect.fromLTWH(0, h * flow - h, size.width, h)),
@@ -148,9 +143,39 @@ String shortStamp(DateTime d) {
   return '$short, ${hm(d)}';
 }
 
+/// Una lista con, sopra, la barra delle cose scelte. La struttura resta la stessa con o senza barra:
+/// se cambiasse, Flutter ricreerebbe la lista (si perde il punto, e il suo ScrollController si attacca a due liste).
+class ConSelezione extends StatelessWidget {
+  const ConSelezione({super.key, required this.bottom, required this.child, this.bar});
+
+  /// Lo spazio in fondo coperto dal Dock: la barra sta sopra.
+  final double bottom;
+  final Widget child;
+
+  /// La barra, solo mentre scegli.
+  final SelectionBar? bar;
+
+  /// Quanto spazio in più lasciare in fondo alla lista mentre scegli (regola sua: le ultime salgono e la barra
+  /// non le copre, così vedi cosa stai scegliendo).
+  static double spazio(bool scegli) => scegli ? SelectionBar.altezza + Spazio.s2 : 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        child,
+        if (bar != null) Positioned(left: Spazio.s4, right: Spazio.s4, bottom: bottom + Spazio.s2, child: bar!),
+      ],
+    );
+  }
+}
+
 /// La barra delle cose scelte: quante sono, e cosa farne. Come in Samsung Note, in fondo, sopra il Dock.
 class SelectionBar extends StatefulWidget {
   const SelectionBar({super.key, required this.label, required this.onClose, required this.actions});
+
+  /// Quanto è alta: la barra prende il posto di «Annulla», e le liste le lasciano questo spazio.
+  static const altezza = 68.0;
 
   /// "1 nota", "3 trascrizioni".
   final String label;
@@ -163,14 +188,13 @@ class SelectionBar extends StatefulWidget {
 
 class _SelectionBarState extends State<SelectionBar> {
   // La barra prende il posto di «Annulla», se c'è: lui sale, e quando la barra se ne va torna giù.
-  static const _height = 68.0;
 
   void _lift(double by) => WidgetsBinding.instance.addPostFrameCallback((_) => _undoLift.value = by);
 
   @override
   void initState() {
     super.initState();
-    _lift(_height);
+    _lift(SelectionBar.altezza);
   }
 
   @override
@@ -183,18 +207,18 @@ class _SelectionBarState extends State<SelectionBar> {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
-      decoration: BoxDecoration(color: const Color(0xFF242424), borderRadius: BorderRadius.circular(32), boxShadow: islandShadow),
+      decoration: BoxDecoration(color: context.col.floater, borderRadius: BorderRadius.circular(Raggio.pillola), boxShadow: Ombra.sospeso),
       child: Row(
         children: [
           IconButton(
             onPressed: widget.onClose,
-            icon: const Icon(Icons.close_rounded, color: Colors.white),
+            icon: Icon(Icons.close_rounded, color: context.col.suFloater),
             tooltip: 'Annulla',
           ),
           Expanded(
             child: Text(
               widget.label,
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+              style: Testo.titoloScheda.copyWith(color: context.col.suFloater),
             ),
           ),
           for (final (icon, name, onTap) in widget.actions)
@@ -204,7 +228,8 @@ class _SelectionBarState extends State<SelectionBar> {
                 onTap();
               },
               tooltip: name,
-              icon: Icon(icon, color: name == 'Elimina' ? const Color(0xFFFF8A70) : Colors.white),
+              // Sul fondo scuro, l'errore usa il suo tono tenue (regola di Figma per ciò che è sospeso).
+              icon: Icon(icon, color: name == 'Elimina' ? context.col.erroreTenue : context.col.suFloater),
             ),
         ],
       ),
@@ -212,7 +237,8 @@ class _SelectionBarState extends State<SelectionBar> {
   }
 }
 
-/// Il simbolino di un testo arrivato da fuori: una nuvoletta con la cornetta, per i vocali di WhatsApp.
+/// Il simbolino di un testo arrivato da fuori: l'icona vera dell'app che l'ha mandato (WhatsApp, Telegram…).
+/// Finché non arriva, o se l'app non si conosce, l'onda di un audio.
 class SourceIcon extends StatelessWidget {
   const SourceIcon(this.source, {super.key, this.size = 14});
 
@@ -221,44 +247,22 @@ class SourceIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (source != 'whatsapp') return const SizedBox.shrink();
-    final color = context.tk.muted;
-    return Tooltip(
-      message: 'Da WhatsApp',
-      child: SizedBox.square(
-        dimension: size,
-        child: CustomPaint(
-          painter: _BubblePainter(color),
-          child: Center(child: Icon(Icons.call_rounded, size: size * 0.52, color: color)),
-        ),
-      ),
+    final source = this.source;
+    if (source == null) return const SizedBox.shrink();
+    return FutureBuilder<Provenienza>(
+      future: Core.provenienza(source),
+      builder: (context, snap) {
+        final p = snap.data;
+        final icona = p?.icona;
+        return Tooltip(
+          message: p?.nome == null ? 'Audio condiviso' : 'Da ${p!.nome}',
+          child: icona == null
+              ? Icon(Icons.graphic_eq_rounded, size: size, color: context.col.testoSecondario)
+              : ClipOval(child: Image.memory(icona, width: size, height: size, gaplessPlayback: true)),
+        );
+      },
     );
   }
-}
-
-class _BubblePainter extends CustomPainter {
-  _BubblePainter(this.color);
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final s = size.width;
-    final pen = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = s * 0.09
-      ..strokeJoin = StrokeJoin.round;
-    final circle = Path()..addOval(Rect.fromCircle(center: Offset(s * 0.52, s * 0.48), radius: s * 0.42));
-    final tail = Path()
-      ..moveTo(s * 0.26, s * 0.76)
-      ..lineTo(s * 0.08, s * 0.94)
-      ..lineTo(s * 0.46, s * 0.89);
-    canvas.drawPath(Path.combine(PathOperation.union, circle, tail), pen);
-  }
-
-  @override
-  bool shouldRepaint(_BubblePainter old) => old.color != color;
 }
 
 /// Copia: diventa una ✓ verde per un attimo.
@@ -278,7 +282,7 @@ class _CopyButtonState extends State<CopyButton> {
     await Clipboard.setData(ClipboardData(text: widget.text));
     HapticFeedback.selectionClick();
     setState(() => done = true);
-    await Future.delayed(const Duration(milliseconds: 1400));
+    await Future.delayed(Durata.conferma);
     if (mounted) setState(() => done = false);
   }
 
@@ -291,11 +295,18 @@ class _CopyButtonState extends State<CopyButton> {
       tooltip: 'Copia',
       iconSize: 20,
       icon: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 180),
+        duration: Durata.veloce,
         transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
         child: done
-            ? const Icon(Icons.check_rounded, key: ValueKey(1), size: 22, color: Tokens.green)
-            : Icon(Icons.content_copy_rounded, key: const ValueKey(0), size: 20, color: context.tk.muted),
+            // Copiato: per un attimo una ✓ sul fondo del successo (B4 «Copia»).
+            ? Container(
+                key: const ValueKey(1),
+                width: Misura.bottoneBasso,
+                height: Misura.bottoneBasso,
+                decoration: BoxDecoration(color: context.col.successoTenue, shape: BoxShape.circle),
+                child: Icon(Icons.check_rounded, size: Misura.iconaMedia, color: context.col.successo),
+              )
+            : Icon(Icons.content_copy_rounded, key: const ValueKey(0), size: Misura.iconaMedia, color: context.col.testoSecondario),
       ),
     );
   }
@@ -331,7 +342,7 @@ class _DeleteButtonState extends State<DeleteButton> {
     HapticFeedback.selectionClick();
     setState(() => armed = true);
     _disarm?.cancel();
-    _disarm = Timer(const Duration(milliseconds: 2200), () {
+    _disarm = Timer(Durata.armato, () {
       if (mounted) setState(() => armed = false);
     });
   }
@@ -351,25 +362,23 @@ class _DeleteButtonState extends State<DeleteButton> {
           onLongPressEnd: widget.onHoldEnd == null ? null : (_) => widget.onHoldEnd!(),
           onLongPress: widget.onHoldStart == null ? widget.onDelete : null,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
+            duration: Durata.normale,
             curve: Curves.easeOutBack,
             height: 40, // 40 × 40 come il tasto copia: le icone vicine hanno la stessa misura.
             constraints: const BoxConstraints(minWidth: 40),
             padding: EdgeInsets.symmetric(horizontal: armed ? 12 : 10),
-            decoration: BoxDecoration(color: armed ? Tokens.red : Colors.transparent, borderRadius: BorderRadius.circular(18)),
+            // Armato: gli stessi colori del chip di errore (B4 «Cestino»).
+            decoration: BoxDecoration(color: armed ? context.col.erroreTenue : Colors.transparent, borderRadius: BorderRadius.circular(Raggio.pillola)),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(armed ? Icons.delete_rounded : Icons.delete_outline_rounded, size: 20, color: armed ? Colors.white : context.tk.faint),
+                Icon(armed ? Icons.delete_rounded : Icons.delete_outline_rounded, size: Misura.iconaMedia, color: armed ? context.col.errore : context.col.testoSecondario),
                 AnimatedSize(
-                  duration: const Duration(milliseconds: 220),
+                  duration: Durata.normale,
                   child: armed
-                      ? const Padding(
-                          padding: EdgeInsets.only(left: 6),
-                          child: Text(
-                            'Elimina',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
-                          ),
+                      ? Padding(
+                          padding: const EdgeInsets.only(left: Spazio.s2),
+                          child: Text('Elimina', style: Testo.etichetta.copyWith(color: context.col.errore)),
                         )
                       : const SizedBox.shrink(),
                 ),
@@ -390,7 +399,7 @@ class Countdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Tokens.blue;
+    final color = context.col.azione;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 1, end: 0),
       duration: duration,
@@ -404,7 +413,8 @@ class Countdown extends StatelessWidget {
 }
 
 /// Quanto resta il messaggio "Annulla" dopo un'eliminazione.
-const undoTime = Duration(seconds: 5);
+/// Quanto resta «Annulla»: il token del design system (2 secondi).
+const undoTime = Durata.annulla;
 
 /// Di quanto sale «Annulla» sopra la sua posizione: la barra di selezione, quando c'è, gli prende il posto.
 final _undoLift = ValueNotifier<double>(0);
@@ -444,7 +454,7 @@ class _UndoPill extends StatefulWidget {
 }
 
 class _UndoPillState extends State<_UndoPill> with SingleTickerProviderStateMixin {
-  late final _show = AnimationController(vsync: this, duration: const Duration(milliseconds: 180))..forward();
+  late final _show = AnimationController(vsync: this, duration: Durata.veloce)..forward();
   late final Timer _timer = Timer(undoTime, () => _leave(false));
   bool _leaving = false;
 
@@ -484,11 +494,11 @@ class _UndoPillState extends State<_UndoPill> with SingleTickerProviderStateMixi
 
   @override
   Widget build(BuildContext context) {
-    final bottom = dockIsland + 12 + MediaQuery.viewPaddingOf(context).bottom + 8;
+    final bottom = Misura.isola + 12 + MediaQuery.viewPaddingOf(context).bottom + 8;
     return ValueListenableBuilder<double>(
       valueListenable: _undoLift,
       builder: (context, lift, child) => AnimatedPositioned(
-        duration: const Duration(milliseconds: 220),
+        duration: Durata.normale,
         curve: Curves.easeOutCubic,
         left: 16,
         right: 16,
@@ -504,8 +514,8 @@ class _UndoPillState extends State<_UndoPill> with SingleTickerProviderStateMixi
             child: Transform.translate(
               offset: _drag,
               child: Material(
-            color: const Color(0xFF242424),
-            borderRadius: BorderRadius.circular(24),
+            color: context.col.floater,
+            borderRadius: BorderRadius.circular(Raggio.pillola),
             elevation: 3,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 2, 4, 2),
@@ -519,11 +529,11 @@ class _UndoPillState extends State<_UndoPill> with SingleTickerProviderStateMixi
                       widget.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      style: Testo.testo.copyWith(color: context.col.suFloater),
                     ),
                   ),
                   TextButton(
-                    style: TextButton.styleFrom(foregroundColor: Tokens.blue),
+                    style: TextButton.styleFrom(foregroundColor: context.col.azione),
                     onPressed: () => _leave(true),
                     child: const Text('Annulla'),
                   ),
@@ -539,17 +549,3 @@ class _UndoPillState extends State<_UndoPill> with SingleTickerProviderStateMixi
   }
 }
 
-/// Il colore delle isole che galleggiano sopra la pagina (il Dock, la casa di Transcri):
-/// bianco di giorno; di notte un tono sopra il grigio delle schede delle note, o si confondono.
-Color islandColor(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? const Color(0xFF353533) : Colors.white;
-
-/// L'ombra delle isole: una larga e morbida che le solleva, e una stretta che fa da bordo appena
-/// accennato, così si staccano anche quando sotto passa una scheda. Niente linee vere.
-const islandShadow = [
-  BoxShadow(color: Color(0x17000000), blurRadius: 18, offset: Offset(0, 4)),
-  BoxShadow(color: Color(0x14000000), blurRadius: 1.5, spreadRadius: 0.5),
-];
-
-/// Le misure del Dock: ogni isola è alta [dockIsland] e dentro ogni cosa tonda è [dockRound],
-/// col suo margine uguale tutto intorno. Così la matita, Transcri e il potere sembrano grandi uguali.
-const dockIsland = 64.0, dockRound = 52.0;

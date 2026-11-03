@@ -1,103 +1,118 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 2 × 1: una pillola. A sinistra Transcri, grande, senza niente intorno; a destra cosa fa.
      Le misure (margine 10 dp, posto da 56 dp) le usa anche WidgetTrampoline per sapere dov'è lui. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_root"
+<!-- La cornice: la pillola che ritaglia (clipToOutline). Dietro, il gradiente dai token (WidgetColori); sopra, il contenuto. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_frame"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg_phone"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:paddingStart="10dp"
-    android:paddingEnd="12dp"
-    android:contentDescription="@string/widget_description">
+    android:clipToOutline="true">
 
-    <FrameLayout
-        android:id="@+id/widget_circle"
-        android:layout_width="56dp"
-        android:layout_height="56dp">
-        <!-- Respira: il ViewFlipper alterna le pose con una dissolvenza (riposo, inspira, riposo, espira). -->
-        <ViewFlipper
-            android:id="@+id/widget_breath"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:autoStart="true"
-            android:flipInterval="1400"
-            android:inAnimation="@android:anim/fade_in"
-            android:outAnimation="@android:anim/fade_out"
-            android:importantForAccessibility="no">
-            <ImageView android:layout_width="52dp" android:layout_height="46dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
-            <ImageView android:layout_width="55dp" android:layout_height="49dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
-            <ImageView android:layout_width="52dp" android:layout_height="46dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
-            <ImageView android:layout_width="50dp" android:layout_height="44dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
-        </ViewFlipper>
-        <ImageView
-            android:id="@+id/widget_away"
-            android:layout_width="52dp"
-            android:layout_height="46dp"
-            android:layout_gravity="center"
-            android:importantForAccessibility="no"
-            android:alpha="0.4"
-            android:src="@drawable/widget_away"
-            android:visibility="gone" />
-    </FrameLayout>
+    <ImageView
+        android:id="@+id/widget_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY" />
 
     <LinearLayout
-        android:id="@+id/widget_words"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:layout_weight="1"
-        android:orientation="vertical">
-        <TextView
-            android:id="@+id/widget_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-medium"
-            android:maxLines="1"
-            android:text="Detta"
-            android:textColor="@color/widget_phone_text"
-            android:textSize="19sp" />
-        <TextView
-            android:id="@+id/widget_line"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:alpha="0.7"
-            android:ellipsize="end"
-            android:maxLines="2"
-            android:text="Tocca e parla, poi incolla dove vuoi"
-            android:textColor="@color/widget_phone_text"
-            android:textSize="12sp" />
-    </LinearLayout>
-
-    <!-- Da 4 × 1 in su: apre l'app, senza cercarla. Il resto del widget continua a far uscire Transcri. -->
-    <LinearLayout
-        android:id="@+id/widget_open"
-        android:layout_width="wrap_content"
-        android:layout_height="52dp"
-        android:layout_marginStart="10dp"
-        android:background="@drawable/widget_open_bg"
-        android:contentDescription="Apri Transcrify"
+        android:id="@+id/widget_root"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingEnd="14dp"
-        android:visibility="gone">
-        <TextView
-            android:id="@+id/widget_open_text"
-            android:layout_width="wrap_content"
+        android:paddingStart="10dp"
+        android:paddingEnd="12dp"
+        android:contentDescription="@string/widget_description">
+
+        <FrameLayout
+            android:id="@+id/widget_circle"
+            android:layout_width="56dp"
+            android:layout_height="56dp">
+            <!-- Respira: il ViewFlipper alterna le pose con una dissolvenza (riposo, inspira, riposo, espira). -->
+            <ViewFlipper
+                android:id="@+id/widget_breath"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:autoStart="true"
+                android:flipInterval="1400"
+                android:inAnimation="@android:anim/fade_in"
+                android:outAnimation="@android:anim/fade_out"
+                android:importantForAccessibility="no">
+                <ImageView android:id="@+id/widget_blob_1" android:layout_width="52dp" android:layout_height="46dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
+                <ImageView android:id="@+id/widget_blob_2" android:layout_width="55dp" android:layout_height="49dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
+                <ImageView android:id="@+id/widget_blob_3" android:layout_width="52dp" android:layout_height="46dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
+                <ImageView android:id="@+id/widget_blob_4" android:layout_width="50dp" android:layout_height="44dp" android:layout_gravity="center" android:src="@drawable/widget_blob" />
+            </ViewFlipper>
+            <ImageView
+                android:id="@+id/widget_away"
+                android:layout_width="52dp"
+                android:layout_height="46dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:alpha="0.4"
+                android:src="@drawable/widget_away"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_words"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-medium"
-            android:text="Apri"
-            android:textColor="@color/widget_phone_text"
-            android:textSize="15sp" />
-        <ImageView
-            android:id="@+id/widget_open_icon"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:layout_marginStart="8dp"
-            android:importantForAccessibility="no"
-            android:src="@drawable/ic_widget_open" />
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/widget_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:text="Detta"
+                android:textColor="@color/widget_phone_text"
+                android:textSize="19sp" />
+            <TextView
+                android:id="@+id/widget_line"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.7"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:text="Tocca e parla, poi incolla dove vuoi"
+                android:textColor="@color/widget_phone_text"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Da 4 × 1 in su: apre l'app, senza cercarla. Il resto del widget continua a far uscire Transcri. -->
+        <LinearLayout
+            android:id="@+id/widget_open"
+            android:layout_width="wrap_content"
+            android:layout_height="52dp"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/widget_open_bg"
+            android:contentDescription="Apri Transcrify"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="14dp"
+            android:visibility="gone">
+            <TextView
+                android:id="@+id/widget_open_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:text="Apri"
+                android:textColor="@color/widget_phone_text"
+                android:textSize="15sp" />
+            <ImageView
+                android:id="@+id/widget_open_icon"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginStart="8dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_widget_open" />
+        </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+</FrameLayout>

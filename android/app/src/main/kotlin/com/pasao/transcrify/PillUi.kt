@@ -1,5 +1,18 @@
 package com.pasao.transcrify
 
+import androidx.compose.foundation.layout.heightIn
+import kotlin.math.cos
+import kotlin.math.sin
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Animatable
@@ -30,6 +43,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.rounded.CloseFullscreen
+import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
@@ -104,10 +122,14 @@ object PillGeometry {
     const val BAR_W = 12f
     const val BAR_H = 88f
     const val BAR_INSET = 3f
-    const val MENU_W = 224f
-    const val MENU_H = 216f
     const val MENU_RADIUS = 28f
-    const val COMPACT = 124f
+    /** Il pannello: largo quanto la carta (260) più i margini; alto almeno quanto il registratore. */
+    const val PANNELLO_W = 284f
+    const val PANNELLO_MIN = 100f
+    /** Stretto: i cassetti e il microfono, finché non esce una carta o non parli. */
+    const val PANNELLO_STRETTO = 168f
+    /** Quanto il fondo del pannello scende sotto il centro della pillola: il registratore le resta accanto. */
+    const val SOTTO_LA_PILLOLA = 60f
     const val MENU_MARGIN = 10f
     const val BUBBLE = 56f
     const val DISMISS = 72f
@@ -115,37 +137,65 @@ object PillGeometry {
     const val DISMISS_MAGNET = 96f
 }
 
-/** Colori, presi dalla palette di Figma. */
+/**
+ * I colori della pillola: i ruoli della pillola presi dai token (Token.kt, la fonte unica). Nessun colore
+ * scritto qui. Il Floater è sempre scuro, anche col telefono chiaro: usa i token del tema SCURO, fatti per
+ * stare su un fondo scuro (il giallo dell'errore, il rosso dell'ascolto si leggono sul pannello).
+ * Il servizio aggiorna [token] all'avvio e quando cambia il colore del telefono.
+ */
 object Palette {
-    // Il pannello, i bottoni e gli stati seguono la palette del telefono (li imposta il servizio):
-    // questi sono solo i valori di partenza.
-    var Panel = Color(0xF22C2C2C)
-    val Ink = Color(0xFF1E1E1E)
-    val Stroke = Color(0x40FFFFFF)
-    val Text = Color(0xFFFFFFFF)
-    val Muted = Color(0x99FFFFFF)
-    var Blue = Color(0xFF0D99FF)
-    var Red = Color(0xFFF24822)
-    var Yellow = Color(0xFFFFCD29)
-    var Green = Color(0xFF14AE5C)
+    var token: Token = Token.dal(0xFFF1917F.toInt(), scuro = true)
+
+    private fun c(argb: Int) = Color(argb)
+
     /**
-     * Transcri prende i colori del telefono (Material You), come i widget di sistema: due toni
-     * vicini in un gradiente diritto. Li legge il servizio all'avvio e quando cambia il tema.
+     * Quanto si vedono i pezzi fuori dall'app (pannello, pillola, casa): lo sceglie lui nelle impostazioni
+     * (Trasparenza), uno per uno, con l'anteprima sul suo sfondo. È uno stato: cambiandolo si ridisegna tutto.
      */
-    var AccentA = Color(0xFF8AA4FF)
-    var AccentB = Color(0xFFC3A6F0)
+    var opacitaFloater by androidx.compose.runtime.mutableFloatStateOf(OPACITA_BASE)
+    var opacitaPillola by androidx.compose.runtime.mutableFloatStateOf(OPACITA_BASE)
+    var opacitaCasa by androidx.compose.runtime.mutableFloatStateOf(OPACITA_BASE)
+    const val OPACITA_BASE = 0.95f
+    const val OPACITA_MIN = 0.5f
 
-    /** A riposo sul bordo è spento: fumo, quasi non si vede. */
-    val Smoke = Color(0xFF3A3A3C)
-    const val SMOKE_ALPHA = 0.55f
+    /** Il pannello: il fondo «floater», trasparente quanto hai scelto. */
+    val Panel get() = c(token.floater).copy(alpha = opacitaFloater)
 
-    /** Il contorno sottile, perché si stacchi anche dagli sfondi più simili. */
-    val IdleStroke = Color(0x40FFFFFF)
-    val Paused = Color(0xFFB3B3B3)
+    /** Il testo e le icone sul pannello, pieni, leggeri, e il bordo sottile. */
+    val Text get() = c(token.suFloater)
+    val Muted get() = c(token.suFloater).copy(alpha = 0.6f)
+    val Stroke get() = c(token.suFloater).copy(alpha = 0.25f)
+
+    /** La carta che esce dalla fessura: chiara sul pannello scuro, col testo scuro. */
+    val Carta get() = c(token.suFloater)
+    val SuCarta get() = c(token.floater)
+    val SuCartaTenue get() = c(token.floater).copy(alpha = 0.6f)
+    val LineaCarta get() = c(token.floater).copy(alpha = 0.12f)
+    /** La testata della carta dei vocali: un velo del colore dell'azione (piena quando rispondi). */
+    val TestataCarta get() = c(token.azione).copy(alpha = 0.22f)
+
+    /** Cosa va sopra i tasti chiari (registra, riprova). */
+    val Ink get() = c(token.suAzione)
+
+    /** L'azione e gli stati. */
+    val Blue get() = c(token.azione)
+    val Red get() = c(token.errore)
+    val Yellow get() = c(token.attenzione)
+    val Green get() = c(token.successo)
+    val Paused get() = c(token.testoSecondario)
+
+    /** Transcri: i suoi due toni. */
+    val AccentA get() = c(token.transcriA)
+    val AccentB get() = c(token.transcriB)
+
+    /** A riposo sul bordo è spento: il fondo «floater», quasi trasparente. */
+    val Smoke get() = c(token.floater)
+    /** La pillola a riposo: la sua trasparenza. */
+    val smokeAlpha get() = opacitaPillola
 }
 
 /** Il corpo di Transcri. */
-private fun transcriBrush() = Brush.verticalGradient(listOf(Palette.AccentA, Palette.AccentB))
+internal fun transcriBrush() = Brush.verticalGradient(listOf(Palette.AccentA, Palette.AccentB))
 
 /** A riposo (o senza minuti) Transcri è spento; mentre trascrive ha i suoi colori; negli altri stati il colore dello stato. */
 private fun isRest(phase: Phase) = phase == Phase.IDLE || phase == Phase.LIMITED
@@ -243,9 +293,9 @@ fun PillBar(svc: PillService) {
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (svc.pillRight) 1f else 0f, 0.5f)
                     scaleX = 1f + voice * 0.45f + hold.coerceAtLeast(0f) * 0.9f + awake * 0.08f + working * WORK_GROW
                     scaleY = 1f + voice * 0.08f + hold.coerceAtLeast(0f) * 0.14f
-                    alpha = if (phase == Phase.LIMITED) 0.5f else lerp(Palette.SMOKE_ALPHA, 1f, awake)
+                    alpha = if (phase == Phase.LIMITED) 0.5f else lerp(Palette.smokeAlpha, 1f, awake)
                 }
-                .shadow((3 * awake).dp, shape, clip = false)
+                .shadow((3 * awake).dp, shape, clip = false) // ds:eccezione: il movimento di Transcri (l'ombra cresce mentre si apre)
                 .clip(shape)
                 // Spento è fumo; sveglio ha i suoi colori; sopra, il colore dello stato.
                 .background(Palette.Smoke)
@@ -265,7 +315,7 @@ fun PillBar(svc: PillService) {
                         )
                     }
                 }
-                .border(1.dp, Palette.IdleStroke, shape)
+                .border(1.dp, Palette.Stroke, shape)
         )
     }
 }
@@ -336,7 +386,6 @@ fun StageLayer(svc: PillService) {
             is Stage.Outro -> Outro(svc, stage.to, stage.home)
             Stage.Menu -> MenuStage(svc)
             Stage.Dismiss -> DismissTarget(svc)
-            Stage.Message -> MessageStage(svc)
             is Stage.Panel -> MenuStage(svc, stage.nest)
             null -> Unit
         }
@@ -450,7 +499,7 @@ private fun Outro(svc: PillService, to: Offset, home: Rect?) {
         w = w1,
         h = h1,
         // Non svanisce: si rimpicciolisce fino a 0,4 e lì il nido lo riprende alla stessa misura.
-        alpha = if (isRest(svc.session.phase)) lerp(Palette.SMOKE_ALPHA, 1f, round) else 1f,
+        alpha = if (isRest(svc.session.phase)) lerp(Palette.smokeAlpha, 1f, round) else 1f,
         rotation = angle * round * (1f - settle),
         sx = lerp(stretch, 1f, settle) * (1f + squash),
         sy = lerp(1f / stretch, 1f, settle) * (1f - squash),
@@ -572,9 +621,9 @@ private fun DismissTarget(svc: PillService) {
                 .size(with(density) { homeW.coerceAtLeast(1f).toDp() }, with(density) { homeH.coerceAtLeast(1f).toDp() })
                 .alpha((a * (1f - gone)).coerceIn(0f, 1f))
                 .clip(CircleShape)
-                .background(Palette.Smoke.copy(alpha = Palette.SMOKE_ALPHA + 0.2f * near))
+                .background(casaFumo(near))
                 .background(transcriBrush(), alpha = fill)
-                .border(1.dp, Palette.IdleStroke, CircleShape)
+                .border(1.dp, Palette.Stroke, CircleShape)
                 .drawWithContent {
                     drawContent()
                     if (fill > 0f) drawEyes(fill * (1f - gone))
@@ -639,7 +688,7 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
         if (closing) return
         closing = true
         scope.launch {
-            t.animateTo(0f, tween(200, easing = FastOutSlowInEasing))
+            t.animateTo(0f, tween(Durate.VELOCE, easing = FastOutSlowInEasing))
             svc.stageDone()
         }
     }
@@ -647,22 +696,27 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
-        // Un passo alla volta: da fermo c'è solo il bottone; registrando (o con un errore) si apre tutto.
-        val compact = isCompact(svc.session.phase)
-        val sizeW by animateFloatAsState(
-            if (compact) PillGeometry.COMPACT else PillGeometry.MENU_W, spring(dampingRatio = 0.72f, stiffness = 420f), label = "menuW",
-        )
-        val sizeH by animateFloatAsState(
-            if (compact) PillGeometry.COMPACT else PillGeometry.MENU_H, spring(dampingRatio = 0.72f, stiffness = 420f), label = "menuH",
-        )
-        val mw = with(density) { sizeW.dp.toPx() }
-        val mh = with(density) { sizeH.dp.toPx() }
         val margin = with(density) { PillGeometry.MENU_MARGIN.dp.toPx() }
-        // Vicino al tasto che l'ha aperto, o sul lato della pillola.
+        // Il pannello è largo quanto la carta; alto quanto serve: si misura il contenuto e il pannello lo segue.
+        // Stretto (i cassetti e il microfono) finché non esce una carta o non parli: allora si allarga (morfa tra le fasi).
+        val largo = svc.carta != null || svc.session.phase !in setOf(Phase.IDLE, Phase.SUCCESS)
+        val mwDp by animateFloatAsState(
+            if (largo) PillGeometry.PANNELLO_W else PillGeometry.PANNELLO_STRETTO,
+            spring(dampingRatio = 0.8f, stiffness = 420f), label = "menuW",
+        )
+        val mw = minOf(with(density) { mwDp.dp.toPx() }, w - margin * 2)
+        var contenuto by remember { mutableFloatStateOf(0f) }
+        val mh by animateFloatAsState(
+            if (contenuto > 0f) contenuto else with(density) { PillGeometry.PANNELLO_MIN.dp.toPx() },
+            spring(dampingRatio = 0.8f, stiffness = 420f), label = "menuH",
+        )
+        // Il registratore resta accanto alla pillola: la carta cresce verso l'alto.
         val right = if (nest != null) nest.center.x > w / 2 else svc.pillRight
         val left = if (right) w - mw - margin else margin
-        val top = if (nest != null) nest.top - mh - margin else (bar.center.y - mh / 2).coerceIn(margin * 4, h - mh - margin * 4)
-        val menu = Rect(left, top, left + mw, top + mh)
+        val bottom = if (nest != null) nest.top - margin
+        // Mai fin su in cima: il pannello resta verso il centro (la carta si scorre).
+        else (bar.center.y + with(density) { PillGeometry.SOTTO_LA_PILLOLA.dp.toPx() }).coerceIn(minOf(mh + h * 0.12f, h - margin * 4), h - margin * 4)
+        val menu = Rect(left, bottom - mh, left + mw, bottom)
         val p = t.value
 
         // Velo: un tocco fuori richiude, la registrazione continua.
@@ -683,121 +737,16 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
             maxRadius = with(density) { PillGeometry.MENU_RADIUS.dp.toPx() },
         ) {
             val visible = ((p - 0.55f) / 0.45f).coerceIn(0f, 1f)
-            androidx.compose.animation.Crossfade(compact, animationSpec = tween(180), label = "menu") { small ->
-                if (small) CompactMenu(svc, visible, ::collapse) else Menu(svc, visible = visible, onCollapse = ::collapse)
-            }
-        }
-    }
-}
-
-/**
- * Il testo di un audio condiviso: si apre dalla pillola come il menu, sopra l'app in cui sei.
- * Si chiude solo con la X: un tocco per sbaglio non deve portartela via a metà lettura.
- * Chiuderla non perde niente: il testo è già salvato nell'app. Se ne restano altri, tocca al prossimo.
- */
-@Composable
-private fun MessageStage(svc: PillService) {
-    val density = LocalDensity.current
-    val scope = rememberCoroutineScope()
-    val t = remember { Animatable(0f) }
-    var closing by remember { mutableStateOf(false) }
-    val bar = remember { svc.barRect() }
-    LaunchedEffect(Unit) { t.animateTo(1f, spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)) }
-    val current = svc.messages.firstOrNull()
-
-    fun close() {
-        if (closing) return
-        if (svc.messages.size > 1) {
-            svc.messages.removeAt(0)
-            return
-        }
-        closing = true
-        scope.launch {
-            t.animateTo(0f, tween(200, easing = FastOutSlowInEasing))
-            svc.messages.clear()
-            svc.stageDone()
-        }
-    }
-
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val w = constraints.maxWidth.toFloat()
-        val h = constraints.maxHeight.toFloat()
-        val margin = with(density) { 16.dp.toPx() }
-        val text = current?.first?.text.orEmpty()
-        // Tanto alta quanto serve: le righe si stimano dai caratteri; oltre il limite il testo scorre.
-        val lines = text.split('\n').sumOf { 1 + it.length / 36 }
-        val mh = with(density) { (64 + lines * 24).dp.toPx() }.coerceAtMost(h * 0.62f)
-        val top = (bar.center.y - mh / 2).coerceIn(margin * 4, h - mh - margin * 4)
-        val card = Rect(margin, top, w - margin, top + mh)
-        val p = t.value
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.32f * p.coerceIn(0f, 1f)))
-        )
-        Blob(
-            rect = lerpRect(bar, card, p),
-            color = lerp(Palette.AccentA, Palette.Panel, p.coerceIn(0f, 1f)),
-            shadow = p.coerceIn(0f, 1f),
-            maxRadius = with(density) { PillGeometry.MENU_RADIUS.dp.toPx() },
-        ) {
-            val visible = ((p - 0.55f) / 0.45f).coerceIn(0f, 1f)
-            if (current != null) {
-                Column(
-                    Modifier
-                        .alpha(visible)
-                        .size(with(density) { card.width.toDp() }, with(density) { card.height.toDp() })
-                        .padding(start = 20.dp, end = 10.dp, top = 10.dp, bottom = 14.dp),
-                ) {
-                    Row(Modifier.fillMaxWidth().height(36.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            current.second.title + if (svc.messages.size > 1) "  (altri ${svc.messages.size - 1})" else "",
-                            Modifier.weight(1f),
-                            color = Palette.Muted,
-                            fontSize = 13.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (!current.second.toNote) {
-                            CircleButton(Icons.Rounded.Cloud, "Spostalo nei Pensieri", Palette.Muted, small = true) { svc.messageToNote() }
-                            Spacer(Modifier.width(6.dp))
-                        }
-                        // Letto e basta: non resta da nessuna parte. Il primo tocco arma, il secondo cancella.
-                        var armed by remember(current.first.at) { mutableStateOf(false) }
-                        LaunchedEffect(armed) {
-                            if (armed) {
-                                kotlinx.coroutines.delay(2200)
-                                armed = false
-                            }
-                        }
-                        CircleButton(
-                            Icons.Rounded.DeleteOutline,
-                            if (armed) "Tocca ancora per non salvarlo" else "Non salvarlo",
-                            if (armed) Palette.Red else Palette.Muted,
-                            small = true,
-                        ) {
-                            if (armed) {
-                                svc.forgetMessage()
-                                close()
-                            } else {
-                                armed = true
-                            }
-                        }
-                        Spacer(Modifier.width(6.dp))
-                        CircleButton(Icons.Rounded.Close, "Chiudi", Palette.Muted, small = true) { close() }
-                    }
-                    Text(
-                        text,
-                        Modifier
-                            .weight(1f, fill = false)
-                            .padding(end = 10.dp)
-                            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
-                        color = Palette.Text,
-                        fontSize = 16.sp,
-                        lineHeight = 23.sp,
-                    )
-                }
-            }
+            Pannello(
+                svc,
+                maxCarta = with(density) { (h * 0.36f).toDp() },
+                onCollapse = ::collapse,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .wrapContentHeight(Alignment.Bottom, unbounded = true)
+                    .onSizeChanged { contenuto = it.height.toFloat() }
+                    .alpha(visible),
+            )
         }
     }
 }
@@ -819,7 +768,7 @@ private fun Blob(
         Modifier
             .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
             .size(with(density) { rect.width.coerceAtLeast(1f).toDp() }, with(density) { rect.height.coerceAtLeast(1f).toDp() })
-            .shadow((16 * shadow).dp, shape, clip = false)
+            .shadow((16 * shadow).dp, shape, clip = false) // ds:eccezione: il movimento di Transcri (l'ombra cresce mentre si apre)
             .background(color, shape)
             .then(if (stroke) Modifier.border(1.dp, Palette.Stroke, shape) else Modifier)
             .clip(shape),
@@ -827,78 +776,77 @@ private fun Blob(
     ) { content() }
 }
 
-// --- Il menu ---
+// --- Il pannello (Figma B12, riga «7 · Finale») ---
 
-private fun isCompact(phase: Phase) = phase == Phase.IDLE || phase == Phase.SUCCESS || phase == Phase.LIMITED
-
-/** Il primo passo: solo il bottone per registrare, la X e, se c'è, "copia ultima". */
+/**
+ * Il registratore e la carta: in basso il registratore, sempre uguale; sopra il caret, che fa uscire la carta
+ * (i vocali condivisi o l'ultima trascrizione, coi loro comandi). Niente X: si chiude toccando fuori.
+ * La pulizia (Fedele · Pulita · Riassunto) compare sotto quando parli.
+ */
 @Composable
-private fun CompactMenu(svc: PillService, visible: Float, onCollapse: () -> Unit) {
+private fun Pannello(svc: PillService, maxCarta: Dp, onCollapse: () -> Unit, modifier: Modifier) {
     val s = svc.session
-    Box(
-        Modifier
-            .alpha(visible)
-            .size(PillGeometry.COMPACT.dp)
-            .padding(10.dp),
-    ) {
-        if (s.hasLast && s.phase != Phase.LIMITED) {
-            Box(Modifier.align(Alignment.TopStart)) {
-                CircleButton(CopyAgain, "Copia l'ultima trascrizione", Palette.Muted, small = true) { s.copyLast() }
+    val haUltima = s.hasLast && s.phase != Phase.LIMITED
+    val carta = svc.carta?.takeIf { it == Carta.ULTIMA && haUltima || it == Carta.VOCALI && svc.vocali.isNotEmpty() }
+    val parla = s.phase == Phase.RECORDING || s.phase == Phase.PROCESSING
+    Column(modifier.padding(horizontal = 12.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        AnimatedVisibility(
+            carta != null,
+            enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(),
+        ) {
+            Column {
+                // Tenuta durante l'uscita: la carta che rientra resta quella di prima.
+                val ultima = remember { mutableStateOf(Carta.ULTIMA) }
+                if (carta != null) ultima.value = carta
+                CartaFuori(svc, ultima.value, maxCarta)
+                Spacer(Modifier.height(8.dp))
             }
         }
-        Box(Modifier.align(Alignment.TopEnd)) {
-            CircleButton(Icons.Rounded.Close, "Rimpicciolisci", Palette.Muted, small = true, onClick = onCollapse)
-        }
-        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) { MainButton(svc, onCollapse) }
+        if (haUltima || svc.vocali.isNotEmpty()) Cassetti(svc, haUltima)
+        StatoRegistratore(svc.session)
+        Spacer(Modifier.height(6.dp))
+        TastiVoce(svc, onCollapse)
+        AnimatedVisibility(parla) {
+            Column {
+                Spacer(Modifier.height(10.dp))
+                ModeSlider(s)
+            }
         }
     }
 }
 
+/** Sopra i tasti: il tempo e l'onda mentre registri, un errore o un avviso; a riposo niente. */
 @Composable
-private fun Menu(svc: PillService, visible: Float, onCollapse: () -> Unit) {
+private fun StatoRegistratore(s: Session) {
+    if (s.phase == Phase.IDLE && s.notice == null) return
+    Box(Modifier.fillMaxWidth().padding(top = 6.dp).heightIn(min = 26.dp), contentAlignment = Alignment.Center) { Status(s) }
+}
+
+/** I tasti di Transcri: butta · il tasto grande · pausa. */
+@Composable
+private fun TastiVoce(svc: PillService, onCollapse: () -> Unit) {
     val s = svc.session
     val recording = s.phase == Phase.RECORDING
-    Box(
-        Modifier
-            .alpha(visible)
-            .size(PillGeometry.MENU_W.dp, PillGeometry.MENU_H.dp)
-            .padding(12.dp),
-    ) {
-        Column(Modifier.fillMaxSize()) {
-            // Angoli in alto: a sinistra il tempo (o copia), a destra la X.
-            Row(Modifier.fillMaxWidth().height(36.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    when {
-                        recording -> Box(Modifier.padding(start = 8.dp)) { Headline(s) }
-                        s.hasLast && s.phase != Phase.PROCESSING -> CopyLast(s)
-                    }
-                }
-                CircleButton(Icons.Rounded.Close, "Rimpicciolisci", Palette.Muted, small = true, onClick = onCollapse)
+    // A riposo c'è solo il microfono, al centro: i posti di butta e pausa esistono solo quando servono
+    // (vuoti, spingevano il microfono a destra nel pannello stretto).
+    if (!recording && s.phase != Phase.ERROR) {
+        Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) { MainButton(svc, onCollapse) }
+        return
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            if (recording || s.phase == Phase.ERROR) CircleButton(Icons.Rounded.DeleteOutline, "Butta l'audio", Palette.Muted) { s.discard() }
+        }
+        Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) { MainButton(svc, onCollapse) }
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            if (recording) {
+                CircleButton(
+                    if (s.paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                    if (s.paused) "Riprendi" else "Pausa",
+                    if (s.paused) Palette.Paused else Palette.Text,
+                ) { s.togglePause() }
             }
-            // Centro: l'onda (solo registrando) o il messaggio, poi il bottone grande coi suoi due compagni.
-            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.fillMaxWidth().height(26.dp), contentAlignment = Alignment.Center) { Status(s) }
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                        if (recording || s.phase == Phase.ERROR) {
-                            CircleButton(Icons.Rounded.DeleteOutline, "Butta l'audio", Palette.Muted) { s.discard() }
-                        }
-                    }
-                    Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) { MainButton(svc, onCollapse) }
-                    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                        if (recording) {
-                            CircleButton(
-                                if (s.paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
-                                if (s.paused) "Riprendi" else "Pausa",
-                                if (s.paused) Palette.Paused else Palette.Text,
-                            ) { s.togglePause() }
-                        }
-                    }
-                }
-            }
-            ModeSlider(s)
         }
     }
 }
@@ -909,6 +857,7 @@ private fun MainButton(svc: PillService, onCollapse: () -> Unit) {
     when (s.phase) {
         Phase.IDLE, Phase.SUCCESS -> RoundButton(Icons.Rounded.Mic, "Registra", Palette.Blue, Palette.Text) { s.start() }
         Phase.RECORDING -> RoundButton(Icons.Rounded.Check, "Ferma e trascrivi", Palette.Red, Palette.Text) {
+            // Mandato a trascrivere: hai finito, il pannello si chiude (la pausa invece non chiude niente).
             s.stopAndSend()
             onCollapse()
         }
@@ -921,47 +870,41 @@ private fun MainButton(svc: PillService, onCollapse: () -> Unit) {
             Fix.NONE -> RoundButton(Icons.Rounded.Mic, "Registra", Palette.Text, Palette.Ink) { s.start() }
         }
         Phase.LIMITED -> RoundButton(Icons.Rounded.Schedule, "Minuti finiti", Palette.Muted.copy(alpha = 0.2f), Palette.Muted) {}
-        Phase.PROCESSING -> CircularProgressIndicator(Modifier.size(30.dp), color = Palette.Blue, strokeWidth = 2.5.dp)
+        // Lavora: il blob che ondeggia (sua richiesta: la sua caratteristica è ondulare, non un cerchio fermo).
+        Phase.PROCESSING -> BlobLavoro(Modifier.size(52.dp).semantics { contentDescription = "Sto trascrivendo" })
     }
 }
 
+/** Transcri al lavoro: una goccia coi suoi due toni, il bordo che ondeggia piano. */
 @Composable
-private fun CopyLast(s: Session) {
-    var done by remember { mutableStateOf(false) }
-    LaunchedEffect(done) {
-        if (done) {
-            kotlinx.coroutines.delay(1400)
-            done = false
+internal fun BlobLavoro(modifier: Modifier) {
+    val giro by rememberInfiniteTransition(label = "blob").animateFloat(
+        0f, (2 * Math.PI).toFloat(), infiniteRepeatable(tween(BLOB_GIRO_MS, easing = LinearEasing)), label = "giro",
+    )
+    val brush = transcriBrush()
+    Canvas(modifier) {
+        val path = Path()
+        val r0 = size.minDimension / 2 * 0.86f
+        for (i in 0..BLOB_PUNTI) {
+            val a = i * 2 * Math.PI / BLOB_PUNTI
+            val r = r0 * (1 + 0.07f * sin(3 * a + giro).toFloat() + 0.05f * sin(2 * a - 1.7 * giro).toFloat())
+            val x = center.x + r * cos(a).toFloat()
+            val y = center.y + r * sin(a).toFloat()
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-    }
-    Row(
-        Modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClickLabel = "Copia l'ultima trascrizione") {
-                s.copyLast()
-                done = true
-            }
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            if (done) Icons.Rounded.Check else CopyAgain, null,
-            tint = if (done) Palette.Green else Palette.Muted, modifier = Modifier.size(15.dp),
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            if (done) "Copiata" else "Copia ultima",
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (done) Palette.Green else Palette.Muted),
-        )
+        path.close()
+        drawPath(path, brush)
     }
 }
+
+private const val BLOB_GIRO_MS = 2400
+private const val BLOB_PUNTI = 48
 
 /**
  * Copia l'ultima: i due fogli di copia (come l'icona di Material) e, in alto a destra, un
  * piccolo orologio staccato dal foglio: la cosa più recente che hai dettato.
  */
-private val CopyAgain: ImageVector by lazy {
+internal val CopyAgain: ImageVector by lazy {
     fun ImageVector.Builder.fill(d: String, evenOdd: Boolean = false) = addPath(
         pathData = androidx.compose.ui.graphics.vector.addPathNodes(d),
         fill = SolidColor(Color.Black),
@@ -984,7 +927,7 @@ private val CopyAgain: ImageVector by lazy {
 
 /** Un bottone secondario: un cerchio vero, appena visibile, così si capisce che si tocca. */
 @Composable
-private fun CircleButton(icon: ImageVector, label: String, tint: Color, small: Boolean = false, onClick: () -> Unit) {
+internal fun CircleButton(icon: ImageVector, label: String, tint: Color, small: Boolean = false, onClick: () -> Unit) {
     val d = if (small) 32.dp else 40.dp
     Box(
         Modifier
@@ -1011,11 +954,7 @@ private fun Headline(s: Session) {
         Spacer(Modifier.width(6.dp))
         Text(
             if (s.paused) "in pausa" else "%02d:%02d".format(sec / 60, sec % 60),
-            style = TextStyle(
-                color = if (s.paused) Palette.Paused else Palette.Text,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-            ),
+            style = Caratteri.etichetta.copy(color = if (s.paused) Palette.Paused else Palette.Text),
         )
     }
 }
@@ -1034,7 +973,7 @@ private fun ModeSlider(s: Session) {
         Modifier
             .fillMaxWidth()
             .height(34.dp)
-            .clip(RoundedCornerShape(17.dp))
+            .clip(Forme.pillola)
             .background(Color.White.copy(alpha = 0.08f))
             .pointerInput(Unit) {
                 // Trascinando si sceglie il modo sotto il dito; un tocco solo può anche spegnere.
@@ -1057,7 +996,7 @@ private fun ModeSlider(s: Session) {
                 .size(cell, 34.dp)
                 .padding(3.dp)
                 .alpha(shown)
-                .background(Palette.Blue.copy(alpha = 0.9f), RoundedCornerShape(14.dp))
+                .background(Palette.Blue.copy(alpha = 0.9f), Forme.pillola)
         )
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             modes.forEachIndexed { i, (_, label) ->
@@ -1065,11 +1004,7 @@ private fun ModeSlider(s: Session) {
                     label,
                     modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
                     textAlign = TextAlign.Center,
-                    style = TextStyle(
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (i == selected) Palette.Text else Palette.Muted,
-                    ),
+                    style = Caratteri.orario.copy(fontWeight = FontWeight.SemiBold, color = if (i == selected) Palette.Text else Palette.Muted),
                 )
             }
         }
@@ -1085,7 +1020,7 @@ private fun Wave(s: Session, modifier: Modifier) {
     val now by androidx.compose.runtime.produceState(0L) {
         while (true) androidx.compose.runtime.withFrameNanos { value = it }
     }
-    androidx.compose.foundation.Canvas(modifier.clip(RoundedCornerShape(0.dp))) {
+    androidx.compose.foundation.Canvas(modifier.clip(androidx.compose.ui.graphics.RectangleShape)) {
         val n = s.levels.size
         val gap = size.width / n
         val bar = gap * 0.55f
@@ -1113,14 +1048,20 @@ private fun Wave(s: Session, modifier: Modifier) {
 
 @Composable
 private fun Status(s: Session) {
-    val small = TextStyle(color = Palette.Text, fontSize = 11.sp, lineHeight = 14.sp, textAlign = TextAlign.Center)
+    val small = Caratteri.orario.copy(color = Palette.Text, textAlign = TextAlign.Center)
     s.notice?.let {
         Text(it, style = small.copy(color = Palette.Muted))
         return
     }
     when (s.phase) {
-        Phase.RECORDING -> Wave(s, Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(26.dp))
-        Phase.PROCESSING -> Text("Trascrivo…", style = small)
+        // Il tempo accanto all'onda (sopra gli faceva strano).
+        Phase.RECORDING -> Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Headline(s)
+            Spacer(Modifier.width(10.dp))
+            Wave(s, Modifier.weight(1f).height(26.dp))
+        }
+        // Lavora: lo dice il blob, niente scritta (sua richiesta).
+        Phase.PROCESSING -> Unit
         Phase.SUCCESS -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Copiato ✓", style = small.copy(color = Palette.Green, fontWeight = FontWeight.Medium))
         }
@@ -1138,7 +1079,7 @@ private fun Status(s: Session) {
 }
 
 @Composable
-private fun RoundButton(icon: ImageVector, label: String, bg: Color, fg: Color, onClick: () -> Unit) {
+internal fun RoundButton(icon: ImageVector, label: String, bg: Color, fg: Color, onClick: () -> Unit) {
     Box(
         Modifier
             .size(52.dp)
@@ -1149,17 +1090,11 @@ private fun RoundButton(icon: ImageVector, label: String, bg: Color, fg: Color, 
     ) { Icon(icon, label, tint = fg, modifier = Modifier.size(26.dp)) }
 }
 
-/** Area di tocco fissa da 44 dp, risposta al tocco rotonda: l'icona non si sposta mai. */
-@Composable
-private fun SmallButton(icon: ImageVector, label: String, tint: Color, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .size(36.dp)
-            .clip(CircleShape)
-            .clickable(onClickLabel = label, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { Icon(icon, label, tint = tint, modifier = Modifier.size(20.dp)) }
-}
+/**
+ * La tana in basso, spenta come lui a riposo: un po' più piena quanto più lui si avvicina ([near] da 0 a 1),
+ * ma sempre in proporzione alla trasparenza scelta (prima un +0,2 fisso la riempiva comunque: lo slider non si vedeva).
+ */
+internal fun casaFumo(near: Float) = Palette.Smoke.copy(alpha = Palette.opacitaCasa * lerp(0.8f, 1f, near))
 
 /** Durata del ritorno: l'app aspetta questo tempo prima di riattaccare la bolla al bottone. */
 const val OUTRO_MS = 640

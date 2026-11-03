@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../core/native.dart';
-import 'common.dart';
 import 'mode_icon.dart';
 import 'onboarding.dart';
 import 'theme.dart';
@@ -193,11 +192,18 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       SettingsRow(
                         icon: Icons.graphic_eq_rounded,
-                        color: Tokens.blue,
+                        color: context.col.azione,
                         title: 'Trascrizione',
                         subtitle: 'Chi ascolta la tua voce e la scrive',
                         value: _modelValue(st.sttModel, speech: true),
                         onTap: () => _open(const ModelSettings(speech: true)),
+                      ),
+                      SettingsRow(
+                        icon: Icons.opacity_rounded,
+                        color: context.col.azione,
+                        title: 'Trasparenza',
+                        subtitle: 'La pillola, il Floater e la casa, sul tuo sfondo',
+                        onTap: Core.openTrasparenza,
                       ),
                     ],
                   ),
@@ -206,7 +212,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       SettingsRow(
                         icon: Icons.auto_fix_high_rounded,
-                        color: Tokens.violet,
+                        color: context.col.transcriB,
                         title: 'Pulisci il testo',
                         subtitle: 'Toglie esitazioni e ripetizioni, mette la punteggiatura',
                         trailing: Switch(value: st.purify, onChanged: _setPurify),
@@ -217,21 +223,21 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           SettingsRow(
                             icon: Icons.auto_awesome_rounded,
-                            color: Tokens.violet,
+                            color: context.col.transcriB,
                             title: 'Modello',
                             value: _modelValue(st.llmModel, speech: false),
                             onTap: () => _open(const ModelSettings(speech: false)),
                           ),
                           SettingsRow(
                             icon: Icons.tune_rounded,
-                            color: Tokens.violet,
+                            color: context.col.transcriB,
                             title: 'Come pulisce',
                             value: _modeNames[st.mode],
                             onTap: () => _open(LiveSettings(title: 'Come pulisce', build: _cleanPage)),
                           ),
                           SettingsRow(
                             icon: Icons.spellcheck_rounded,
-                            color: Tokens.violet,
+                            color: context.col.transcriB,
                             title: 'Vocabolario',
                             value: st.words.isEmpty ? 'Vuoto' : '${st.words.length} ${st.words.length == 1 ? 'parola' : 'parole'}',
                             onTap: () => _open(
@@ -250,7 +256,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       SettingsRow(
                         icon: Icons.bubble_chart_rounded,
-                        color: Tokens.green,
+                        color: context.col.successo,
                         title: 'Dividi per argomento',
                         subtitle: 'Sul telefono, senza rete',
                         trailing: Switch(value: topicsOn, onChanged: _setTopics),
@@ -261,7 +267,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           SettingsRow(
                             icon: Icons.memory_rounded,
-                            color: Tokens.green,
+                            color: context.col.successo,
                             title: 'Modello',
                             value: topics,
                             onTap: () => _open(const TopicsSettings()),
@@ -275,7 +281,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       SettingsRow(
                         icon: Icons.insights_rounded,
-                        color: Tokens.green,
+                        color: context.col.successo,
                         title: 'Utilizzo',
                         value: '${(_dayUsed(st) / 60).round()} di ${(st.dayLimit / 60).round()} min oggi',
                         onTap: () => _open(const UsagePage()),
@@ -289,7 +295,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       SettingsRow(
                         icon: Icons.school_rounded,
-                        color: context.tk.muted,
+                        color: context.col.testoSecondario,
                         title: 'Rivedi come funziona',
                         onTap: () => Navigator.of(context).pop('intro'),
                       ),
@@ -301,7 +307,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       children: [
                         SettingsRow(
                           icon: Icons.shield_outlined,
-                          color: Tokens.blue,
+                          color: context.col.azione,
                           title: 'Dati finti',
                           subtitle: 'Note e trascrizioni inventate: quelle vere restano da parte. L\'app si riavvia.',
                           trailing: Switch(value: st.sandbox, onChanged: Core.setSandbox),
@@ -309,14 +315,14 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         SettingsRow(
                           icon: Icons.science_outlined,
-                          color: Tokens.blue,
+                          color: context.col.azione,
                           title: 'Crea la nota di prova',
                           subtitle: 'Con tutto quello che c\'è: argomenti, elenchi, link',
                           onTap: _demoNote,
                         ),
                         SettingsRow(
                           icon: Icons.person_outline_rounded,
-                          color: Tokens.blue,
+                          color: context.col.azione,
                           title: 'Come un utente nuovo',
                           subtitle: 'Senza chiave, note, permessi e scelte, con l\'introduzione. I tuoi dati restano.',
                           trailing: Switch(value: Core.preview.value, onChanged: _setPreview),
@@ -324,7 +330,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         SettingsRow(
                           icon: Icons.hourglass_bottom_rounded,
-                          color: Tokens.blue,
+                          color: context.col.azione,
                           title: 'Minuti finiti',
                           subtitle: 'Transcri dorme come quando finisce il limite',
                           trailing: Switch(value: st.simulateLimit, onChanged: _setLimit),
@@ -332,7 +338,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         SettingsRow(
                           icon: Icons.pinch_rounded,
-                          color: Tokens.blue,
+                          color: context.col.azione,
                           title: 'Pizzico al contrario',
                           subtitle: 'Stringere le dita = più argomenti',
                           trailing: Switch(
@@ -343,7 +349,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         SettingsRow(
                           icon: Icons.wifi_off_rounded,
-                          color: Tokens.blue,
+                          color: context.col.azione,
                           title: 'Senza rete',
                           subtitle: 'Groq non risponde: le registrazioni vanno in attesa',
                           trailing: Switch(value: st.simOffline, onChanged: (on) => _simulate('offline', on)),
@@ -351,7 +357,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         SettingsRow(
                           icon: Icons.key_off_rounded,
-                          color: Tokens.blue,
+                          color: context.col.azione,
                           title: 'Chiave rifiutata',
                           subtitle: 'Groq dice che la chiave non è valida',
                           trailing: Switch(value: st.simBadKey, onChanged: (on) => _simulate('badKey', on)),
@@ -359,7 +365,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         SettingsRow(
                           icon: Icons.mic_off_rounded,
-                          color: Tokens.blue,
+                          color: context.col.azione,
                           title: 'Microfono negato',
                           subtitle: 'Come se non avessi dato il permesso',
                           trailing: Switch(value: st.simNoMic, onChanged: (on) => _simulate('noMic', on)),
@@ -367,7 +373,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         SettingsRow(
                           icon: Icons.cloud_off_rounded,
-                          color: Tokens.blue,
+                          color: context.col.azione,
                           title: 'Registrazioni in attesa',
                           subtitle: 'Due finte, come se fosse mancata la rete',
                           trailing: Switch(value: Core.fakeWaiting.value, onChanged: _setFakeWaiting),
@@ -381,7 +387,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       SettingsRow(
                         icon: Icons.key_rounded,
-                        color: Tokens.red,
+                        color: context.col.errore,
                         title: 'Chiave Groq',
                         value: st.maskedKey ?? 'Nessuna',
                         mono: st.maskedKey != null,
@@ -447,7 +453,7 @@ class _SettingsPageState extends State<SettingsPage> {
   /// La chiave: un campo con la chiave nascosta e «Modifica»; rimuoverla sta in fondo, a parte.
   List<Widget> _keyPage(BuildContext context, CoreState st, VoidCallback reload) {
     final t = Theme.of(context).textTheme;
-    final tk = context.tk;
+    final tk = context.col;
     Future<void> change() async {
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -469,7 +475,7 @@ class _SettingsPageState extends State<SettingsPage> {
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
             // Quello che vuoi fare, rosso e pieno; tornare indietro resta lì, senza peso.
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Tokens.red, minimumSize: const Size(0, 40)),
+              style: FilledButton.styleFrom(backgroundColor: context.col.errore, minimumSize: const Size(0, 40)),
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Rimuovi'),
             ),
@@ -486,15 +492,15 @@ class _SettingsPageState extends State<SettingsPage> {
     return [
       Text(
         'Dà accesso al tuo account Groq. Resta cifrata su questo telefono: non condividerla.',
-        style: t.bodyMedium?.copyWith(color: tk.muted),
+        style: t.bodyMedium?.copyWith(color: tk.testoSecondario),
       ),
       const SizedBox(height: 20),
       // Come un campo: la chiave (nascosta) e a destra Modifica, che apre la pagina per incollarne una o crearne una nuova.
       Material(
-        color: islandColor(context),
-        borderRadius: BorderRadius.circular(16),
+        color: context.col.isola,
+        borderRadius: BorderRadius.circular(Raggio.campo),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(Raggio.campo),
           onTap: change,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
@@ -503,7 +509,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 Expanded(
                   child: Text(
                     st.maskedKey ?? 'Nessuna chiave',
-                    style: has ? monoStyle(context, size: 15, color: tk.text) : t.bodyLarge?.copyWith(color: tk.faint),
+                    style: has ? monoStyle(context, size: 15, color: tk.testo) : t.bodyLarge?.copyWith(color: tk.testoSecondario),
                   ),
                 ),
                 TextButton(onPressed: change, child: Text(has ? 'Modifica' : 'Aggiungi')),
@@ -517,7 +523,7 @@ class _SettingsPageState extends State<SettingsPage> {
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
-            style: TextButton.styleFrom(foregroundColor: Tokens.red, padding: EdgeInsets.zero),
+            style: TextButton.styleFrom(foregroundColor: context.col.errore, padding: EdgeInsets.zero),
             onPressed: remove,
             icon: const Icon(Icons.delete_outline_rounded, size: 18),
             label: const Text('Rimuovi la chiave'),
@@ -537,7 +543,7 @@ class _Unfold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AnimatedSize(
-    duration: const Duration(milliseconds: 260),
+    duration: Durata.normale,
     curve: Curves.easeOutCubic,
     alignment: Alignment.topCenter,
     child: open ? Column(children: children) : const SizedBox(width: double.infinity),
@@ -654,7 +660,7 @@ class UsageCard extends StatelessWidget {
         Padding(padding: const EdgeInsets.only(left: 12), child: UsageLabel(label)),
         Container(
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-          decoration: BoxDecoration(color: islandColor(context), borderRadius: BorderRadius.circular(24)),
+          decoration: BoxDecoration(color: context.col.isola, borderRadius: BorderRadius.circular(Raggio.gruppo)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -676,10 +682,7 @@ class UsageLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
-    child: Text(
-      text.toUpperCase(),
-      style: TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w600, color: context.tk.muted),
-    ),
+    child: EtichettaGruppo(text),
   );
 }
 
@@ -733,7 +736,7 @@ class _ModelSettingsState extends State<ModelSettings> {
   Widget build(BuildContext context) {
     final s = st;
     final t = Theme.of(context).textTheme;
-    final tk = context.tk;
+    final tk = context.col;
     final speech = widget.speech;
     final current = s == null ? '' : (speech ? s.sttModel : s.llmModel);
     final ids = models?.where((m) => m.speech == speech).map((m) => m.id);
@@ -748,10 +751,10 @@ class _ModelSettingsState extends State<ModelSettings> {
       children: [
         Text(
           speech ? 'Chi ascolta la tua voce e la scrive.' : 'Chi rilegge quello che hai detto e lo pulisce.',
-          style: t.bodyMedium?.copyWith(color: tk.muted),
+          style: t.bodyMedium?.copyWith(color: tk.testoSecondario),
         ),
         const SizedBox(height: 20),
-        if (error != null) Text(error!, style: t.bodySmall?.copyWith(color: Tokens.red)),
+        if (error != null) Text(error!, style: t.bodySmall?.copyWith(color: context.col.errore)),
         if (models == null && error == null)
           const Padding(
             padding: EdgeInsets.all(24),
@@ -832,7 +835,7 @@ class _WordsEditorState extends State<WordsEditor> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    final tk = context.tk;
+    final tk = context.col;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -848,7 +851,7 @@ class _WordsEditorState extends State<WordsEditor> {
             for (final w in widget.words)
               Container(
                 padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
-                decoration: BoxDecoration(color: tk.surface, borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(color: tk.scheda, borderRadius: BorderRadius.circular(Raggio.scheda)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -859,7 +862,7 @@ class _WordsEditorState extends State<WordsEditor> {
                       onTap: () => _remove(w),
                       child: Padding(
                         padding: const EdgeInsets.all(4),
-                        child: Icon(Icons.close_rounded, size: 14, color: tk.muted),
+                        child: Icon(Icons.close_rounded, size: 14, color: tk.testoSecondario),
                       ),
                     ),
                   ],
@@ -882,10 +885,10 @@ class _WordsEditorState extends State<WordsEditor> {
             else
               ActionChip(
                 onPressed: _open,
-                avatar: Icon(Icons.add_rounded, size: 16, color: Tokens.blue),
+                avatar: Icon(Icons.add_rounded, size: 16, color: context.col.azione),
                 label: const Text('Aggiungi'),
-                labelStyle: TextStyle(color: Tokens.blue, fontWeight: FontWeight.w600),
-                side: BorderSide(color: Tokens.blue.withValues(alpha: 0.4)),
+                labelStyle: TextStyle(color: context.col.azione, fontWeight: FontWeight.w600),
+                side: BorderSide(color: context.col.azione.withValues(alpha: 0.4)),
                 shape: const StadiumBorder(),
                 backgroundColor: Colors.transparent,
               ),
@@ -912,12 +915,12 @@ class _ModeChooser extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
+    final tk = context.col;
     final t = Theme.of(context).textTheme;
     final current = _modes.firstWhere((m) => m.$1 == mode);
     final index = _modes.indexOf(current);
     return AnimatedOpacity(
-      duration: const Duration(milliseconds: 200),
+      duration: Durata.veloce,
       opacity: enabled ? 1 : 0.45,
       child: IgnorePointer(
         ignoring: !enabled,
@@ -927,7 +930,7 @@ class _ModeChooser extends StatelessWidget {
             Container(
               height: 64,
               padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(color: tk.surface, borderRadius: BorderRadius.circular(32)),
+              decoration: BoxDecoration(color: tk.scheda, borderRadius: BorderRadius.circular(Raggio.foglio)),
               child: LayoutBuilder(
                 builder: (context, box) {
                   final cell = box.maxWidth / 3;
@@ -945,7 +948,7 @@ class _ModeChooser extends StatelessWidget {
                     child: Stack(
                       children: [
                         AnimatedPositioned(
-                          duration: const Duration(milliseconds: 220),
+                          duration: Durata.normale,
                           curve: Curves.easeOutBack,
                           left: cell * index,
                           top: 0,
@@ -953,9 +956,9 @@ class _ModeChooser extends StatelessWidget {
                           width: cell,
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Tokens.blue,
-                              borderRadius: BorderRadius.circular(28),
-                              boxShadow: [BoxShadow(color: Tokens.blue.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 3))],
+                              color: context.col.azione,
+                              borderRadius: BorderRadius.circular(Raggio.foglio),
+                              boxShadow: Ombra.appoggiato,
                             ),
                           ),
                         ),
@@ -966,15 +969,11 @@ class _ModeChooser extends StatelessWidget {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    CustomPaint(size: const Size(18, 14), painter: ModeIcon(m.$1, m.$1 == mode ? Colors.white : tk.muted)),
+                                    CustomPaint(size: const Size(18, 14), painter: ModeIcon(m.$1, m.$1 == mode ? tk.suAzione : tk.testoSecondario)),
                                     const SizedBox(height: 5),
                                     Text(
                                       m.$2,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: m.$1 == mode ? Colors.white : tk.muted,
-                                      ),
+                                      style: Testo.piccolo.copyWith(fontWeight: FontWeight.w600, color: m.$1 == mode ? tk.suAzione : tk.testoSecondario),
                                     ),
                                   ],
                                 ),
@@ -1047,10 +1046,10 @@ class _PromptEditorState extends State<PromptEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
+    final tk = context.col;
     final t = Theme.of(context).textTheme;
     return AnimatedOpacity(
-      duration: const Duration(milliseconds: 200),
+      duration: Durata.veloce,
       opacity: widget.enabled || editing ? 1 : 0.5,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1059,20 +1058,20 @@ class _PromptEditorState extends State<PromptEditor> {
             children: [
               Text('Prompt della pulizia', style: t.titleMedium),
               const SizedBox(width: 8),
-              Text(widget.custom ? 'tuo' : 'predefinito', style: monoStyle(context, color: tk.faint)),
+              Text(widget.custom ? 'tuo' : 'predefinito', style: monoStyle(context, color: tk.testoSecondario)),
             ],
           ),
           const SizedBox(height: 8),
           AnimatedSize(
-            duration: const Duration(milliseconds: 250),
+            duration: Durata.normale,
             curve: Curves.easeOutCubic,
             alignment: Alignment.topCenter,
             child: !editing
                 ? Material(
-                    color: tk.surface,
-                    borderRadius: BorderRadius.circular(12),
+                    color: tk.scheda,
+                    borderRadius: BorderRadius.circular(Raggio.campo),
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(Raggio.campo),
                       onTap: widget.enabled ? _edit : null,
                       child: Padding(
                         padding: const EdgeInsets.all(14),
@@ -1084,11 +1083,11 @@ class _PromptEditorState extends State<PromptEditor> {
                                 widget.prompt,
                                 maxLines: 4,
                                 overflow: TextOverflow.ellipsis,
-                                style: t.bodySmall?.copyWith(color: tk.faint),
+                                style: t.bodySmall?.copyWith(color: tk.testoSecondario),
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Icon(widget.enabled ? Icons.edit_rounded : Icons.lock_outline_rounded, size: 16, color: tk.faint),
+                            Icon(widget.enabled ? Icons.edit_rounded : Icons.lock_outline_rounded, size: 16, color: tk.testoSecondario),
                           ],
                         ),
                       ),
@@ -1102,7 +1101,7 @@ class _PromptEditorState extends State<PromptEditor> {
                         autofocus: true,
                         minLines: 6,
                         maxLines: 14,
-                        style: t.bodySmall?.copyWith(color: tk.text, fontSize: 13),
+                        style: Testo.testo.copyWith(color: tk.testo),
                       ),
                       const SizedBox(height: 10),
                       Row(
@@ -1154,7 +1153,7 @@ class _Meter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
+    final tk = context.col;
     final t = Theme.of(context).textTheme;
     final full = fraction != null && fraction! >= 1;
     final near = fraction != null && fraction! >= 0.8;
@@ -1165,22 +1164,22 @@ class _Meter extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            Text(label, style: t.bodyMedium?.copyWith(color: tk.muted)),
+            Text(label, style: t.bodyMedium?.copyWith(color: tk.testoSecondario)),
             const Spacer(),
-            Text(value, style: display(context, size: 20, color: full ? Tokens.red : null)),
+            Text(value, style: display(context, size: 20, color: full ? context.col.errore : null)),
             if (of != null) Text(' / $of', style: monoStyle(context)),
           ],
         ),
         if (fraction != null) ...[
           const SizedBox(height: 6),
           ClipRRect(
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(Raggio.piccolo),
             child: LinearProgressIndicator(
               value: fraction!.clamp(0, 1).toDouble(),
               minHeight: 5,
               // La parte ancora libera si vede, anche sulla scheda bianca.
-              backgroundColor: tk.border,
-              color: full ? Tokens.red : Tokens.blue,
+              backgroundColor: tk.linea,
+              color: full ? context.col.errore : context.col.azione,
             ),
           ),
         ],
@@ -1189,7 +1188,7 @@ class _Meter extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             full ? 'Finito. Torna ${_when(resets!)}' : 'Si azzera ${_when(resets!)}',
-            style: monoStyle(context).copyWith(color: full ? Tokens.red : null),
+            style: monoStyle(context).copyWith(color: full ? context.col.errore : null),
           ),
         ],
       ],
@@ -1205,12 +1204,11 @@ class SettingsGroup extends StatelessWidget {
   final String label;
   final List<Widget> children;
 
-  /// La zona sensibile: la scheda ha un filo rosso.
+  /// La zona sensibile: la scheda è del rosso tenue del pericolo (errore), non il bianco delle isole.
   final bool danger;
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
       child: Column(
@@ -1218,17 +1216,13 @@ class SettingsGroup extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: Text(
-              label.toUpperCase(),
-              style: TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w600, color: danger ? Tokens.red : tk.muted),
-            ),
+            child: EtichettaGruppo(label, colore: danger ? context.col.errore : null),
           ),
           Container(
             padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
-              color: islandColor(context),
-              borderRadius: BorderRadius.circular(24),
-              border: danger ? Border.all(color: Tokens.red.withValues(alpha: 0.35)) : null,
+              color: danger ? context.col.erroreTenue : context.col.isola,
+              borderRadius: BorderRadius.circular(Raggio.gruppo),
             ),
             child: Column(children: children),
           ),
@@ -1301,7 +1295,7 @@ class _PermissionsState extends State<_Permissions> with WidgetsBindingObserver 
       children: [
         SettingsRow(
           icon: Icons.mic_rounded,
-          color: Tokens.blue,
+          color: context.col.azione,
           title: need('Microfono', mic),
           subtitle: 'Per sentirti mentre detti',
           value: state(mic),
@@ -1309,7 +1303,7 @@ class _PermissionsState extends State<_Permissions> with WidgetsBindingObserver 
         ),
         SettingsRow(
           icon: Icons.layers_rounded,
-          color: Tokens.blue,
+          color: context.col.azione,
           title: need('Sopra le altre app', overlay),
           subtitle: 'Per stare sul bordo dello schermo e dettare dentro qualunque app',
           value: state(overlay),
@@ -1320,7 +1314,7 @@ class _PermissionsState extends State<_Permissions> with WidgetsBindingObserver 
         ),
         SettingsRow(
           icon: Icons.notifications_rounded,
-          color: Tokens.blue,
+          color: context.col.azione,
           title: 'Notifiche',
           subtitle: 'Il testo dei vocali condivisi, se Transcri non può stare sopra le altre app',
           value: state(notifications),
@@ -1359,7 +1353,7 @@ class SettingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
+    final tk = context.col;
     final t = Theme.of(context).textTheme;
     return InkWell(
       onTap: onTap,
@@ -1390,7 +1384,7 @@ class SettingsRow extends StatelessWidget {
                 child: Text(
                   value!,
                   overflow: TextOverflow.ellipsis,
-                  style: mono ? monoStyle(context, size: 12) : t.bodyMedium?.copyWith(color: tk.muted),
+                  style: mono ? monoStyle(context, size: 12) : t.bodyMedium?.copyWith(color: tk.testoSecondario),
                 ),
               ),
             ],
@@ -1398,7 +1392,7 @@ class SettingsRow extends StatelessWidget {
               const SizedBox(width: 8),
               trailing!,
             ] else if (onTap != null)
-              Icon(Icons.chevron_right_rounded, color: tk.faint),
+              Icon(Icons.chevron_right_rounded, color: tk.testoSecondario),
           ],
         ),
       ),
@@ -1495,7 +1489,7 @@ class _TopicsSettingsState extends State<TopicsSettings> {
     setState(() => models = list);
     // Mentre scarica si guarda a che punto è, due volte al secondo; poi si smette.
     final busy = list.any((m) => m.state == 'downloading');
-    if (busy && _poll == null) _poll = Timer.periodic(const Duration(milliseconds: 500), (_) => _load());
+    if (busy && _poll == null) _poll = Timer.periodic(const Duration(milliseconds: 500), (_) => _load()); // ds:eccezione: tempo di comportamento (quanto spesso controlla lo scaricamento)
     if (!busy) {
       _poll?.cancel();
       _poll = null;
@@ -1512,14 +1506,14 @@ class _TopicsSettingsState extends State<TopicsSettings> {
   Widget build(BuildContext context) {
     final list = models;
     final t = Theme.of(context).textTheme;
-    final tk = context.tk;
+    final tk = context.col;
     return SettingsPageFrame(
       title: 'Argomenti nelle note',
       children: [
         Text(
           'Transcrify divide le note per argomento e le raggruppa da solo. Lo fa un modello che gira sul telefono: '
           'si scarica una volta, poi lavora senza rete e senza costi. Meglio col Wi-Fi.',
-          style: t.bodyMedium?.copyWith(color: tk.muted),
+          style: t.bodyMedium?.copyWith(color: tk.testoSecondario),
         ),
         const SizedBox(height: 24),
         if (list != null) ...[
@@ -1553,22 +1547,22 @@ class _Choice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
+    final tk = context.col;
     final t = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: islandColor(context),
-        borderRadius: BorderRadius.circular(20),
+        color: context.col.isola,
+        borderRadius: BorderRadius.circular(Raggio.scheda),
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(Raggio.scheda),
           onTap: onTap,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: Durata.veloce,
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: selected ? Tokens.blue : Colors.transparent, width: 1.5),
+              borderRadius: BorderRadius.circular(Raggio.scheda),
+              border: Border.all(color: selected ? context.col.azione : Colors.transparent, width: 1.5),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1589,7 +1583,7 @@ class _Choice extends StatelessWidget {
                     ),
                     Icon(
                       selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                      color: selected ? Tokens.blue : tk.faint,
+                      color: selected ? context.col.azione : tk.testoSecondario,
                     ),
                   ],
                 ),
@@ -1623,7 +1617,7 @@ class _ModelState extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: BorderRadius.circular(Raggio.piccolo),
               child: LinearProgressIndicator(value: m.progress, minHeight: 6),
             ),
             const SizedBox(height: 6),
@@ -1648,11 +1642,11 @@ class _ModelState extends StatelessWidget {
         ),
         'ready' => Row(
           children: [
-            const Icon(Icons.check_circle_rounded, size: 18, color: Tokens.green),
+            Icon(Icons.check_circle_rounded, size: 18, color: context.col.successo),
             const SizedBox(width: 6),
             Expanded(child: Text('Sul telefono', style: t.bodySmall)),
             TextButton(
-              style: TextButton.styleFrom(foregroundColor: Tokens.red),
+              style: TextButton.styleFrom(foregroundColor: context.col.errore),
               onPressed: () async {
                 await Core.deleteTopicModel(m.id);
                 onRefresh();
@@ -1664,7 +1658,7 @@ class _ModelState extends StatelessWidget {
         'failed' => Row(
           children: [
             Expanded(
-              child: Text(m.error ?? 'Non è andata.', style: t.bodySmall?.copyWith(color: Tokens.red)),
+              child: Text(m.error ?? 'Non è andata.', style: t.bodySmall?.copyWith(color: context.col.errore)),
             ),
             TextButton(
               onPressed: () async {

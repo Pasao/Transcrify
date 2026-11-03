@@ -60,6 +60,12 @@ class Session(private val context: Context, private val store: Store, private va
     var sampledAt = 0L
     var hasLast by mutableStateOf(store.history().isNotEmpty()); private set
 
+    /** Il vocale a cui stai rispondendo, se la sua carta è aperta nel Floater (lo dice il servizio). */
+    var contestoRisposta: () -> String? = { null }
+
+    /** Il testo dell'ultima trascrizione, per la carta del Floater. */
+    fun lastText(): String? = store.history().firstOrNull()?.text
+
     /** Registrazioni che aspettano la rete (o un nuovo tentativo). */
     val queue = Queue(context)
     val transcriber = Transcriber(context, store, queue)
@@ -266,7 +272,7 @@ class Session(private val context: Context, private val store: Store, private va
             say("Non ho sentito niente")
             return null
         }
-        val item = queue.add(recording, duration / 1000, if (purify) mode else null, appendingTo, cursor = appendCursor)
+        val item = queue.add(recording, duration / 1000, if (purify) mode else null, appendingTo, cursor = appendCursor, contesto = if (appendingTo == null) contestoRisposta() else null)
         waiting = queue.all().size
         onHistoryChanged()
         return item
@@ -292,15 +298,20 @@ class Session(private val context: Context, private val store: Store, private va
     }
 
     /** Il lavoro su un audio, fino alla fine. Dice se è andato a buon fine. */
-    private suspend fun work(item: Pending): Boolean {
-        phase = Phase.PROCESSING
-        error = null
+    /** Trascrive [item] e aggiorna la coda; lo stato (phase) lo decide chi chiama. */
+    private suspend fun esegui(item: Pending): Transcriber.Outcome {
         working.add(item.id)
         val outcome = withContext(Dispatchers.IO) { transcriber.run(item) }
         working.remove(item.id)
         waiting = queue.all().size
         onHistoryChanged()
-        when (outcome) {
+        return outcome
+    }
+
+    private suspend fun work(item: Pending): Boolean {
+        phase = Phase.PROCESSING
+        error = null
+        when (val outcome = esegui(item)) {
             is Transcriber.Outcome.Done -> {
                 val t = outcome.result
                 if (t == null) {
@@ -324,17 +335,28 @@ class Session(private val context: Context, private val store: Store, private va
     }
 
     /**
-     * Trascrive gli audio condivisi, uno alla volta, appena Transcri è libero: se stai dettando
-     * aspettano che tu finisca. Se uno fallisce si ferma: restano in coda e l'app li mostra.
+     * Un audio condiviso mentre stai registrando (anche in pausa): si trascrive in sottofondo, senza toccare la tua
+     * registrazione né lo stato di Transcri; quando è pronto arriva nella carta. Se fallisce resta in coda.
+     */
+    private suspend fun inSottofondo(item: Pending): Boolean {
+        val outcome = esegui(item)
+        if (outcome !is Transcriber.Outcome.Done) return false
+        outcome.result?.let { onShared(it, item.origin!!) }
+        return true
+    }
+
+    /**
+     * Trascrive gli audio condivisi, uno alla volta: se stai registrando, in sottofondo (sua richiesta, 3 nov:
+     * prima aspettavano che finissi). Se uno fallisce si ferma: restano in coda e l'app li mostra.
      */
     fun drainShared(onDone: () -> Unit) {
         if (draining) return
         draining = true
         scope.launch {
             while (true) {
-                snapshotFlow { phase }.first { it != Phase.RECORDING && it != Phase.PROCESSING }
-                val item = queue.all().firstOrNull { it.origin != null } ?: break
-                if (!work(item)) break
+                snapshotFlow { phase }.first { it != Phase.PROCESSING }
+                val item = queue.all().firstOrNull { it.origin != null && it.id !in working } ?: break
+                if (!(if (phase == Phase.RECORDING) inSottofondo(item) else work(item))) break
             }
             draining = false
             onDone()
@@ -353,13 +375,14 @@ class Session(private val context: Context, private val store: Store, private va
         val open = android.app.PendingIntent.getActivity(
             context, 0, android.content.Intent(context, MainActivity::class.java), android.app.PendingIntent.FLAG_IMMUTABLE,
         )
-        val from = origin.title
+        val from = Provenienza.titolo(context, origin)
         nm.notify(
             t.at.hashCode(),
             android.app.Notification.Builder(context, SHARED_CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_mic)
                 .setContentTitle(from)
                 .setContentText(t.text)
+                .setLargeIcon(Provenienza.icona(context, origin.source))
                 .setStyle(android.app.Notification.BigTextStyle().bigText(t.text))
                 .setContentIntent(open)
                 .setAutoCancel(true)
@@ -420,7 +443,7 @@ class Session(private val context: Context, private val store: Store, private va
     }
 
     fun copyLast() {
-        store.history().firstOrNull()?.let { copy(it.text) }
+        lastText()?.let { copy(it) }
     }
 
     /**

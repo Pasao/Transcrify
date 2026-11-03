@@ -64,8 +64,6 @@ sealed interface Stage {
     /** Mentre si trascina: la X in basso che può inghiottire la pillola. */
     data object Dismiss : Stage
 
-    /** Il testo di un audio condiviso: si apre dalla pillola, sopra l'app in cui sei. */
-    data object Message : Stage
 
     /** I comandi del Floater con Transcri nel Dock: si aprono dal suo posto [nest], sopra l'app. */
     data class Panel(val nest: Rect) : Stage
@@ -96,7 +94,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         finishing = scope.launch {
             snapshotFlow { session.busy }.first { !it }
             // Nel Dock il verde di «fatto» si vede solo se il servizio resta acceso ancora un attimo.
-            if (!out && session.phase == Phase.SUCCESS) delay(1400)
+            if (!out && session.phase == Phase.SUCCESS) delay(Durate.CONFERMA)
             stopSelf()
         }
     }
@@ -166,6 +164,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         session = Session(this, store, scope).also {
             it.onHistoryChanged = { listener?.invoke() }
             it.onShared = { t, origin -> if (out) showMessage(t, origin) else it.notifyShared(t, origin) }
+            it.contestoRisposta = ::contestoRisposta
         }
         pillRight = store.pillRight
         readAccent()
@@ -235,6 +234,9 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         "level" to (session.level * 50).roundToInt() / 50.0,
         "appendTo" to session.appendingTo,
         "error" to session.error,
+        // Per i ComandiVoce nella barra della trascrizione: in pausa, e da quanti secondi ascolta.
+        "paused" to session.paused,
+        "seconds" to (session.elapsedMs / 1000).toInt(),
     )
 
     /** Ascolta: dal Dock, senza finestre sopra le altre app; se è già fuori, lo vedi sulla sua pillola. */
@@ -248,6 +250,9 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         session.stopAndSend()
         if (!out) rest()
     }
+
+    /** Mette in pausa o riprende l'ascolto (il tasto a destra dei ComandiVoce). */
+    fun togglePause() = session.togglePause()
 
     /** Butta quello che ha sentito. */
     fun discardListening() {
@@ -278,46 +283,69 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     /** Uscito apposta per un audio condiviso: finito il lavoro, se nessuno l'ha toccato, se ne torna a casa. */
     private var outForShared = false
 
-    /** I testi degli audio condivisi ancora da leggere: il primo è quello che si vede. */
+    /**
+     * La carta del Floater (B12, 2 nov notte): esce dalla fessura sopra il registratore. Mostra i vocali condivisi
+     * ([vocale] il primo, [messages] gli altri, di fila) o, se non ce ne sono, l'ultima trascrizione.
+     * Con la carta di un vocale aperta, quello che detti risponde a quel vocale: il pulitore lo riceve come contesto.
+     */
     val messages = androidx.compose.runtime.mutableStateListOf<Pair<Transcription, Origin>>()
+    var vocale by mutableStateOf<Pair<Transcription, Origin>?>(null); private set
 
-    /** Il messaggio l'ho solo letto: via dalle trascrizioni o dai Pensieri, dov'era finito. */
-    fun forgetMessage() {
-        val (t, _) = messages.firstOrNull() ?: return
-        if (t.noteId != null) {
-            store.deleteNote(t.noteId)
-            NoteTopicsWorker.get(this).forget(t.noteId)
-        } else {
-            store.removeFromHistory(t.at)
-        }
+    /** Quale carta è fuori (i cassetti la aprono, la scambiano, la chiudono); null: nessuna. */
+    var carta by mutableStateOf<Carta?>(null)
+
+    /** Tutti i vocali sulla carta, dal primo all'ultimo. */
+    val vocali: List<Pair<Transcription, Origin>> get() = listOfNotNull(vocale) + messages
+
+    /** Il vocale a cui stai rispondendo: c'è solo se la sua carta è aperta. */
+    private fun contestoRisposta(): String? = if (carta == Carta.VOCALI) vocali.joinToString("\n\n") { it.first.text }.ifBlank { null } else null
+
+    /** La X di un vocale: esce dalla carta (resta salvato dov'era). Finiti i vocali, la carta si richiude. */
+    fun togliVocale(t: Transcription) {
+        if (vocale?.first?.at == t.at) vocale = messages.removeFirstOrNull() else messages.removeAll { it.first.at == t.at }
+        if (vocale == null && carta == Carta.VOCALI) carta = null
+    }
+
+    /** «Salva come nota»: i vocali sulla carta passano tra le note. Il titolo arriva appena è pronto. */
+    fun vocaliInNote() {
+        vocale = vocale?.let(::inNota)
+        for (i in messages.indices) messages[i] = inNota(messages[i])
         listener?.invoke()
     }
 
-    /** Il messaggio era una trascrizione, ma lo voglio tra i pensieri. Il titolo arriva appena è pronto. */
-    fun messageToNote() {
-        val (t, origin) = messages.firstOrNull() ?: return
-        if (t.noteId != null) return
+    /** «Salva come nota» sulla carta dell'ultima trascrizione. */
+    fun ultimaInNota() {
+        val t = store.history().firstOrNull() ?: return
+        inNota(t to Origin(t.source, toNote = false))
+        listener?.invoke()
+    }
+
+    private fun inNota(v: Pair<Transcription, Origin>): Pair<Transcription, Origin> {
+        val (t, origin) = v
+        if (t.noteId != null) return v
         val id = "${t.at}-pensiero"
         store.removeFromHistory(t.at)
         store.saveNote(Note(id, "", t.text, t.at, t.at, origin.source))
         NoteTopicsWorker.get(this).request(id)
-        messages[0] = t.copy(noteId = id) to origin.copy(toNote = true)
-        listener?.invoke()
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val title = session.transcriber.titleFor(t.text)
             if (title.isNotEmpty()) store.notes().firstOrNull { it.id == id }?.let { store.saveNote(it.copy(title = title)) }
             listener?.invoke()
         }
+        return t.copy(noteId = id) to origin.copy(toNote = true)
     }
 
     private fun showMessage(t: Transcription, origin: Origin) {
-        messages += t to origin
-        if (stage == null) showStage(Stage.Message)
+        if (vocale == null) vocale = t to origin else messages += t to origin
+        // Mentre registri non apre la carta da sola: diventerebbe il contesto di quello che stai già dicendo.
+        if (session.phase != Phase.RECORDING) carta = Carta.VOCALI
+        if (stage == null) showStage(Stage.Menu)
     }
 
     /** Se è uscito solo per gli audio condivisi, e li hai letti tutti, torna a casa. */
     private fun goHomeIfDone() {
-        if (!outForShared || !out || stage != null || messages.isNotEmpty() || session.busy) return
+        // Con un vocale nel pannello resta fuori: aspetta che lo riapri.
+        if (!outForShared || !out || stage != null || vocale != null || session.busy) return
         if (session.phase == Phase.ERROR || session.phase == Phase.RECORDING) return
         outForShared = false
         showStage(Stage.Outro(dismissCenter(), null))
@@ -335,7 +363,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     override fun onDestroy() {
-        liveListener?.invoke(mapOf("phase" to Phase.IDLE.name, "level" to 0.0, "appendTo" to null, "error" to null))
+        liveListener?.invoke(mapOf("phase" to Phase.IDLE.name, "level" to 0.0, "appendTo" to null, "error" to null, "paused" to false, "seconds" to 0))
         main.removeCallbacks(finish)
         val refreshed = homecoming
         session.release()
@@ -357,25 +385,19 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     /** Lo schermo ruota: la pillola resta sul suo bordo, alla stessa altezza in proporzione. */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (stage == Stage.Menu || stage == Stage.Dismiss || stage == Stage.Message || stage is Stage.Panel) removeStage()
+        if (stage == Stage.Menu || stage == Stage.Dismiss || stage is Stage.Panel) removeStage()
         readAccent()
         placePill()
     }
 
-    /** I colori di Transcri sono quelli del telefono (Material You): cambiano con lo sfondo e col tema. */
+    /**
+     * I colori della pillola vengono dalla fonte unica dei token (Token.kt), come l'app e il widget:
+     * Transcri coi suoi due toni, il pannello scuro «floater», gli stati del design system.
+     */
     private fun readAccent() {
-        val c = { id: Int -> androidx.compose.ui.graphics.Color(getColor(id)) }
-        Palette.AccentA = c(android.R.color.system_accent1_300)
-        Palette.AccentB = c(android.R.color.system_accent3_300)
-        // Bottoni e cursore: il tono pieno dell'accento. Il pannello: il neutro scuro del telefono.
-        Palette.Blue = c(android.R.color.system_accent1_400)
-        Palette.Panel = c(android.R.color.system_neutral1_900).copy(alpha = 0.95f)
-        // Gli stati restano riconoscibili (rosso ascolta, verde fatto, giallo errore) ma si avvicinano
-        // al tono del telefono e si smorzano: non devono stonare col suo colore.
-        val accent = getColor(android.R.color.system_accent1_400)
-        Palette.Red = androidx.compose.ui.graphics.Color(stateColor(this, RED))
-        Palette.Green = androidx.compose.ui.graphics.Color(stateColor(this, GREEN))
-        Palette.Yellow = androidx.compose.ui.graphics.Color(stateColor(this, YELLOW))
+        // Il Floater è sempre scuro: i token del tema scuro (vedi Palette).
+        Palette.token = Token.dal(Seme.di(this), scuro = true)
+        Opacita.di(store).applica()
     }
 
     // --- Geometria, in pixel dello schermo ---
@@ -590,7 +612,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         stage = s
         val params = overlayParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
         // Animazioni e X non prendono tocchi: passano alla pillola o all'app sotto.
-        if (s !is Stage.Menu && s !is Stage.Message && s !is Stage.Panel) params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        if (s !is Stage.Menu && s !is Stage.Panel) params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         val view = composeView { StageLayer(this) }
         wm.addView(view, params)
         stageView = view
@@ -622,7 +644,6 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         stage = null
         leaving?.postDelayed({ runCatching { wm.removeView(leaving) } }, 48)
         when {
-            messages.isNotEmpty() -> showStage(Stage.Message)
             // Il pannello nel Dock si chiude, e non c'è più niente in corso: il servizio può spegnersi.
             !out -> if (session.phase != Phase.RECORDING) rest()
             else -> goHomeIfDone()
@@ -733,25 +754,6 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         /** Avvisato quando cambia quello che Transcri sta facendo: stato e volume, per il Dock. */
         var liveListener: ((Map<String, Any?>) -> Unit)? = null
 
-        const val RED = 0xFFF24822.toInt()
-        const val GREEN = 0xFF14AE5C.toInt()
-        private const val YELLOW = 0xFFFFCD29.toInt()
-
-        /**
-         * Il colore di uno stato, avvicinato al tono del telefono: la tinta si sposta verso l'accento
-         * (al più 15°) e si smorza un poco, come fa Material You. La pillola e il Dock usano questo.
-         */
-        fun stateColor(context: Context, color: Int): Int {
-            val a = FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) }
-            val b = FloatArray(3).also { android.graphics.Color.colorToHSV(context.getColor(android.R.color.system_accent1_400), it) }
-            var diff = b[0] - a[0]
-            if (diff > 180) diff -= 360
-            if (diff < -180) diff += 360
-            a[0] = (a[0] + diff.coerceIn(-15f, 15f) * 0.6f + 360) % 360
-            a[1] *= 0.82f
-            a[2] = minOf(1f, a[2] * 0.97f)
-            return android.graphics.Color.HSVToColor(a)
-        }
 
         /** Comincia ad ascoltare con l'app aperta: è qui che Android concede il microfono anche per dopo. */
         fun listen(context: Context, appendTo: Long?, cursor: Int, panel: FloatArray?) {
@@ -792,3 +794,6 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
     }
 }
+
+/** Le carte che escono sopra il registratore del Floater. */
+enum class Carta { VOCALI, ULTIMA }

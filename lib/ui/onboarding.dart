@@ -15,6 +15,12 @@ final _keyPattern = RegExp(r'^gsk_[A-Za-z0-9]{20,}$');
 /// È la stessa pagina ovunque: nell'introduzione (con la freccia per tornare alla prima pagina)
 /// e dalle impostazioni per cambiarla. In alto a destra la X chiude senza toccare niente:
 /// la prima volta vuol dire «salta», e la chiave si potrà mettere quando serve.
+
+/// La testata dell'introduzione è dipinta coi colori di Transcri: sopra va il bianco, e la sua ombra è nera.
+/// Eccezione dichiarata al design system (non c'è un token «su Transcri»).
+const _suTranscri = Colors.white; // ds:eccezione: sopra i colori di Transcri
+const _ombraTranscri = Colors.black; // ds:eccezione: l'ombra del disegno di Transcri
+
 class KeyPage extends StatefulWidget {
   const KeyPage({super.key, required this.onSaved, required this.onClose, this.onBack});
 
@@ -104,14 +110,14 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
         children: [
           Text('Una chiave Groq.', style: display(context, size: 24)),
           const SizedBox(height: 6),
-          Text('È gratis. Tre passi, il terzo lo facciamo noi.', style: t.bodyMedium?.copyWith(color: context.tk.muted)),
+          Text('È gratis. Tre passi, il terzo lo facciamo noi.', style: t.bodyMedium?.copyWith(color: context.col.testoSecondario)),
           const SizedBox(height: 22),
-          _Step(n: 1, color: Tokens.blue, text: 'Apri Groq e accedi, anche con Google.', done: wentToGroq || found != null),
-          _Step(n: 2, color: Tokens.violet, text: 'Premi “Create API Key”, dagli un nome e copiala.', done: found != null),
-          _Step(n: 3, color: Tokens.green, text: 'Torna qui: la troviamo da soli negli appunti.', done: false),
+          _Passo(n: 1, color: context.col.azione, text: 'Apri Groq e accedi, anche con Google.', done: wentToGroq || found != null),
+          _Passo(n: 2, color: context.col.transcriB, text: 'Premi “Create API Key”, dagli un nome e copiala.', done: found != null),
+          _Passo(n: 3, color: context.col.successo, text: 'Torna qui: la troviamo da soli negli appunti.', done: false),
           const SizedBox(height: 24),
           AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
+            duration: Durata.normale,
             transitionBuilder: (c, a) => FadeTransition(
               opacity: a,
               child: SlideTransition(
@@ -128,7 +134,7 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
                     label: const Text('Apri Groq'),
                   ),
           ),
-          if (problem != null) ...[const SizedBox(height: 12), Text(problem!, style: t.bodySmall?.copyWith(color: Tokens.red))],
+          if (problem != null) ...[const SizedBox(height: 12), Text(problem!, style: t.bodySmall?.copyWith(color: context.col.errore))],
           // Gerarchia: il primario sopra (Apri Groq / Usa questa chiave), poi il secondario con il bordo.
           if (manual) ...[
             const SizedBox(height: 12),
@@ -165,9 +171,7 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
         child: Scaffold(
           appBar: AppBar(
             automaticallyImplyLeading: false,
-            leading: widget.onBack == null
-                ? null
-                : IconButton(icon: const Icon(Icons.arrow_back_rounded), tooltip: 'Indietro', onPressed: widget.onBack),
+            leading: widget.onBack == null ? null : IconButton(icon: const Icon(Icons.arrow_back_rounded), tooltip: 'Indietro', onPressed: widget.onBack),
             actions: [close, const SizedBox(width: 8)],
           ),
           body: SafeArea(child: ListView(children: [steps])),
@@ -187,7 +191,7 @@ class _Hero extends StatefulWidget {
 }
 
 class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 4200))..repeat();
+  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 4200))..repeat(); // ds:eccezione: il movimento di Transcri
 
   @override
   void dispose() {
@@ -201,8 +205,8 @@ class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
     return Container(
       height: 380 + top,
       decoration: BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Tokens.blue, Tokens.violet]),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [context.col.azione, context.col.transcriB]),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(Raggio.foglio)),
       ),
       child: Stack(
         children: [
@@ -220,7 +224,10 @@ class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Transcrify', style: monoStyle(context, size: 13, color: Colors.white.withValues(alpha: 0.75))),
+                Text(
+                  'Transcrify',
+                  style: monoStyle(context, size: 13, color: _suTranscri.withValues(alpha: 0.75)),
+                ),
                 const SizedBox(height: 12),
                 Text.rich(
                   TextSpan(
@@ -228,16 +235,23 @@ class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
                       const TextSpan(text: 'Parla.\nÈ già '),
                       TextSpan(
                         text: 'copiato.',
-                        style: display(context, size: 46, strong: true, color: Colors.white),
+                        style: display(
+                          context,
+                          size: 46,
+                          strong: true,
+                          color: _suTranscri,
+                        ),
                       ),
                     ],
                   ),
-                  style: display(context, size: 46, color: Colors.white),
+                  style: display(context, size: 46, color: _suTranscri),
                 ),
                 const SizedBox(height: 12),
                 Text(
                   'Transcri vive sul bordo di ogni app. Lo tocchi, detti, incolli.',
-                  style: TextStyle(fontSize: 15, height: 1.4, color: Colors.white.withValues(alpha: 0.85)),
+                  style: Testo.testoGrande.copyWith(
+                    color: _suTranscri.withValues(alpha: 0.85),
+                  ),
                 ),
               ],
             ),
@@ -272,18 +286,22 @@ class _PillPainter extends CustomPainter {
     canvas.drawRRect(
       rect.shift(const Offset(0, 6)),
       Paint()
-        ..color = Colors.black.withValues(alpha: 0.18 * fade)
+        ..color = _ombraTranscri
+            .withValues(alpha: 0.18 * fade)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
     );
-    canvas.drawRRect(rect, Paint()..color = Colors.white.withValues(alpha: 0.95 * fade * breathe));
+    canvas.drawRRect(
+      rect,
+      Paint()..color = _suTranscri.withValues(alpha: 0.95 * fade * breathe),
+    );
   }
 
   @override
   bool shouldRepaint(_PillPainter old) => old.t != t;
 }
 
-class _Step extends StatelessWidget {
-  const _Step({required this.n, required this.text, required this.done, required this.color});
+class _Passo extends StatelessWidget {
+  const _Passo({required this.n, required this.text, required this.done, required this.color});
 
   final int n;
   final String text;
@@ -297,17 +315,14 @@ class _Step extends StatelessWidget {
       child: Row(
         children: [
           AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
+            duration: Durata.normale,
             width: 30,
             height: 30,
             alignment: Alignment.center,
             decoration: BoxDecoration(color: done ? color : color.withValues(alpha: 0.14), shape: BoxShape.circle),
             child: done
-                ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
-                : Text(
-                    '$n',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color),
-                  ),
+                ? Icon(Icons.check_rounded, size: Misura.iconaPiccola, color: context.col.suAzione)
+                : Text('$n', style: Testo.etichetta.copyWith(color: color)),
           ),
           const SizedBox(width: 14),
           Expanded(child: Text(text, style: Theme.of(context).textTheme.bodyMedium)),
@@ -326,31 +341,26 @@ class _FoundCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(color: Tokens.green.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(20)),
+    // B6 «ChiaveTrovata»: una scheda neutra, verde solo la spunta; il bottone è quello principale (Pieno).
+    return Scheda(
+      padding: const EdgeInsets.all(Spazio.s5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_awesome, size: 16, color: Tokens.green),
-              const SizedBox(width: 8),
-              Text(
-                'Trovata negli appunti',
-                style: t.bodyMedium?.copyWith(color: Tokens.green, fontWeight: FontWeight.w600),
-              ),
+              Icon(Icons.check_circle_rounded, size: Misura.iconaPiccola, color: context.col.successo),
+              const SizedBox(width: Spazio.s2),
+              Text('Trovata negli appunti', style: Testo.etichetta.copyWith(color: context.col.testo)),
             ],
           ),
           const SizedBox(height: 8),
-          Text(masked, style: monoStyle(context, size: 16, color: context.tk.text)),
+          Text(masked, style: monoStyle(context, size: 16, color: context.col.testo)),
           const SizedBox(height: 14),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Tokens.green),
             onPressed: checking ? null : onUse,
             child: checking
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: context.col.suAzione))
                 : const Text('Usa questa chiave'),
           ),
         ],
@@ -404,19 +414,19 @@ class IntroPage extends StatelessWidget {
                       const SizedBox(height: 18),
                       _How(
                         icon: Icons.bubble_chart_rounded,
-                        color: Tokens.blue,
+                        color: context.col.azione,
                         title: 'Fai uscire Transcri',
                         text: 'Dal bottone dell’app vola sul bordo dello schermo e resta lì, sopra tutto.',
                       ),
                       _How(
                         icon: Icons.mic_rounded,
-                        color: Tokens.violet,
+                        color: context.col.transcriB,
                         title: 'Toccalo e parla',
                         text: 'Da WhatsApp, dalle note, dalla mail: ovunque tu stia scrivendo.',
                       ),
-                      const _How(
+                      _How(
                         icon: Icons.content_paste_rounded,
-                        color: Tokens.green,
+                        color: context.col.successo,
                         title: 'Incolla',
                         text: 'Il testo è già negli appunti, anche ripulito da esitazioni e ripetizioni se vuoi.',
                       ),
@@ -433,7 +443,7 @@ class IntroPage extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.all(8),
                   child: IconButton(
-                    icon: const Icon(Icons.close_rounded, color: Colors.white),
+                    icon: Icon(Icons.close_rounded, color: _suTranscri),
                     tooltip: 'Chiudi',
                     onPressed: onClose,
                   ),
@@ -475,7 +485,7 @@ class _How extends StatelessWidget {
               children: [
                 Text(title, style: t.titleMedium),
                 const SizedBox(height: 2),
-                Text(text, style: t.bodyMedium?.copyWith(color: context.tk.muted)),
+                Text(text, style: t.bodyMedium?.copyWith(color: context.col.testoSecondario)),
               ],
             ),
           ),

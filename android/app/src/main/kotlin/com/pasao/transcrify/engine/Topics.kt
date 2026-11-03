@@ -159,6 +159,29 @@ class Topics(
         albums.values.filter { it.n >= minShown }.sortedByDescending { it.n }.map { it.id to it.members.toList() }
 
     /**
+     * I «grandi concetti»: gli album mostrati, raggruppati quando si somigliano abbastanza tra loro.
+     * Due album stanno nello stesso concetto se i loro pezzi si somigliano in media almeno [quanto] della
+     * soglia che tiene insieme un album ([pair]); basta somigliare a uno del gruppo (legame singolo).
+     * Ogni album mostrato sta in un concetto solo. Dal concetto più grande; dentro, dall'album più grande.
+     */
+    fun concetti(quanto: Float = 0.8f): List<List<Long>> {
+        val mostrati = albums.values.filter { it.n >= minShown }
+        val padre = HashMap<Long, Long>().apply { mostrati.forEach { put(it.id, it.id) } }
+        fun radice(x: Long): Long {
+            var r = x
+            while (padre[r] != r) r = padre[r]!!
+            return r
+        }
+        for (i in mostrati.indices) for (j in i + 1 until mostrati.size) {
+            if (mostrati[i].like(mostrati[j]) >= pair * quanto) padre[radice(mostrati[i].id)] = radice(mostrati[j].id)
+        }
+        return mostrati.groupBy { radice(it.id) }.values
+            .map { g -> g.sortedByDescending { it.n } }
+            .sortedByDescending { g -> g.sumOf { it.n } }
+            .map { g -> g.map { it.id } }
+    }
+
+    /**
      * I pezzi più simili a [query]: prima un setaccio largo coi codici binari ([wide] candidati),
      * poi il coseno vero sui vettori in 8 bit. Il setaccio sbaglia poco, il riordino quasi niente.
      */

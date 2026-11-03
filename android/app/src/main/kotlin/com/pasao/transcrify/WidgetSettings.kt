@@ -1,5 +1,7 @@
 package com.pasao.transcrify
 
+import androidx.compose.ui.platform.LocalContext
+
 import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.Intent
@@ -79,14 +81,14 @@ private fun Screen(start: WidgetLook, onDone: (WidgetLook) -> Unit) {
             .systemBarsPadding()
             .padding(horizontal = 24.dp, vertical = 28.dp),
     ) {
-        Text("Widget di Transcri", fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
+        Text("Widget di Transcri", style = Caratteri.titoloPagina, color = c.onSurface)
         Spacer(Modifier.height(24.dp))
         // L'anteprima, su un muro neutro come la home.
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(150.dp)
-                .background(c.surfaceVariant, RoundedCornerShape(28.dp)),
+                .background(c.surfaceVariant, Forme.foglio),
             contentAlignment = Alignment.Center,
         ) { Preview(look) }
         Spacer(Modifier.height(28.dp))
@@ -96,14 +98,14 @@ private fun Screen(start: WidgetLook, onDone: (WidgetLook) -> Unit) {
         Choice("Scritta", listOf(true to "Con la scritta", false to "Solo Transcri"), look.text) { look = look.copy(text = it) }
         Choice("Sfondo", listOf(true to "Pieno", false to "Trasparente"), look.filled) { look = look.copy(filled = it) }
         Spacer(Modifier.weight(1f))
-        Button(onClick = { onDone(look) }, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Fatto", fontSize = 16.sp) }
+        Button(onClick = { onDone(look) }, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Fatto", style = Caratteri.testoGrande) }
     }
 }
 
 @Composable
 private fun <T> Choice(label: String, options: List<Pair<T, String>>, current: T, onPick: (T) -> Unit) {
     val c = MaterialTheme.colorScheme
-    Text(label, fontSize = 13.sp, color = c.onSurfaceVariant)
+    Text(label, style = Caratteri.etichetta, color = c.onSurfaceVariant)
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { (value, text) ->
@@ -113,7 +115,7 @@ private fun <T> Choice(label: String, options: List<Pair<T, String>>, current: T
                     .background(if (on) c.onSurface else c.surfaceVariant, CircleShape)
                     .clickable { onPick(value) }
                     .padding(horizontal = 16.dp, vertical = 9.dp),
-            ) { Text(text, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = if (on) c.surface else c.onSurface) }
+            ) { Text(text, style = Caratteri.testo.copy(fontWeight = FontWeight.Medium), color = if (on) c.surface else c.onSurface) }
         }
     }
     Spacer(Modifier.height(20.dp))
@@ -122,12 +124,11 @@ private fun <T> Choice(label: String, options: List<Pair<T, String>>, current: T
 /** Il widget come lo disegna il launcher, in piccolo: stessi colori, stesse proporzioni. */
 @Composable
 private fun Preview(look: WidgetLook) {
-    val (bg, text) = when (look.style) {
-        WidgetLook.LIGHT -> listOf(Color(0xFFFFF4EC), Color(0xFFF4E2F0)) to Color(0xFF2A2320)
-        WidgetLook.DARK -> listOf(Color(0xFF2C2A33), Color(0xFF1C1B20)) to Color(0xFFF3F0EC)
-        else -> listOf(colorResource(R.color.widget_phone_start), colorResource(R.color.widget_phone_end)) to colorResource(R.color.widget_phone_text)
-    }
-    val blob = Brush.verticalGradient(listOf(colorResource(android.R.color.system_accent1_300), colorResource(android.R.color.system_accent3_300)))
+    // Gli stessi colori del widget vero (WidgetColori, dai token).
+    val col = WidgetColori.di(LocalContext.current, look.style)
+    val bg = listOf(Color(col.fondo), Color(col.fondoFine))
+    val text = Color(col.testo)
+    val blob = Brush.verticalGradient(listOf(Color(col.transcriA), Color(col.transcriB)))
     val shape = CircleShape
     val base = Modifier
         .then(if (look.filled) Modifier.background(Brush.horizontalGradient(bg), shape) else Modifier.border(1.dp, text.copy(alpha = 0.2f), shape))
@@ -136,8 +137,8 @@ private fun Preview(look: WidgetLook) {
             Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) { Blob(blob, big = true) }
             Spacer(Modifier.width(12.dp))
             Column {
-                Text("Detta", fontSize = 19.sp, fontWeight = FontWeight.Medium, color = text)
-                Text("Tocca e parla, poi incolla dove vuoi", fontSize = 12.sp, color = text.copy(alpha = 0.7f), maxLines = 2)
+                Text("Detta", style = Caratteri.titoloScheda, color = text)
+                Text("Tocca e parla, poi incolla dove vuoi", style = Caratteri.piccolo, color = text.copy(alpha = 0.7f), maxLines = 2)
             }
         }
     } else {
@@ -151,7 +152,7 @@ private fun Blob(brush: Brush, big: Boolean = false) {
     val k = if (big) 52f / 34f else 1f
     Box(Modifier.size((34 * k).dp, (30 * k).dp).background(brush, RoundedCornerShape((13 * k).dp))) {
         Row(Modifier.align(Alignment.TopCenter).padding(top = (9 * k).dp), horizontalArrangement = Arrangement.spacedBy((9 * k).dp)) {
-            repeat(2) { Box(Modifier.size((2.6 * k).dp, (3.1 * k).dp).background(Color.White, CircleShape)) }
+            repeat(2) { Box(Modifier.size((2.6 * k).dp, (3.1 * k).dp).background(Color.White, CircleShape)) } // ds:eccezione: gli occhi di Transcri
         }
     }
 }

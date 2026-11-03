@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 
 import '../core/native.dart';
 import 'common.dart';
+import 'molecole/pezzo_argomento.dart';
+import 'molecole/scheda_argomento.dart';
+import 'molecole/stato_vuoto.dart';
 import 'theme.dart';
 
 /// Apre una nota (o una nuova, vuota) e ci pensa lui a salvarla quando torni indietro.
@@ -55,7 +58,22 @@ class _PensieriPageState extends State<PensieriPage> {
   /// Le note scelte tenendole premute. Finché ce n'è almeno una, toccare una nota la sceglie invece di aprirla.
   final selected = <String>{};
 
-  void _toggle(String id) => setState(() => selected.contains(id) ? selected.remove(id) : selected.add(id));
+  void _toggle(String id) {
+    final prima = selected.isEmpty;
+    setState(() => selected.contains(id) ? selected.remove(id) : selected.add(id));
+    // Appena cominci a scegliere, se eri in fondo la lista sale: la barra non copre le ultime.
+    if (prima && selected.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scroll.hasClients) return;
+        final p = _scroll.position;
+        if (p.maxScrollExtent - p.pixels <= ConSelezione.spazio(true) + Spazio.s1) {
+          _scroll.animateTo(p.maxScrollExtent, duration: Durata.normale, curve: Curva.standard);
+        }
+      });
+    }
+  }
+
+  final _scroll = ScrollController();
 
   List<Note> get _chosen => [
     for (final n in notes ?? <Note>[])
@@ -104,6 +122,7 @@ class _PensieriPageState extends State<PensieriPage> {
   void dispose() {
     Core.removeListener(_load);
     _search.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -126,22 +145,20 @@ class _PensieriPageState extends State<PensieriPage> {
   Widget build(BuildContext context) {
     final all = notes;
     if (all == null) return const SizedBox.shrink();
-    final tk = context.tk;
+    final tk = context.col;
     final shown = _found(all);
     if (all.isEmpty) {
-      return Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, widget.bottom + 24),
-        child: const Column(mainAxisAlignment: MainAxisAlignment.end, children: [_EmptyNotes()]),
-      );
+      return StatoVuoto(frase: 'Le tue note stanno qui.\nScrivine una con la matita, in basso.', bottom: widget.bottom);
     }
     final list = ListView(
-      padding: EdgeInsets.fromLTRB(16, 8, 16, widget.bottom + 24),
+      controller: _scroll,
+      padding: EdgeInsets.fromLTRB(16, 8, 16, widget.bottom + 24 + ConSelezione.spazio(selected.isNotEmpty)),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       children: [
         SearchField(controller: _search, hint: 'Cerca quello che ricordi'),
         const SizedBox(height: 14),
         if (shown.isEmpty)
-          _Hint(top: 'Niente con «${_search.text.trim()}».', bottom: 'Prova con un\'altra parola.', color: tk.muted)
+          _Hint(top: 'Niente con «${_search.text.trim()}».', bottom: 'Prova con un\'altra parola.', color: tk.testoSecondario)
         else
           Masonry(
             children: [
@@ -157,94 +174,21 @@ class _PensieriPageState extends State<PensieriPage> {
           ),
       ],
     );
-    if (selected.isEmpty) return list;
     // Le azioni sulle note scelte, in fondo, sopra il Dock.
-    return Stack(
-      children: [
-        list,
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: widget.bottom + 8,
-          child: SelectionBar(
-            label: selected.length == 1 ? '1 nota' : '${selected.length} note',
-            onClose: () => setState(selected.clear),
-            actions: [
-              (Icons.content_copy_rounded, 'Copia', _copy),
-              (Icons.share_rounded, 'Condividi', _share),
-              (Icons.delete_outline_rounded, 'Elimina', _delete),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Nessuna nota ancora: le sagome di quattro schede su due colonne, che sfumano, e una frase.
-/// Dicono cosa arriverà senza fingere un contenuto, come le schede vuote di Trascrivi.
-class _EmptyNotes extends StatelessWidget {
-  const _EmptyNotes();
-
-  @override
-  Widget build(BuildContext context) {
-    final tk = context.tk;
-    Widget ghost(double h, double opacity, List<double> lines) => Opacity(
-      opacity: opacity,
-      child: Container(
-        height: h,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: tk.surface, borderRadius: BorderRadius.circular(18)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final w in lines)
-              FractionallySizedBox(
-                widthFactor: w,
-                child: Container(
-                  height: 8,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(color: tk.border, borderRadius: BorderRadius.circular(4)),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                children: [
-                  ghost(150, 1, [0.6, 0.9, 0.8, 0.5]),
-                  const SizedBox(height: 10),
-                  ghost(96, 0.5, [0.7, 0.4]),
-                ],
-              ),
+    return ConSelezione(
+      bottom: widget.bottom,
+      bar: selected.isEmpty
+          ? null
+          : SelectionBar(
+              label: selected.length == 1 ? '1 nota' : '${selected.length} note',
+              onClose: () => setState(selected.clear),
+              actions: [
+                (Icons.content_copy_rounded, 'Copia', _copy),
+                (Icons.share_rounded, 'Condividi', _share),
+                (Icons.delete_outline_rounded, 'Elimina', _delete),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                children: [
-                  ghost(100, 0.75, [0.5, 0.85]),
-                  const SizedBox(height: 10),
-                  ghost(130, 0.35, [0.8, 0.6, 0.3]),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 28),
-        Text(
-          'Le tue note stanno qui.\nScrivine una con la matita, in basso.',
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: tk.muted),
-        ),
-      ],
+      child: list,
     );
   }
 }
@@ -292,103 +236,31 @@ class _ArgomentiPageState extends State<ArgomentiPage> {
   Widget build(BuildContext context) {
     final list = albums;
     if (list == null) return const SizedBox.shrink();
-    final tk = context.tk;
-    final t = Theme.of(context).textTheme;
     if (list.isEmpty) {
       final ready = notes.values.where((n) => n.topics == 'ready').length;
-      Widget ghost(double opacity) => Opacity(
-        opacity: opacity,
-        child: Container(
-          decoration: BoxDecoration(color: tk.surface, borderRadius: BorderRadius.circular(20)),
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              FractionallySizedBox(
-                widthFactor: 0.6,
-                child: Container(
-                  height: 10,
-                  decoration: BoxDecoration(color: tk.border, borderRadius: BorderRadius.circular(5)),
-                ),
-              ),
-              const Spacer(),
-              FractionallySizedBox(
-                widthFactor: 0.4,
-                child: Container(
-                  height: 8,
-                  decoration: BoxDecoration(color: tk.border, borderRadius: BorderRadius.circular(4)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-      return Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, widget.bottom + 24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              height: 230,
-              child: GridView.count(
-                crossAxisCount: 2,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: 1.25,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [ghost(1), ghost(0.7), ghost(0.45), ghost(0.25)],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                ready == 0
-                    ? 'Gli argomenti di cui parli più spesso stanno qui.\nAccendi «Dividi per argomento» nelle impostazioni.'
-                    : 'Gli argomenti di cui parli più spesso stanno qui.\nUno compare quando torna almeno tre volte.',
-                style: t.bodyLarge?.copyWith(color: tk.muted),
-              ),
-            ),
-          ],
-        ),
+      return StatoVuoto(
+        frase: ready == 0
+            ? 'Gli argomenti di cui parli più spesso stanno qui.\nAccendi «Dividi per argomento» nelle impostazioni.'
+            : 'Gli argomenti di cui parli più spesso stanno qui.\nUno compare quando torna almeno tre volte.',
+        bottom: widget.bottom,
       );
     }
-    return GridView.builder(
-      padding: EdgeInsets.fromLTRB(16, 8, 16, widget.bottom + 24),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 1.25,
+    // I grandi concetti, nell'ordine in cui arrivano (dal più grande); il nome lo dà il motore.
+    final concetti = <int, List<Album>>{};
+    for (final a in list) {
+      (concetti[a.concetto < 0 ? -a.id : a.concetto] ??= []).add(a);
+    }
+    final gruppi = concetti.values.toList();
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(Spazio.s4, Spazio.s2, Spazio.s4, widget.bottom + Spazio.s6),
+      itemCount: gruppi.length,
+      separatorBuilder: (_, _) => const SizedBox(height: Spazio.s3),
+      itemBuilder: (context, i) => SchedaArgomento(
+        nome: gruppi[i].first.concettoNome,
+        colore: context.col.argomenti[i % context.col.argomenti.length],
+        album: gruppi[i],
+        onApri: (a) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AlbumPage(album: a, notes: notes))),
       ),
-      itemCount: list.length,
-      itemBuilder: (context, i) {
-        final a = list[i];
-        return Material(
-          color: _topicColors[i % _topicColors.length].withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(20),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => AlbumPage(album: a, notes: notes),
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(a.name, style: t.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
-                  const Spacer(),
-                  Text('${a.pieces.length} pezzi da ${a.notes} note', style: monoStyle(context)),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }
@@ -403,8 +275,7 @@ class AlbumPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
-    final t = Theme.of(context).textTheme;
+    final tk = context.col;
     return Paper(
       child: Scaffold(
         appBar: AppBar(),
@@ -412,38 +283,21 @@ class AlbumPage extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(16, 0, 16, 32 + MediaQuery.viewPaddingOf(context).bottom),
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
-              child: Text(album.name, style: display(context, size: 28)),
+              padding: const EdgeInsets.fromLTRB(Spazio.s1, 0, Spazio.s1, Spazio.s1),
+              child: Text(album.name, style: Testo.titoloPagina.copyWith(color: tk.testo)),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, 20),
-              child: Text('${album.pieces.length} pezzi da ${album.notes} note', style: t.bodySmall),
+              padding: const EdgeInsets.fromLTRB(Spazio.s1, 0, Spazio.s1, Spazio.s5),
+              child: Text('${SchedaArgomento.pezzi(album.pieces.length)} da ${album.notes == 1 ? '1 nota' : '${album.notes} note'}', style: Testo.orario.copyWith(color: tk.testoSecondario)),
             ),
             for (final p in album.pieces)
               if (notes[p.note] case final note? when p.range.end <= note.text.length)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Material(
-                    color: tk.surface,
-                    borderRadius: BorderRadius.circular(18),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(18),
-                      onTap: () => openNote(context, note),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(note.text.substring(p.range.start, p.range.end).trim(), style: t.bodyMedium?.copyWith(height: 1.45)),
-                            const SizedBox(height: 8),
-                            Text(
-                              'da «${note.title.trim().isEmpty ? dayLabel(note.updated) : note.title.trim()}» ›',
-                              style: monoStyle(context, color: Tokens.blue),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                  padding: const EdgeInsets.only(bottom: Spazio.s3),
+                  child: PezzoArgomento(
+                    testo: note.text.substring(p.range.start, p.range.end).trim(),
+                    daNota: note.title.trim().isEmpty ? dayLabel(note.updated) : note.title.trim(),
+                    onApriNota: () => openNote(context, note),
                   ),
                 ),
           ],
@@ -477,25 +331,25 @@ class SearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
+    final tk = context.col;
     return TextField(
       controller: controller,
       textInputAction: TextInputAction.search,
       decoration: InputDecoration(
         hintText: hint,
-        prefixIcon: Icon(Icons.search_rounded, color: tk.muted),
+        prefixIcon: Icon(Icons.search_rounded, color: tk.testoSecondario),
         suffixIcon: controller.text.isEmpty
             ? null
             : IconButton(
-                icon: Icon(Icons.close_rounded, color: tk.muted),
+                icon: Icon(Icons.close_rounded, color: tk.testoSecondario),
                 tooltip: 'Cancella',
                 onPressed: controller.clear,
               ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(Raggio.foglio), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(Raggio.foglio), borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
-          borderSide: BorderSide(color: Tokens.blue, width: 1.5),
+          borderRadius: BorderRadius.circular(Raggio.foglio),
+          borderSide: BorderSide(color: context.col.azione, width: 1.5),
         ),
       ),
     );
@@ -554,34 +408,31 @@ class NoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
-    final t = Theme.of(context).textTheme;
+    final tk = context.col;
+    // La Scheda del design system: «scelta» = fondo tenue e contorno.
     return Material(
-      color: selected ? Tokens.blue.withValues(alpha: 0.14) : tk.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: selected ? Tokens.blue : Colors.transparent, width: 1.5),
-      ),
+      color: Scheda.fondo(tk, scelta: selected),
+      shape: Scheda.forma(tk, scelta: selected),
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Raggio.scheda),
         onTap: onOpen,
         onLongPress: () {
           HapticFeedback.mediumImpact();
           onSelect();
         },
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          padding: const EdgeInsets.fromLTRB(Spazio.s4, Spazio.s3, Spazio.s4, Spazio.s3),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (note.title.trim().isNotEmpty) ...[
-                Text(note.title.trim(), style: t.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
+                Text(note.title.trim(), style: Testo.titoloScheda.copyWith(color: tk.testo), maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: Spazio.s1),
               ],
               if (note.text.trim().isNotEmpty)
                 Text(
                   note.text.trim(),
-                  style: t.bodyMedium?.copyWith(height: 1.4, color: tk.muted),
+                  style: Testo.testo.copyWith(color: tk.testoSecondario),
                   maxLines: _maxLines,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -613,13 +464,12 @@ class TopicsBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) => switch (state) {
     'ready' => const Tooltip(message: 'Divisa per argomento: pizzica la nota', child: GrainIcon(level: 1, size: 14)),
-    'pending' => SizedBox(width: 11, height: 11, child: CircularProgressIndicator(strokeWidth: 1.5, color: context.tk.faint)),
+    'pending' => SizedBox(width: 11, height: 11, child: CircularProgressIndicator(strokeWidth: 1.5, color: context.col.testoSecondario)),
     _ => const SizedBox.shrink(),
   };
 }
 
 /// I colori dei pezzi: tenui, uno dopo l'altro. Si leggono sia di giorno sia di notte.
-const _topicColors = [Color(0xFFE8875F), Color(0xFF8E7CC3), Color(0xFF5FA778), Color(0xFF5C93C9), Color(0xFFC9A24B), Color(0xFFC9668E)];
 
 /// Il testo della nota con gli argomenti illuminati dietro le lettere, alla grana scelta.
 /// Solo finché il testo è quello per cui sono stati fatti: appena scrivi, si spengono e tornano
@@ -670,7 +520,7 @@ class TopicTextController extends TextEditingController {
       children.add(
         TextSpan(
           text: m.group(0),
-          style: TextStyle(color: Tokens.blue, decoration: TextDecoration.underline, decorationColor: Tokens.blue),
+          style: TextStyle(color: Colori.adesso.azione, decoration: TextDecoration.underline, decorationColor: Colori.adesso.azione),
         ),
       );
       at = m.end;
@@ -681,7 +531,7 @@ class TopicTextController extends TextEditingController {
 
   static List<TextRange> _pairs(List<int> k) => [for (var i = 0; i + 1 < k.length; i += 2) TextRange(start: k[i], end: k[i + 1])];
 
-  Color _color(int i) => _topicColors[i % _topicColors.length];
+  Color _color(int i) => Colori.adesso.argomenti[i % Colori.adesso.argomenti.length];
 
   TextSpan _pieces(TextStyle? style, List<TextRange> pieces) {
     final children = <TextSpan>[];
@@ -704,7 +554,7 @@ class TopicTextController extends TextEditingController {
   /// Le ultime due grane: il testo si fa leggero e restano accesi solo dei pezzi (le frasi chiave,
   /// o le parole chiave), ognuno col colore del suo argomento medio. Si legge l'essenziale in un colpo d'occhio.
   TextSpan _accents(TextStyle? style, List<TextRange> lit, {required bool bold}) {
-    final faded = TextStyle(color: (style?.color ?? const Color(0xFF1E1E1E)).withValues(alpha: 0.28));
+    final faded = TextStyle(color: (style?.color ?? Colori.adesso.testo).withValues(alpha: 0.28));
     final pieces = topics!.pieces(2);
     int pieceOf(int at) {
       for (var i = 0; i < pieces.length; i++) {
@@ -734,45 +584,18 @@ class TopicTextController extends TextEditingController {
 /// La grana in un'icona, come un mirino: tre cerchi alla stessa distanza uno dall'altro.
 /// Acceso il più grande = argomenti larghi, quello di mezzo = medi, il piccolo = frasi chiave;
 /// il mirino (la croce) = parole chiave, il punto più preciso. Spenti: tutti appena accennati.
+/// La grana degli argomenti: ora è il Mirino del design system (atomi.dart). Il nome resta per chi lo usa.
 class GrainIcon extends StatelessWidget {
   const GrainIcon({super.key, required this.level, this.size = 22, this.color});
 
   final int level;
   final double size;
+
+  /// Su un fondo scuro (il selettore della grana) tutto in un colore solo.
   final Color? color;
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(size: Size.square(size), painter: _GrainPainter(level, color ?? Tokens.blue, context.tk.faint));
-}
-
-class _GrainPainter extends CustomPainter {
-  _GrainPainter(this.level, this.on, this.off);
-
-  final int level;
-  final Color on, off;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final r = size.width / 2 - 1;
-    Paint pen(bool lit) => Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = lit ? 2 : 1.3
-      ..strokeCap = StrokeCap.round
-      ..color = lit ? on : off;
-    for (var ring = 1; ring <= 3; ring++) {
-      canvas.drawCircle(c, r * (4 - ring) / 3, pen(level == ring));
-    }
-    if (level == 4) {
-      final p = pen(true);
-      canvas.drawLine(c - Offset(r, 0), c + Offset(r, 0), p);
-      canvas.drawLine(c - Offset(0, r), c + Offset(0, r), p);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GrainPainter old) => old.level != level || old.on != on || old.off != off;
+  Widget build(BuildContext context) => Mirino(livello: level, misura: size, acceso: color, spento: color);
 }
 
 /// Scrivere una nota: il titolo (se vuoi) e il testo. Si salva da sola quando torni indietro.
@@ -811,10 +634,11 @@ class _NoteEditorState extends State<NoteEditor> {
 
   // --- Gli argomenti: si accendono pizzicando, col tasto nella barra, o tirandolo su ---
 
-  /// Mentre tiri su il tasto: la scala delle grane, e quanto hai tirato.
+  /// Mentre tieni il tasto: la scala delle grane. La grana è quella della riga sotto il dito
+  /// (dove capita il dito, non quanto l'hai spostato): si sale e si scende liberamente.
   bool _sliding = false;
-  double _slid = 0;
-  int _slideFrom = 0;
+  final _scala = GlobalKey();
+  static const _rigaScala = 40.0;
 
   void _slideStart() {
     if (!_text.usable) return _setLevel(1);
@@ -822,16 +646,17 @@ class _NoteEditorState extends State<NoteEditor> {
     setState(() {
       _showSummary = false;
       _sliding = true;
-      _slid = 0;
-      _slideFrom = _text.level;
     });
   }
 
-  /// Un gradino ogni 34 punti: più tiri su, più è preciso.
-  void _slide(double by) {
+  /// [dito]: dov'è il dito sullo schermo. Sotto la scala (sul tasto) non cambia niente; sopra la scala è la più fine.
+  void _slide(Offset dito) {
     if (!_sliding) return;
-    _slid += by;
-    final l = (_slideFrom - (_slid / 34).round()).clamp(0, 4);
+    final box = _scala.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final y = box.globalToLocal(dito).dy - Spazio.s2;
+    if (y > _rigaScala * 5) return;
+    final l = (4 - (y / _rigaScala).floor()).clamp(0, 4);
     if (l == _text.level) return;
     HapticFeedback.selectionClick();
     setState(() => _text.level = l);
@@ -864,7 +689,7 @@ class _NoteEditorState extends State<NoteEditor> {
   void _say(String s) {
     _labelTimer?.cancel();
     setState(() => _label = s);
-    _labelTimer = Timer(const Duration(milliseconds: 1100), () {
+    _labelTimer = Timer(Durata.etichetta, () {
       if (mounted) setState(() => _label = null);
     });
   }
@@ -1055,7 +880,7 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
+    final tk = context.col;
     final fresh = widget.note.isEmpty;
     final plain = InputDecoration(
       filled: false,
@@ -1063,7 +888,7 @@ class _NoteEditorState extends State<NoteEditor> {
       enabledBorder: InputBorder.none,
       focusedBorder: InputBorder.none,
       contentPadding: EdgeInsets.zero,
-      hintStyle: TextStyle(color: tk.faint),
+      hintStyle: TextStyle(color: tk.testoSecondario),
     );
     return PopScope<Note?>(
       canPop: false,
@@ -1109,7 +934,7 @@ class _NoteEditorState extends State<NoteEditor> {
                                 maxLines: null,
                                 decoration: plain.copyWith(
                                   hintText: 'Titolo',
-                                  hintStyle: display(context, size: 24, color: tk.faint),
+                                  hintStyle: display(context, size: 24, color: tk.testoSecondario),
                                 ),
                               ),
                               const SizedBox(height: 12),
@@ -1149,34 +974,41 @@ class _NoteEditorState extends State<NoteEditor> {
                           bottom: 4,
                           child: IgnorePointer(
                             child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(color: const Color(0xFF242424), borderRadius: BorderRadius.circular(18)),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  for (var i = 4; i >= 0; i--)
-                                    Container(
-                                      height: 34,
-                                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                                      color: i == _text.level ? Tokens.blue.withValues(alpha: 0.3) : Colors.transparent,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          GrainIcon(level: i, size: 16, color: Colors.white),
-                                          const SizedBox(width: 10),
-                                          Text(
-                                            _levels[i],
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 13,
-                                              fontWeight: i == _text.level ? FontWeight.w600 : FontWeight.w400,
+                              key: _scala,
+                              padding: const EdgeInsets.all(Spazio.s2),
+                              decoration: BoxDecoration(color: context.col.floater, borderRadius: BorderRadius.circular(Raggio.scheda), boxShadow: Ombra.sospeso),
+                              // Le righe larghe tutte uguali: quella scelta si colora per intero.
+                              child: IntrinsicWidth(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    for (var i = 4; i >= 0; i--)
+                                      AnimatedContainer(
+                                        duration: Durata.veloce,
+                                        height: _rigaScala,
+                                        padding: const EdgeInsets.symmetric(horizontal: Spazio.s3),
+                                        decoration: BoxDecoration(
+                                          // Sul fondo scuro, la scelta usa i toni tenui dell'azione (regola di Figma per ciò che è sospeso).
+                                          color: i == _text.level ? context.col.azioneTenue : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(Raggio.pillola),
+                                        ),
+                                        child: Row(
+                                          spacing: Spazio.s3,
+                                          children: [
+                                            GrainIcon(level: i, size: Misura.iconaPiccola, color: i == _text.level ? context.col.suAzioneTenue : context.col.suFloater),
+                                            Text(
+                                              _levels[i],
+                                              style: Testo.etichetta.copyWith(
+                                                color: i == _text.level ? context.col.suAzioneTenue : context.col.suFloater,
+                                                fontWeight: i == _text.level ? FontWeight.w600 : FontWeight.w400,
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -1190,24 +1022,9 @@ class _NoteEditorState extends State<NoteEditor> {
                           child: Center(
                             child: AnimatedOpacity(
                               opacity: _label == null ? 0 : 1,
-                              duration: const Duration(milliseconds: 160),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                                decoration: BoxDecoration(color: const Color(0xFF242424), borderRadius: BorderRadius.circular(20)),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (_text.usable) ...[
-                                      GrainIcon(level: _text.level, size: 16, color: Colors.white),
-                                      const SizedBox(width: 8),
-                                    ],
-                                    Text(
-                                      _label ?? '',
-                                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                              duration: Durata.veloce,
+                              // La grana scelta: l'etichetta sospesa del design system.
+                              child: EtichettaSospesa(_label ?? ''),
                             ),
                           ),
                         ),
@@ -1226,7 +1043,6 @@ class _NoteEditorState extends State<NoteEditor> {
                 onSlideStart: _slideStart,
                 onSlide: _slide,
                 onSlideEnd: _slideEnd,
-                onHold: (from) => _slide(from - _slid),
                 onSummarize: _summarize,
                 summarizing: _summarizing,
                 summaryOn: _showSummary,
@@ -1253,7 +1069,6 @@ class NoteToolbar extends StatelessWidget {
     required this.onSlideStart,
     required this.onSlide,
     required this.onSlideEnd,
-    required this.onHold,
     required this.onSummarize,
     this.summarizing = false,
     this.summaryOn = false,
@@ -1268,12 +1083,9 @@ class NoteToolbar extends StatelessWidget {
   final int topics;
   final VoidCallback onTopics;
 
-  /// Tenendo il tasto e tirando su si sceglie la grana: [onSlide] riceve di quanto ti sei spostato.
+  /// Tenendo il tasto si sceglie la grana: [onSlide] riceve dov'è il dito sullo schermo.
   final VoidCallback onSlideStart, onSlideEnd;
-  final ValueChanged<double> onSlide;
-
-  /// Lo stesso, tenendolo premuto: riceve la distanza dal punto di partenza.
-  final ValueChanged<double> onHold;
+  final ValueChanged<Offset> onSlide;
 
   /// Passa dal testo al riassunto e ritorno.
   final VoidCallback onSummarize;
@@ -1284,7 +1096,7 @@ class NoteToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
+    final tk = context.col;
     return SafeArea(
       top: false,
       child: Padding(
@@ -1302,7 +1114,7 @@ class NoteToolbar extends StatelessWidget {
             ),
             IconButton(
               onPressed: onList,
-              icon: Icon(Icons.format_list_bulleted_rounded, color: tk.text),
+              icon: Icon(Icons.format_list_bulleted_rounded, color: tk.testo),
               tooltip: 'Elenco',
             ),
             // Gli argomenti: lo stesso del pizzico, per chi non lo conosce. Acceso = colorato.
@@ -1312,11 +1124,11 @@ class NoteToolbar extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   onTap: onTopics,
                   onVerticalDragStart: (_) => onSlideStart(),
-                  onVerticalDragUpdate: (d) => onSlide(d.delta.dy),
+                  onVerticalDragUpdate: (d) => onSlide(d.globalPosition),
                   onVerticalDragEnd: (_) => onSlideEnd(),
                   onVerticalDragCancel: onSlideEnd,
                   onLongPressStart: (_) => onSlideStart(),
-                  onLongPressMoveUpdate: (d) => onHold(d.offsetFromOrigin.dy),
+                  onLongPressMoveUpdate: (d) => onSlide(d.globalPosition),
                   onLongPressEnd: (_) => onSlideEnd(),
                   child: Padding(padding: const EdgeInsets.all(12), child: GrainIcon(level: topics)),
                 ),
@@ -1326,13 +1138,13 @@ class NoteToolbar extends StatelessWidget {
                 tooltip: summaryOn ? 'Torna al testo intero' : 'Riassumi',
                 icon: summarizing
                     ? const SizedBox.square(dimension: 24, child: VoiceCircle(phase: 'PROCESSING', size: 24))
-                    : Icon(Icons.short_text_rounded, color: summaryOn ? Tokens.blue : tk.text),
+                    : Icon(Icons.short_text_rounded, color: summaryOn ? context.col.azione : tk.testo),
               ),
             Expanded(
               child: Align(
                 alignment: Alignment.centerRight,
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
+                  duration: Durata.normale,
                   transitionBuilder: (c, a) => ScaleTransition(
                     scale: a,
                     child: FadeTransition(opacity: a, child: c),

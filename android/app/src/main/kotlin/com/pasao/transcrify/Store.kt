@@ -114,6 +114,17 @@ class Store(context: Context) {
         get() = prefs.getBoolean("intro_seen", false)
         set(v) = prefs.edit().putBoolean("intro_seen", v).apply()
 
+    /** La trasparenza dei pezzi fuori dall'app (Trasparenza), uno per uno: da 0,5 a 1. */
+    var opacitaFloater: Float
+        get() = prefs.getFloat("opacita", Palette.OPACITA_BASE)
+        set(v) = prefs.edit().putFloat("opacita", v).apply()
+    var opacitaPillola: Float
+        get() = prefs.getFloat("opacita_pillola", Palette.OPACITA_BASE)
+        set(v) = prefs.edit().putFloat("opacita_pillola", v).apply()
+    var opacitaCasa: Float
+        get() = prefs.getFloat("opacita_casa", Palette.OPACITA_BASE)
+        set(v) = prefs.edit().putFloat("opacita_casa", v).apply()
+
     var purify: Boolean
         get() = prefs.getBoolean("purify", false)
         set(v) = prefs.edit().putBoolean("purify", v).apply()

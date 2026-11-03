@@ -77,17 +77,21 @@ class TranscriWidget : AppWidgetProvider() {
 
         private fun views(context: Context, id: Int, look: WidgetLook, away: Boolean, wide: Boolean, open: Boolean = false) =
             RemoteViews(context.packageName, if (wide) R.layout.widget_wide else R.layout.widget_small).apply {
-                val (bg, text) = when (look.style) {
-                    WidgetLook.LIGHT -> R.drawable.widget_bg_light to R.color.widget_light_text
-                    WidgetLook.DARK -> R.drawable.widget_bg_dark to R.color.widget_dark_text
-                    else -> R.drawable.widget_bg_phone to R.color.widget_phone_text
-                }
-                setInt(R.id.widget_root, "setBackgroundResource", if (look.filled) bg else 0)
+                // I colori dai token (WidgetColori, gli stessi dell'anteprima): la pillola si colora col fondo,
+                // Transcri è disegnato coi suoi due toni.
+                val col = WidgetColori.di(context, look.style)
+                val text = android.content.res.ColorStateList.valueOf(col.testo)
+                // Pieno: la pillola col gradiente dai token; vuoto: niente fondo (solo il contorno del launcher).
+                setInt(R.id.widget_frame, "setBackgroundResource", if (look.filled) R.drawable.widget_bg_phone else 0)
+                setViewVisibility(R.id.widget_bg, if (look.filled) View.VISIBLE else View.GONE)
+                if (look.filled) setImageViewBitmap(R.id.widget_bg, col.sfondo())
+                val corpo = col.transcri(context.resources.displayMetrics.density * (if (wide) 55f else 37f) / 34f)
+                for (b in listOf(R.id.widget_blob_1, R.id.widget_blob_2, R.id.widget_blob_3, R.id.widget_blob_4)) setImageViewBitmap(b, corpo)
                 // I colori si risolvono nel launcher: lo stile "del telefono" segue anche il tema chiaro/scuro.
                 setColorStateList(R.id.widget_title, "setTextColor", text)
                 if (wide) {
                     setColorStateList(R.id.widget_line, "setTextColor", text)
-                    setTextViewText(R.id.widget_title, if (away) "È fuori" else "Detta")
+                    setTextViewText(R.id.widget_title, if (away) "Richiama" else "Detta")
                     setTextViewText(R.id.widget_line, if (away) "Tocca per richiamarlo" else "Tocca e parla, poi incolla dove vuoi")
                     setViewVisibility(R.id.widget_words, if (look.text) View.VISIBLE else View.INVISIBLE)
                     setViewVisibility(R.id.widget_open, if (open) View.VISIBLE else View.GONE)

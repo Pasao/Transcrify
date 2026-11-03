@@ -50,7 +50,8 @@ class ShareAudio : Activity() {
         contentResolver.openInputStream(uri)!!.use { input -> copy.outputStream().use { input.copyTo(it) } }
         // Una trascrizione usa la pulizia che hai scelto; un pensiero resta fedele, poi puoi riassumerlo dalla nota.
         val mode = if (toNote) "fedele" else if (store.purify) store.cleanMode else null
-        queue.add(copy, secondsOf(copy), mode, origin = Origin(sourceOf(uri), toNote))
+        val vocale = copy.extension in VOCALI
+        queue.add(copy, secondsOf(copy), mode, origin = Origin(Provenienza.dalCondividi(this, uri), toNote, vocale))
     }
 
     private fun extensionOf(uri: Uri): String {
@@ -64,10 +65,9 @@ class ShareAudio : Activity() {
             ?: "audio"
     }
 
-    /** I vocali di WhatsApp arrivano dal suo archivio, e l'indirizzo lo dice. */
-    private fun sourceOf(uri: Uri): String? {
-        val from = "${uri.authority} ${referrer?.host}".lowercase()
-        return if ("whatsapp" in from) "whatsapp" else null
+    private companion object {
+        /** I messaggi vocali (WhatsApp, Telegram, Signal…) sono Opus dentro un Ogg. */
+        val VOCALI = setOf("ogg", "opus", "oga")
     }
 
     private fun secondsOf(file: File): Long = runCatching {

@@ -1,22 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Transcri che sbircia dal bordo destro, come sul telefono; a sinistra le righe di quello che hai detto.
-     Coi colori del telefono: gli stessi che ha lui sul bordo, nell'app e nel widget. -->
+<!-- Transcri, grande al centro: il suo corpo coi due toni dell'arancione (#F5873C, toni 76 → 62, come transcriA/B)
+     e gli occhi. Le proporzioni sono quelle del suo disegno (46 × 40, angoli 0,425 del lato corto). Sta nella zona sicura (66 dp). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="@android:color/system_accent1_300" android:fillAlpha="0.6" android:pathData="M33,44 H49 A2,2 0 0 1 49,48 H33 A2,2 0 0 1 33,44 Z M33,53 H43 A2,2 0 0 1 43,57 H33 A2,2 0 0 1 33,53 Z M33,62 H47 A2,2 0 0 1 47,66 H33 A2,2 0 0 1 33,62 Z" />
-    <path android:pathData="M72.3,36 H81.7 A15.3,15.3 0 0 1 97,51.3 V56.7 A15.3,15.3 0 0 1 81.7,72 H72.3 A15.3,15.3 0 0 1 57,56.7 V51.3 A15.3,15.3 0 0 1 72.3,36 Z">
+    <path android:pathData="M48,34 H60 A17,17 0 0 1 77,51 V57 A17,17 0 0 1 60,74 H48 A17,17 0 0 1 31,57 V51 A17,17 0 0 1 48,34 Z">
         <aapt:attr name="android:fillColor">
             <gradient
                 android:type="linear"
-                android:startX="0" android:startY="36"
-                android:endX="0" android:endY="72"
-                android:startColor="@android:color/system_accent1_300"
-                android:endColor="@android:color/system_accent3_300" />
+                android:startX="0" android:startY="34"
+                android:endX="0" android:endY="74"
+                android:startColor="#FFFFA770"
+                android:endColor="#FFE4792F" />
         </aapt:attr>
     </path>
-    <path android:fillColor="#FFFFFFFF" android:pathData="M67.5,48.96 a2.7,3.24 0 1,0 5.4,0 a2.7,3.24 0 1,0 -5.4,0 Z M81.1,48.96 a2.7,3.24 0 1,0 5.4,0 a2.7,3.24 0 1,0 -5.4,0 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M43.2,48.4 a3,3.6 0 1,0 6,0 a3,3.6 0 1,0 -6,0 Z M58.8,48.4 a3,3.6 0 1,0 6,0 a3,3.6 0 1,0 -6,0 Z" />
 </vector>

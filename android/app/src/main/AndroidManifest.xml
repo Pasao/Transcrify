@@ -61,6 +61,13 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/transcri_widget" />
         </receiver>
+        <!-- La trasparenza di Transcri fuori dall'app: lascia vedere lo sfondo del telefono (nessun permesso). -->
+        <activity
+            android:name=".Trasparenza"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/SfondoDelTelefono" />
         <!-- Le impostazioni del widget: si aprono quando lo aggiungi e, dopo, tenendolo premuto (su Samsung "Impostazioni"). -->
         <activity
             android:name=".WidgetSettings"
@@ -121,6 +128,8 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Per l'icona di WhatsApp nei dati vecchi (salvati come «whatsapp», senza icona da parte). -->
+        <package android:name="com.whatsapp" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />

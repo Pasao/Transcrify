@@ -138,7 +138,13 @@ class Keywords {
                 "tanto teoricamente tipo tra tutta tutte tutti tutto una uno vabbè voglio vorrei vuoi abbiamo appunto bene boh ecco " +
                 "essenzialmente insomma comunque okay praticamente dire detto dici dico fai faccio fanno può puoi deve devo devi " +
                 "the and for that this with you are was have has not but from they what when your can will would there their about " +
-                "just like then than into also some https http www com"
+                "just like then than into also some https http www com " +
+                // I verbi di tutti i giorni (e le loro forme più comuni): dicono cosa fai, non di cosa parli.
+                "stare stata stati state andare vado vai andiamo andato andata vanno venire vengo viene vieni venuto " +
+                "vedere vedo vedi visto sapere sai sapevo saputo dovere dovrei dovremmo potere potrei potremmo volere volevo " +
+                "dare dato mettere metto metti messo prendere prendo prendi preso sentire sento senti pensare penso pensavo " +
+                "parlare parlo parli trovare trovo capire capito usare uso provare provo cercare cerco credere credo " +
+                "era erano fosse siano ho ha avevamo avrei avremmo sarei saremmo fare facendo facciamo"
             ).split(' ').toHashSet()
     }
 }

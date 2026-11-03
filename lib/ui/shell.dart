@@ -1,12 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/native.dart';
-import 'common.dart';
 import 'dock.dart';
+import 'molecole/colonna_poteri.dart';
+import 'molecole/foglio_in_attesa.dart';
+import 'molecole/intestazione.dart';
+import 'molecole/riga_in_attesa.dart';
 import 'onboarding.dart';
 import 'pensieri.dart';
 import 'settings.dart';
-import 'status.dart';
 import 'theme.dart';
 import 'transcri.dart';
 import 'trascrivi.dart';
@@ -35,8 +39,21 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   DateTime? limitedUntil;
   int waiting = 0;
 
-  /// La colonna dei poteri è aperta.
-  bool switching = false;
+  /// «Riprova» sta trascrivendo le registrazioni in attesa.
+  bool riprovando = false;
+
+  /// La pagina è scorsa: il titolo si rimpicciolisce.
+  bool ridotta = false;
+
+  /// La colonna dei poteri è aperta (un tocco sul medaglione).
+  bool colonna = false;
+
+  /// Quanto stai tirando su il medaglione (0 → 1 = abbastanza per cambiare): sopra compare il nome di chi arriva.
+  double tira = 0;
+
+  /// Il nome del potere appena cambiato, per un attimo.
+  bool nomeVisibile = false;
+  Timer? _nome;
 
   @override
   void initState() {
@@ -52,6 +69,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     Core.removeListener(_load);
     Core.live.removeListener(_liveChanged);
+    _nome?.cancel();
     super.dispose();
   }
 
@@ -78,10 +96,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       sandbox = s.sandbox;
       _liveChanged();
       hasKey = s.hasKey;
-      transcriColors = [s.accentA, s.accentB];
-      transcriRed = s.stateRed;
-      transcriGreen = s.stateGreen;
-      if (s.accentMain != Tokens.blue) Tokens.useAccent(s.accentMain, s.accentSecond);
+      Colori.usa(s.tokenChiaro, s.tokenScuro);
       limitedUntil = s.limited == null ? null : s.resetAt;
     });
   }
@@ -106,7 +121,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             const SizedBox(height: 8),
             Text(
               'Transcri trascrive con Groq. La chiave è gratis e si prende in due minuti.',
-              style: Theme.of(sheet).textTheme.bodyMedium?.copyWith(color: context.tk.muted),
+              style: Theme.of(sheet).textTheme.bodyMedium?.copyWith(color: context.col.testoSecondario),
             ),
             const SizedBox(height: 20),
             FilledButton(onPressed: () => Navigator.pop(sheet, true), child: const Text('Prendi la chiave')),
@@ -141,13 +156,42 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   void _go(Power p) => setState(() {
     power = p;
-    switching = false;
+    colonna = false;
+    ridotta = false;
   });
+
+  /// «Riprova»: trascrive quello che è rimasto indietro.
+  Future<void> _riprova() async {
+    if (riprovando) return;
+    setState(() => riprovando = true);
+    await Core.flushWaiting();
+    if (!mounted) return;
+    setState(() => riprovando = false);
+    Core.refresh();
+  }
+
+  /// Il titolo si riduce quando la pagina scorre in verticale (le liste di lato non contano).
+  bool _scorre(ScrollNotification n) {
+    if (n.depth == 0 && n.metrics.axis == Axis.vertical) {
+      final r = n.metrics.pixels > Spazio.s6;
+      if (r != ridotta) setState(() => ridotta = r);
+    }
+    return false;
+  }
+
+  /// Tirato su abbastanza: il prossimo potere, e il suo nome resta un attimo.
+  void _prossimo() {
+    _go(power.step(1));
+    setState(() => nomeVisibile = true);
+    _nome?.cancel();
+    _nome = Timer(Durata.etichetta, () {
+      if (mounted) setState(() => nomeVisibile = false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final bottom = Dock.height + MediaQuery.paddingOf(context).bottom;
-    final status = Status(limitedUntil: limitedUntil, waiting: waiting, hasKey: hasKey);
     final page = switch (power) {
       Power.trascrivi => TrascriviPage(key: const ValueKey(Power.trascrivi), bottom: bottom),
       Power.pensieri =>
@@ -164,52 +208,34 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
               bottom: false,
               child: Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 220),
-                            layoutBuilder: (current, previous) => Stack(alignment: Alignment.centerLeft, children: [...previous, ?current]),
-                            child: Text(power.label, key: ValueKey(power), style: display(context, size: 26)),
-                          ),
-                        ),
-                        if (sandbox)
-                          Container(
-                            margin: const EdgeInsets.only(right: 4),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(color: Tokens.blue.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(14)),
-                            child: Text('Dati finti', style: TextStyle(color: Tokens.blue, fontSize: 12, fontWeight: FontWeight.w600)),
-                          ),
-                        // Se qualcosa non va o aspetta, lo dice qui, accanto alle impostazioni.
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 220),
-                          child: status.any
-                              ? Padding(
-                                  key: ValueKey(status.short),
-                                  padding: const EdgeInsets.only(right: 4),
-                                  child: StatusChip(status: status, onTap: () => showStatus(context)),
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                        IconButton(onPressed: _openSettings, icon: const Icon(Icons.settings_rounded), tooltip: 'Impostazioni'),
-                      ],
-                    ),
+                  Intestazione(
+                    titolo: power.label,
+                    ridotta: ridotta,
+                    sotto: waiting > 0
+                        ? RigaInAttesa(quante: waiting, riprovando: riprovando, onRiprova: _riprova, onApri: () => apriInAttesa(context, onRiprova: _riprova))
+                        : null,
+                    accanto: waiting > 0 ? InAttesaCorto(quante: waiting) : null,
+                    azioni: [
+                      if (sandbox) const Padding(padding: EdgeInsets.only(right: Spazio.s1), child: ChipStato('Dati finti', tipo: TipoChip.azione)),
+                      IconButton(onPressed: _openSettings, icon: const Icon(Icons.settings_rounded), tooltip: 'Impostazioni'),
+                    ],
                   ),
                   Expanded(
                     // Cambiando potere la pagina sfuma nell'altra, senza scorrere di lato.
-                    child: AnimatedSwitcher(duration: const Duration(milliseconds: 260), child: page),
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: _scorre,
+                      child: AnimatedSwitcher(duration: Durata.normale, child: page),
+                    ),
                   ),
                 ],
               ),
             ),
             // La colonna aperta: un velo leggero sopra la pagina, toccandolo si richiude.
-            if (switching)
+            if (colonna)
               Positioned.fill(
                 child: GestureDetector(
-                  onTap: () => setState(() => switching = false),
-                  child: const ColoredBox(color: Color(0x1F000000)),
+                  onTap: () => setState(() => colonna = false),
+                  child: ColoredBox(color: context.col.floater.withValues(alpha: 0.12)),
                 ),
               ),
             Positioned(
@@ -223,8 +249,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                   valueListenable: _heard,
                   builder: (context, heard, _) => Dock(
                     power: power,
-                    onSwitch: () => setState(() => switching = !switching),
-                    onStep: (by) => _go(power.step(by)),
+                    onTocco: () => setState(() => colonna = !colonna),
+                    onProssimo: _prossimo,
+                    onTira: (t) => setState(() => tira = t),
                     action: _action(heard),
                     pages: power == Power.pensieri
                         ? const [(Icons.notes_rounded, 'Note'), (Icons.bubble_chart_rounded, 'Argomenti')]
@@ -237,27 +264,30 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
                       limitedUntil: limitedUntil,
                       onChanged: Core.refresh,
                       onNeedKey: hasKey ? null : _needKey,
-                      onAsleep: () => showStatus(context),
+                      // Transcri dorme (minuti finiti): l'Utilizzo dice quando tornano.
+                      onAsleep: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const UsagePage())),
                     ),
                   ),
                 ),
               ),
             ),
+            // Sopra il medaglione: la colonna (tocco), o il nome di chi arriva mentre lo tiri su e
+            // di quello appena arrivato.
             Positioned(
-              left: 16,
-              bottom: bottom + 10,
-              child: IgnorePointer(
-                ignoring: !switching,
-                child: AnimatedSlide(
-                  offset: switching ? Offset.zero : const Offset(0, 0.15),
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOutCubic,
-                  child: AnimatedOpacity(
-                    opacity: switching ? 1 : 0,
-                    duration: const Duration(milliseconds: 180),
-                    child: PowerColumn(current: power, onPick: _go),
-                  ),
-                ),
+              left: Spazio.s3,
+              bottom: MediaQuery.paddingOf(context).bottom + Spazio.s3 + Misura.isola + Spazio.s2,
+              child: AnimatedSwitcher(
+                duration: Durata.veloce,
+                child: colonna
+                    ? ColonnaPoteri(attuale: power, onScegli: _go)
+                    : tira > 0 || nomeVisibile
+                        ? IgnorePointer(
+                            child: Opacity(
+                              opacity: nomeVisibile ? 1 : tira.clamp(0, 1).toDouble(),
+                              child: EtichettaSospesa((nomeVisibile ? power : power.step(1)).label, key: ValueKey(nomeVisibile ? power : power.step(1))),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
               ),
             ),
           ],

@@ -7,6 +7,9 @@ import 'package:flutter/services.dart';
 import '../core/native.dart';
 import 'common.dart';
 import 'mode_icon.dart';
+import 'molecole/stato_vuoto.dart';
+import 'molecole/titolo_giorno.dart';
+import 'molecole/voce_in_barra.dart';
 import 'theme.dart';
 import 'transcri.dart';
 
@@ -142,13 +145,12 @@ class _TrascriviPageState extends State<TrascriviPage> {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
     final list = entries;
     final page = list == null
         ? const SizedBox.shrink()
         : list.isEmpty
         // Da vuota la pagina non scorre: non c'è niente sotto.
-        ? _Empty(bottom: widget.bottom)
+        ? StatoVuoto(titolo: 'Oggi', frase: 'Quello che detti compare qui,\ngiorno per giorno.', bottom: widget.bottom)
         // Le schede stanno in basso, dove arriva il pollice; se sono tante, si scorre.
         : LayoutBuilder(
             builder: (context, box) => _FastScroll(
@@ -167,38 +169,16 @@ class _TrascriviPageState extends State<TrascriviPage> {
                     for (final (label, items) in _groups(list)) ...[
                       Padding(
                         key: _dayKeys.putIfAbsent(label, GlobalKey.new),
-                        padding: const EdgeInsets.fromLTRB(20, 24, 8, 12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(label, style: display(context, size: 24), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Text('${items.length}', style: monoStyle(context, color: tk.faint)),
-                                ],
-                              ),
-                            ),
-                            if (items.length >= 4)
-                              TextButton.icon(
-                                style: TextButton.styleFrom(foregroundColor: tk.muted),
-                                onPressed: () => setState(() => openDays.contains(label) ? openDays.remove(label) : openDays.add(label)),
-                                iconAlignment: IconAlignment.end,
-                                icon: AnimatedRotation(
-                                  turns: openDays.contains(label) ? 0.5 : 0,
-                                  duration: const Duration(milliseconds: 250),
-                                  child: const Icon(Icons.expand_more_rounded, size: 20),
-                                ),
-                                label: Text(openDays.contains(label) ? 'Chiudi' : 'Tutte'),
-                              ),
-                          ],
+                        padding: const EdgeInsets.fromLTRB(Spazio.s5, Spazio.s6, Spazio.s2, Spazio.s3),
+                        child: TitoloGiorno(
+                          giorno: label,
+                          quante: items.length,
+                          aperto: items.length >= 4 ? openDays.contains(label) : null,
+                          onApri: () => setState(() => openDays.contains(label) ? openDays.remove(label) : openDays.add(label)),
                         ),
                       ),
                       AnimatedSize(
-                        duration: const Duration(milliseconds: 300),
+                        duration: Durata.normale,
                         curve: Curves.easeOutCubic,
                         alignment: Alignment.topCenter,
                         child: openDays.contains(label)
@@ -248,33 +228,33 @@ class _TrascriviPageState extends State<TrascriviPage> {
                               ),
                       ),
                     ],
-                    SizedBox(height: widget.bottom + 24),
+                    // Mentre scegli, le ultime salgono sopra la barra.
+                    AnimatedContainer(
+                      duration: Durata.normale,
+                      curve: Curva.standard,
+                      height: widget.bottom + 24 + ConSelezione.spazio(selected.isNotEmpty),
+                    ),
                   ],
                 ),
               ),
               ),
             ),
           );
-    if (selected.isEmpty) return page;
     // Le azioni sulle trascrizioni scelte, in fondo, sopra il Dock: le stesse delle note.
-    return Stack(
-      children: [
-        page,
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: widget.bottom + 8,
-          child: SelectionBar(
-            label: selected.length == 1 ? '1 trascrizione' : '${selected.length} trascrizioni',
-            onClose: () => setState(selected.clear),
-            actions: [
-              (Icons.content_copy_rounded, 'Copia', _copyChosen),
-              (Icons.share_rounded, 'Condividi', _shareChosen),
-              (Icons.delete_outline_rounded, 'Elimina', _deleteChosen),
-            ],
-          ),
-        ),
-      ],
+    return ConSelezione(
+      bottom: widget.bottom,
+      bar: selected.isEmpty
+          ? null
+          : SelectionBar(
+              label: selected.length == 1 ? '1 trascrizione' : '${selected.length} trascrizioni',
+              onClose: () => setState(selected.clear),
+              actions: [
+                (Icons.content_copy_rounded, 'Copia', _copyChosen),
+                (Icons.share_rounded, 'Condividi', _shareChosen),
+                (Icons.delete_outline_rounded, 'Elimina', _deleteChosen),
+              ],
+            ),
+      child: page,
     );
   }
 }
@@ -313,7 +293,7 @@ class _FastScrollState extends State<_FastScroll> {
     _hide?.cancel();
     if (!_visible) setState(() => _visible = true);
     if (!_dragging) {
-      _hide = Timer(const Duration(milliseconds: 1400), () {
+      _hide = Timer(Durata.conferma, () {
         if (mounted) setState(() => _visible = false);
       });
     }
@@ -343,7 +323,6 @@ class _FastScrollState extends State<_FastScroll> {
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
     return NotificationListener<ScrollNotification>(
       onNotification: (n) {
         // Le schede del giorno scorrono di lato: quelle non contano.
@@ -369,7 +348,7 @@ class _FastScrollState extends State<_FastScroll> {
                       ignoring: !_visible,
                       child: AnimatedOpacity(
                         opacity: _visible ? 1 : 0,
-                        duration: const Duration(milliseconds: 180),
+                        duration: Durata.veloce,
                         child: Stack(
                           children: [
                             Positioned(
@@ -397,28 +376,20 @@ class _FastScrollState extends State<_FastScroll> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (_dragging && _day != null)
-                                      Container(
-                                        margin: const EdgeInsets.only(right: 10),
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                        decoration: BoxDecoration(color: const Color(0xFF242424), borderRadius: BorderRadius.circular(18)),
-                                        child: Text(
-                                          _day!,
-                                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-                                        ),
-                                      ),
+                                      Padding(padding: const EdgeInsets.only(right: Spazio.s2), child: EtichettaSospesa(_day!)),
                                     // Una zona larga per il dito, attorno a una barretta sottile.
                                     SizedBox(
                                       width: 36,
                                       child: Align(
                                         alignment: Alignment.centerRight,
                                         child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 120),
+                                          duration: Durata.veloce,
                                           width: _dragging ? 8 : 5,
                                           height: _thumb,
                                           margin: const EdgeInsets.only(right: 3),
                                           decoration: BoxDecoration(
-                                            color: _dragging ? Tokens.blue : tk.faint,
-                                            borderRadius: BorderRadius.circular(4),
+                                            color: _dragging ? context.col.azione : context.col.testoSecondario,
+                                            borderRadius: BorderRadius.circular(Raggio.piccolo),
                                           ),
                                         ),
                                       ),
@@ -437,72 +408,6 @@ class _FastScrollState extends State<_FastScroll> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Stato vuoto: un giorno ancora senza schede e una frase. Sta in basso, vicino al bottone.
-class _Empty extends StatelessWidget {
-  const _Empty({required this.bottom});
-
-  final double bottom;
-
-  @override
-  Widget build(BuildContext context) {
-    final tk = context.tk;
-    final t = Theme.of(context).textTheme;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, bottom + 40),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Oggi', style: display(context, size: 24, color: tk.faint)),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 120,
-            child: OverflowBox(
-              alignment: Alignment.centerLeft,
-              maxWidth: double.infinity,
-              child: Row(
-                children: [
-                  for (var i = 0; i < 3; i++) ...[_Ghost(opacity: 1 - i * 0.3), const SizedBox(width: 10)],
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 28),
-          Text('Quello che detti compare qui,\ngiorno per giorno.', style: t.bodyLarge?.copyWith(color: tk.muted)),
-        ],
-      ),
-    );
-  }
-}
-
-/// Una scheda vuota, solo la sagoma: suggerisce cosa arriverà senza fingere un contenuto.
-class _Ghost extends StatelessWidget {
-  const _Ghost({required this.opacity});
-
-  final double opacity;
-
-  @override
-  Widget build(BuildContext context) {
-    final tk = context.tk;
-    Widget line(double w) => Container(
-      width: w,
-      height: 8,
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(color: tk.border, borderRadius: BorderRadius.circular(4)),
-    );
-    return Opacity(
-      opacity: opacity,
-      child: Container(
-        width: 180,
-        height: 120,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: tk.surface, borderRadius: BorderRadius.circular(18)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [line(140), line(118), line(80), const Spacer(), line(36)]),
       ),
     );
   }
@@ -536,7 +441,7 @@ class _MiniCard extends StatefulWidget {
 }
 
 class _MiniCardState extends State<_MiniCard> with SingleTickerProviderStateMixin {
-  late final _gone = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100));
+  late final _gone = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100)); // ds:eccezione: la scheda che trema e sparisce (cestino tenuto premuto)
 
   @override
   void dispose() {
@@ -551,11 +456,11 @@ class _MiniCardState extends State<_MiniCard> with SingleTickerProviderStateMixi
   void _holdStart() {
     _committed = false;
     HapticFeedback.selectionClick();
-    _gone.animateTo(_commit, duration: const Duration(milliseconds: 700), curve: Curves.linear).then((_) {
+    _gone.animateTo(_commit, duration: const Duration(milliseconds: 700), curve: Curves.linear).then((_) { // ds:eccezione: come sopra
       if (!mounted || _gone.value < _commit) return;
       _committed = true;
       HapticFeedback.heavyImpact();
-      _gone.animateTo(1, duration: const Duration(milliseconds: 420), curve: Curves.easeIn).then((_) {
+      _gone.animateTo(1, duration: Durata.lenta, curve: Curves.easeIn).then((_) {
         if (mounted) widget.onDelete();
       });
     });
@@ -564,12 +469,12 @@ class _MiniCardState extends State<_MiniCard> with SingleTickerProviderStateMixi
   void _holdEnd() {
     if (_committed) return;
     // Ripensamento: torna com'era.
-    _gone.animateBack(0, duration: const Duration(milliseconds: 260), curve: Curves.easeOut);
+    _gone.animateBack(0, duration: Durata.normale, curve: Curves.easeOut);
   }
 
   @override
   Widget build(BuildContext context) {
-    final tk = context.tk;
+    final tk = context.col;
     final entry = widget.entry;
     return AnimatedBuilder(
       animation: _gone,
@@ -588,7 +493,7 @@ class _MiniCardState extends State<_MiniCard> with SingleTickerProviderStateMixi
             child: Transform.scale(
               scale: 1 - out * 0.25,
               child: ColorFiltered(
-                colorFilter: ColorFilter.mode(Tokens.red.withValues(alpha: red * 0.55), BlendMode.srcATop),
+                colorFilter: ColorFilter.mode(context.col.errore.withValues(alpha: red * 0.55), BlendMode.srcATop),
                 child: child,
               ),
             ),
@@ -599,19 +504,17 @@ class _MiniCardState extends State<_MiniCard> with SingleTickerProviderStateMixi
     );
   }
 
-  Widget _card(BuildContext context, Tokens tk, Entry entry) {
+  Widget _card(BuildContext context, Colori tk, Entry entry) {
     final onOpen = widget.onOpen;
     return SizedBox(
       width: widget.width,
       height: 176,
       child: Material(
-        color: widget.selected ? Tokens.blue.withValues(alpha: 0.14) : tk.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: widget.selected ? Tokens.blue : Colors.transparent, width: 1.5),
-        ),
+        // La Scheda del design system: «scelta» = fondo tenue e contorno.
+        color: Scheda.fondo(context.col, scelta: widget.selected),
+        shape: Scheda.forma(context.col, scelta: widget.selected),
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(Raggio.scheda),
           onTap: onOpen,
           onLongPress: () {
             HapticFeedback.mediumImpact();
@@ -674,7 +577,7 @@ class _ModeTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = context.tk.muted;
+    final color = context.col.testoSecondario;
     final icon = CustomPaint(size: const Size(16, 13), painter: ModeIcon(mode, color));
     if (!label) return Tooltip(message: _names[mode] ?? mode, child: icon);
     return Row(
@@ -718,7 +621,7 @@ class _EntrySheetState extends State<_EntrySheet> {
     Core.addListener(_reload);
     // Scrivendo serve tutto lo spazio che resta sopra la tastiera.
     _focus.addListener(() {
-      if (_focus.hasFocus) _sheet.animateTo(0.94, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+      if (_focus.hasFocus) _sheet.animateTo(0.94, duration: Durata.normale, curve: Curves.easeOutCubic);
     });
   }
 
@@ -734,9 +637,13 @@ class _EntrySheetState extends State<_EntrySheet> {
     super.dispose();
   }
 
+  /// L'ultimo punto del cursore: Flutter lo cancella quando la tastiera si chiude, ma la voce deve entrare lì.
+  int _cursore = -1;
+
   void _edited() {
+    if (_text.selection.isValid) _cursore = _text.selection.end;
     _saving?.cancel();
-    _saving = Timer(const Duration(milliseconds: 500), _save);
+    _saving = Timer(const Duration(milliseconds: 500), _save); // ds:eccezione: tempo di comportamento (salva mezzo secondo dopo l'ultima lettera)
   }
 
   /// Un testo svuotato non si salva: per eliminarlo c'è il cestino.
@@ -754,12 +661,12 @@ class _EntrySheetState extends State<_EntrySheet> {
     final now = list.where((e) => e.at == widget.entry.at).firstOrNull?.text;
     if (now == null || now == _saved) return;
     final grown = now.length - _saved.length;
-    final at = _text.selection.isValid ? _text.selection.baseOffset : -1;
+    final at = _text.selection.isValid ? _text.selection.baseOffset : _cursore;
     _saved = now;
-    _text.value = TextEditingValue(
-      text: now,
-      selection: at >= 0 && at + grown <= now.length ? TextSelection.collapsed(offset: at + grown) : const TextSelection.collapsed(offset: -1),
-    );
+    final dopo = at >= 0 && at + grown <= now.length ? at + grown : -1;
+    _text.value = TextEditingValue(text: now, selection: TextSelection.collapsed(offset: dopo));
+    // Il cursore si sposta dopo le parole arrivate: la prossima voce entra lì.
+    _cursore = dopo;
   }
 
   /// Quando la tastiera si chiude sparisce anche il cursore; il punto resta ricordato per la voce.
@@ -773,17 +680,6 @@ class _EntrySheetState extends State<_EntrySheet> {
     _keyboard = now;
   }
 
-  final _voiceKey = GlobalKey();
-
-  /// Il tasto della voce, in pixel fisici: il player si apre lì sopra.
-  List<double> _voiceRect() {
-    final box = _voiceKey.currentContext!.findRenderObject() as RenderBox;
-    final ratio = MediaQuery.devicePixelRatioOf(context);
-    final tl = box.localToGlobal(Offset.zero) * ratio;
-    final br = box.localToGlobal(box.size.bottomRight(Offset.zero)) * ratio;
-    return [tl.dx, tl.dy, br.dx, br.dy];
-  }
-
   Future<void> _addVoice() async {
     _saving?.cancel();
     _save();
@@ -791,18 +687,18 @@ class _EntrySheetState extends State<_EntrySheet> {
     // Il player sta sopra la tastiera: si chiude prima, così non copre il testo.
     if (_focus.hasFocus) {
       _focus.unfocus();
-      await Future.delayed(const Duration(milliseconds: 320));
+      await Future.delayed(const Duration(milliseconds: 320)); // ds:eccezione: tempo di comportamento (aspetta che la tastiera scenda)
       if (!mounted) return;
     }
     HapticFeedback.heavyImpact();
-    final at = _text.selection;
-    await Core.listen(appendTo: widget.entry.at, cursor: at.isValid ? at.end : -1, panel: _voiceRect());
+    // I comandi stanno nella barra (ComandiVoce): niente pannello del Floater sopra.
+    await Core.listen(appendTo: widget.entry.at, cursor: _text.selection.isValid ? _text.selection.end : _cursore);
   }
 
   @override
   Widget build(BuildContext context) {
     final entry = widget.entry;
-    final tk = context.tk;
+    final tk = context.col;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: DraggableScrollableSheet(
@@ -848,7 +744,7 @@ class _EntrySheetState extends State<_EntrySheet> {
             // Sempre lì, anche in fondo a un testo lungo e sopra la tastiera.
             Container(
               decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: tk.border)),
+                border: Border(top: BorderSide(color: tk.linea)),
               ),
               child: SafeArea(
                 top: false,
@@ -857,10 +753,7 @@ class _EntrySheetState extends State<_EntrySheet> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: KeyedSubtree(
-                          key: _voiceKey,
-                          child: _AddVoice(at: entry.at, onStart: _addVoice, onOpen: () => Core.openPanel(_voiceRect())),
-                        ),
+                        child: VoceInBarra(at: entry.at, onStart: _addVoice),
                       ),
                       DeleteButton(onDelete: widget.onDelete),
                       ListenableBuilder(
@@ -875,77 +768,6 @@ class _EntrySheetState extends State<_EntrySheet> {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// «Aggiungi a voce», a sinistra nella barra. Il tocco fa partire Transcri e apre il player, lo stesso del
-/// Floater. Mentre ascolta e trascrive qui c'è il suo cerchio: toccandolo si riapre il player.
-class _AddVoice extends StatelessWidget {
-  const _AddVoice({required this.at, required this.onStart, required this.onOpen});
-
-  final DateTime at;
-  final VoidCallback onStart, onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final tk = context.tk;
-    Widget saying(String text) => Flexible(
-      child: Padding(
-        padding: const EdgeInsets.only(left: 10),
-        child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium),
-      ),
-    );
-    return ValueListenableBuilder<Live>(
-      valueListenable: Core.live,
-      builder: (context, live, _) {
-        final mine = live.appendTo == at.millisecondsSinceEpoch;
-        if (mine && live.listening) {
-          return Row(
-            children: [
-              Flexible(
-                child: Tooltip(
-                  message: 'Apri i comandi',
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: onOpen,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(6, 3, 10, 3),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [const VoiceCircle(phase: 'RECORDING', size: 28), saying('Ti ascolto')]),
-                    ),
-                  ),
-                ),
-              ),
-              IconButton(
-                constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-                padding: EdgeInsets.zero,
-                onPressed: () {
-                  HapticFeedback.mediumImpact();
-                  Core.stopListening();
-                },
-                tooltip: 'Ferma e aggiungi',
-                icon: Icon(Icons.stop_rounded, size: 22, color: tk.muted),
-              ),
-            ],
-          );
-        }
-        if (mine && live.phase == 'PROCESSING') {
-          return Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: Row(children: [const VoiceCircle(phase: 'PROCESSING', size: 28), saying('Sto trascrivendo')]),
-          );
-        }
-        return Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            style: TextButton.styleFrom(foregroundColor: tk.muted),
-            // Mentre detta altrove aspetta: Transcri fa una cosa alla volta.
-            onPressed: live.listening || live.phase == 'PROCESSING' ? null : onStart,
-            icon: const Icon(Icons.mic_none_rounded, size: 21),
-            label: const Text('Aggiungi a voce', maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-        );
-      },
     );
   }
 }

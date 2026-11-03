@@ -182,7 +182,10 @@ class NoteTopicsWorker private constructor(context: Context) {
     private fun snapshotAlbums() {
         val e = engine ?: return run { albumsSnapshot = emptyList() }
         val notes = store.notes().associateBy { it.id }
-        albumsSnapshot = e.topics.shown().mapNotNull { (album, members) ->
+        // Il grande concetto di ogni album (Argomenti a due livelli: concetto → sotto-argomenti).
+        val concettoDi = HashMap<Long, Int>().apply { e.topics.concetti().forEachIndexed { i, g -> g.forEach { put(it, i) } } }
+        val testoDi = HashMap<Long, String>()
+        val albums = e.topics.shown().mapNotNull { (album, members) ->
             val pieces = members.mapNotNull { pid ->
                 val (noteId, range) = e.piece(pid) ?: return@mapNotNull null
                 val r = results[noteId] ?: return@mapNotNull null
@@ -193,13 +196,20 @@ class NoteTopicsWorker private constructor(context: Context) {
             // Basta che un argomento torni tre volte, anche nella stessa nota: se ne hai parlato tanto, è un argomento.
             if (pieces.size < 3) return@mapNotNull null
             val text = pieces.joinToString("\n") { (n, a, b) -> n.text.substring(a, b) }
+            testoDi[album] = text
             val name = keywords.top(text, 2).joinToString(" · ") { it.replaceFirstChar(Char::uppercase) }
             mapOf(
                 "id" to album,
                 "name" to name.ifEmpty { "Senza nome" },
+                "concetto" to (concettoDi[album] ?: -1),
                 "pieces" to pieces.map { (n, a, b) -> mapOf("note" to n.id, "start" to a, "end" to b) },
             )
         }
+        // Il nome di ogni concetto: l'espressione che conta di più nel testo di tutti i suoi album.
+        val nomeConcetto = albums.filter { (it["concetto"] as Int) >= 0 }.groupBy { it["concetto"] as Int }.mapValues { (_, gruppo) ->
+            keywords.top(gruppo.joinToString("\n") { testoDi[it["id"] as Long].orEmpty() }, 1).firstOrNull()?.replaceFirstChar(Char::uppercase)
+        }
+        albumsSnapshot = albums.map { a -> a + ("concettoNome" to (nomeConcetto[a["concetto"] as Int] ?: (a["name"] as String))) }
     }
 
     /** Il motore del modello scelto, con le sue frasi su disco. Se il modello cambia si ricomincia: i vettori di modelli diversi non si mescolano. */
