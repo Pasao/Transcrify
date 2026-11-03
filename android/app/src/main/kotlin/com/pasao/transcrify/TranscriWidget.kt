@@ -39,7 +39,8 @@ data class WidgetLook(val style: String = PHONE, val text: Boolean = true, val f
 /**
  * Il widget: la casa di Transcri sulla schermata home, una pillola come i widget di Samsung.
  * 2 × 1 dice cosa fa ("Detta" / "È fuori"); stretto a 1 × 1, o senza scritta, resta lui al centro.
- * Toccandolo Transcri esce e vola al bordo; se è già fuori, rientra qui.
+ * Toccandolo Transcri esce e vola al bordo; se è già fuori, rientra qui (e se stava registrando manda quello che ha sentito).
+ * Il 4 × 1 ha anche «Apri» e, con lui a casa, il tasto che lo fa uscire già in ascolto.
  */
 class TranscriWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = refresh(context)
@@ -95,11 +96,12 @@ class TranscriWidget : AppWidgetProvider() {
                     setTextViewText(R.id.widget_line, if (away) "Tocca per richiamarlo" else "Tocca e parla, poi incolla dove vuoi")
                     setViewVisibility(R.id.widget_words, if (look.text) View.VISIBLE else View.INVISIBLE)
                     setViewVisibility(R.id.widget_open, if (open) View.VISIBLE else View.GONE)
+                    // Il tasto che detta c'è solo con lui a casa: è da lì che esce.
+                    setViewVisibility(R.id.widget_record, if (open && !away) View.VISIBLE else View.GONE)
                     if (open) {
-                        setColorStateList(R.id.widget_open_icon, "setImageTintList", text)
+                        tasto(R.id.widget_open, R.id.widget_open_icon, text, openApp(context, id))
                         setColorStateList(R.id.widget_open_text, "setTextColor", text)
-                        setColorStateList(R.id.widget_open, "setBackgroundTintList", text)
-                        setOnClickPendingIntent(R.id.widget_open, openApp(context, id))
+                        if (!away) tasto(R.id.widget_record, R.id.widget_record_icon, text, tap(context, id, record = true))
                     }
                 } else {
                     setTextViewText(R.id.widget_title, if (away) "Richiama" else "Detta")
@@ -117,14 +119,24 @@ class TranscriWidget : AppWidgetProvider() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
+        /** I tasti del 4 × 1 («Apri», detta): il fondo e l'icona col colore del testo, e cosa fanno. */
+        private fun RemoteViews.tasto(fondo: Int, icona: Int, colore: android.content.res.ColorStateList, azione: PendingIntent) {
+            setColorStateList(icona, "setImageTintList", colore)
+            setColorStateList(fondo, "setBackgroundTintList", colore)
+            setOnClickPendingIntent(fondo, azione)
+        }
+
         private const val OPEN_REQUEST = 100_000
+        private const val RECORD_REQUEST = 200_000
 
         // Ogni widget passa il suo id: serve per leggere il suo fattore di scala e il suo aspetto (vedi WidgetTrampoline).
-        private fun tap(context: Context, id: Int) = PendingIntent.getActivity(
-            context, id,
+        // Il tasto che detta ha un suo codice: con lo stesso, Android userebbe un PendingIntent solo per tutti e due.
+        private fun tap(context: Context, id: Int, record: Boolean = false) = PendingIntent.getActivity(
+            context, if (record) RECORD_REQUEST + id else id,
             Intent(context, WidgetTrampoline::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id),
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                .putExtra(PillService.EXTRA_RECORD, record),
             // Mutabile di proposito: solo così il launcher può aggiungere il rettangolo del
             // widget (sourceBounds), da cui parte e in cui rientra la bolla.
             PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
@@ -148,15 +160,17 @@ class WidgetTrampoline : Activity() {
         val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
         val ratio = if (id == AppWidgetManager.INVALID_APPWIDGET_ID) 1f
         else (AppWidgetManager.getInstance(this).getAppWidgetOptions(id).get("hsResizeRatio") as? Number)?.toFloat() ?: 1f
+        // Dal tasto che detta (4 × 1) il rettangolo è quello del tasto, non del widget: Transcri esce da lì, piccolo.
+        val record = intent.getBooleanExtra(PillService.EXTRA_RECORD, false)
         val home = bounds?.let { b ->
             val w = b.width() * ratio
             val h = b.height() * ratio
             val look = if (id == AppWidgetManager.INVALID_APPWIDGET_ID) WidgetLook() else WidgetLook.of(this, id)
-            val wide = w / d >= TranscriWidget.LONG_FROM_DP || (look.text && w / d >= TranscriWidget.WIDE_FROM_DP)
+            val wide = !record && (w / d >= TranscriWidget.LONG_FROM_DP || (look.text && w / d >= TranscriWidget.WIDE_FROM_DP))
             // Dov'è Transcri nel disegno: nel 2 × 1 a sinistra, grande (10 dp + metà del suo posto da 56),
             // nel 1 × 1 al centro, un po' più su per lasciare posto alla parola sotto.
             val cx = if (wide) b.left + 38f * d * ratio else b.left + w / 2f
-            val cy = b.top + h / 2f - if (!wide && look.text) 9f * d * ratio else 0f
+            val cy = b.top + h / 2f - if (!wide && !record && look.text) 9f * d * ratio else 0f
             val hw = (if (wide) 26f else 17f) * d * ratio
             val hh = (if (wide) 23f else 15f) * d * ratio
             Rect(cx - hw, cy - hh, cx + hw, cy + hh)
@@ -166,12 +180,15 @@ class WidgetTrampoline : Activity() {
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
             Store(this).apiKey != null
         when {
+            // Il tasto che detta mentre lui è già fuori (il widget non s'era ancora ridisegnato): detta da dov'è.
+            pill != null && record -> PillService.listen(this, null, -1, null)
+            // Rientra nel widget; se stava registrando (anche in pausa), quello che ha sentito si trascrive e si copia.
             pill != null && home != null -> pill.recall(home.center, home)
-            // Senza la posizione del widget non c'è dove rientrare: si chiude e basta.
-            pill != null -> PillService.stop(this)
+            // Senza la posizione del widget rientra nella casa in basso: anche così non si butta niente.
+            pill != null -> pill.rientra()
             // Manca qualcosa (permessi o chiave): si apre l'app, che sa chiederlo.
             home == null || !ready -> startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            else -> PillService.start(this, home.center.x, home.center.y, floatArrayOf(home.left, home.top, home.right, home.bottom))
+            else -> PillService.start(this, home.center.x, home.center.y, floatArrayOf(home.left, home.top, home.right, home.bottom), record)
         }
         finish()
         @Suppress("DEPRECATION")
