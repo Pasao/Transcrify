@@ -6,6 +6,10 @@ import com.pasao.transcrify.engine.Embedder
 import com.pasao.transcrify.engine.Engine
 import com.pasao.transcrify.engine.Keywords
 import com.pasao.transcrify.engine.OnnxEmbedder
+import com.pasao.transcrify.engine.Parole
+import com.pasao.transcrify.engine.Sentences
+import com.pasao.transcrify.engine.Span
+import com.pasao.transcrify.engine.Trovato
 import com.pasao.transcrify.engine.SentenceStore
 import com.pasao.transcrify.engine.XxHash64
 import org.json.JSONArray
@@ -13,6 +17,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Gli argomenti delle note, calcolati sul telefono. Un thread solo, in fondo, mai sull'interfaccia.
@@ -30,7 +35,13 @@ class NoteTopicsWorker private constructor(context: Context) {
     private val models = TopicModels(app)
     // v4: parole chiave di più parole. I risultati di prima si rifanno.
     private val file = File(Sandbox.dir(app), "note_topics_v4.json")
-    private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "argomenti").apply { priority = Thread.MIN_PRIORITY } }
+    private val exec = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "argomenti").apply { priority = Thread.MIN_PRIORITY } }
+
+    /** Il testo di ogni trascrizione già nella ricerca (per quale impronta): una cambiata si rifà. */
+    private val trascrizioniFatte = HashMap<Long, Long>()
+
+    /** Quando è arrivata l'ultima ricerca: il modello resta caricato un minuto, per le lettere che seguono. */
+    @Volatile private var ultimaDomanda = 0L
 
     /** Le note in coda o in lavorazione. */
     private val pending: MutableSet<String> = ConcurrentHashMap.newKeySet()
@@ -127,6 +138,24 @@ class NoteTopicsWorker private constructor(context: Context) {
         for (n in store.notes()) if (state(n.id, n.text) == "stale") request(n.id)
     }
 
+    /** Le trascrizioni nuove o cambiate entrano nella ricerca, quelle eliminate escono. In fondo, come le note. */
+    fun requestTrascrizioni() {
+        exec.execute { indicizzaTrascrizioni(); liberaSeFermo() }
+    }
+
+    /**
+     * Cerca nelle note e nelle trascrizioni: prima quelle con tutte le parole, poi quelle vicine per senso.
+     * Senza modello pronto, solo per parola. [risposta] arriva dal thread del lavoro.
+     */
+    fun cerca(testo: String, risposta: (List<Map<String, Any>>) -> Unit) {
+        ultimaDomanda = System.currentTimeMillis()
+        exec.execute {
+            val out = try { trova(testo) } catch (_: Throwable) { emptyList() }
+            risposta(out)
+            exec.schedule({ liberaSeFermo() }, ATTESA_MODELLO, TimeUnit.MILLISECONDS)
+        }
+    }
+
     fun forget(id: String) {
         exec.execute {
             engine?.forget(id)
@@ -139,6 +168,66 @@ class NoteTopicsWorker private constructor(context: Context) {
 
     // --- nel thread del lavoro ---
 
+    private fun trova(testo: String): List<Map<String, Any>> {
+        val parole = Parole.di(testo)
+        if (parole.isEmpty()) return emptyList()
+        val note = store.notes()
+        val trascrizioni = store.history()
+        val testi = HashMap<String, String>()
+        for (n in note) testi[Engine.FONTE_NOTA + n.id] = n.title + "\n" + n.text
+        for (t in trascrizioni) testi[Engine.FONTE_TRASCRIZIONE + t.at] = t.text
+        // Per parola: dalla più recente, la frase dove compare la prima parola.
+        val esatti = (note.map { Engine.FONTE_NOTA + it.id } + trascrizioni.map { Engine.FONTE_TRASCRIZIONE + it.at }).mapNotNull { f ->
+            val t = testi.getValue(f)
+            val i = Parole.trova(t, parole) ?: return@mapNotNull null
+            Trovato(f, Sentences.split(t).firstOrNull { i < it.end } ?: Span(0, t.length), 1f, esatto = true)
+        }
+        val m = models.chosen
+        val perSenso = if (m != null && models.ready(m)) {
+            val e = engineFor(m)
+            // Le trascrizioni nuove o cambiate da quando si è cercato l'ultima volta: di solito nessuna.
+            indicizzaTrascrizioni()
+            val visti = esatti.map { it.fonte }.toHashSet()
+            e.ricerca.cerca(e.domanda(testo), RISULTATI, m.profile.cercaMinimo, m.profile.cercaBanda).filter { it.fonte !in visti }
+        } else emptyList()
+        return (esatti + perSenso).mapNotNull { r ->
+            val t = testi[r.fonte] ?: return@mapNotNull null
+            // Gli intervalli della nota sono sul testo senza titolo: il titolo è davanti, si toglie.
+            val nota = r.fonte.startsWith(Engine.FONTE_NOTA)
+            val spostamento = if (nota && r.esatto) t.indexOf('\n') + 1 else 0
+            mapOf(
+                "tipo" to if (nota) "nota" else "trascrizione",
+                "id" to r.fonte.substringAfter(':'),
+                "start" to (r.span.start - spostamento).coerceAtLeast(0),
+                "end" to (r.span.end - spostamento).coerceAtLeast(0),
+                "esatto" to r.esatto,
+                "punteggio" to r.punteggio.toDouble(),
+            )
+        }
+    }
+
+    private fun indicizzaTrascrizioni() {
+        val m = models.chosen ?: return
+        if (!models.ready(m)) return
+        val e = engineFor(m)
+        val ora = store.history()
+        val vive = ora.map { it.at }.toHashSet()
+        for (at in trascrizioniFatte.keys.filter { it !in vive }) {
+            trascrizioniFatte.remove(at)
+            e.ricerca.togli(Engine.FONTE_TRASCRIZIONE + at)
+        }
+        for (t in ora) {
+            val h = hash(t.text)
+            if (trascrizioniFatte[t.at] == h) continue
+            runCatching { e.indicizza(Engine.FONTE_TRASCRIZIONE + t.at, t.text) }.onSuccess { trascrizioniFatte[t.at] = h }
+        }
+    }
+
+    /** Libera il modello se non c'è più niente da fare e nessuno sta cercando. */
+    private fun liberaSeFermo() {
+        if (pending.isEmpty() && System.currentTimeMillis() - ultimaDomanda >= ATTESA_MODELLO) release()
+    }
+
     private fun warm() {
         val m = models.chosen ?: return
         if (!models.ready(m)) return
@@ -149,6 +238,7 @@ class NoteTopicsWorker private constructor(context: Context) {
             // Le frasi sono già su disco: niente modello, solo somme e confini.
             runCatching { engineFor(m).commit(n.id, n.text) }
         }
+        indicizzaTrascrizioni()
         release()
         snapshotAlbums()
         listener?.invoke()
@@ -173,7 +263,7 @@ class NoteTopicsWorker private constructor(context: Context) {
             // Un modello che non si carica (memoria, file rovinato) non deve far cadere l'app: la nota resta senza argomenti.
         } finally {
             pending.remove(id)
-            if (pending.isEmpty()) release()
+            liberaSeFermo()
             listener?.invoke()
         }
     }
@@ -216,6 +306,8 @@ class NoteTopicsWorker private constructor(context: Context) {
     private fun engineFor(m: TopicModel): Engine {
         engine?.takeIf { engineModel == m }?.let { return it }
         release()
+        // Un motore nuovo ha la ricerca vuota: le trascrizioni si rifanno col suo modello.
+        trascrizioniFatte.clear()
         val disk = SentenceStore(File(if (Sandbox.on(app)) Sandbox.dir(app) else models.dir(m), "frasi.bin"), m.embedding.dim)
         val lazy = object : Embedder {
             override val dim = m.embedding.dim
@@ -252,6 +344,9 @@ class NoteTopicsWorker private constructor(context: Context) {
     }
 
     companion object {
+        private const val ATTESA_MODELLO = 60_000L
+        private const val RISULTATI = 20
+
         @Volatile private var instance: NoteTopicsWorker? = null
 
         fun get(context: Context): NoteTopicsWorker =

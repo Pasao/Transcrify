@@ -25,6 +25,14 @@ data class EngineProfile(
         require(split <= pair) { "un album appena unito non deve spezzarsi subito" }
     }
 
+    /**
+     * La ricerca: sotto [cercaMinimo] un risultato non c'entra, e si tengono solo quelli entro [cercaBanda]
+     * dal migliore. Presi dalla scala del modello (la distanza tra «stesso argomento» e «diverso»), non tarati
+     * su ricerche vere: da rivedere quando ci sono.
+     */
+    val cercaMinimo: Float get() = split - 2 * (pair - split)
+    val cercaBanda: Float get() = 3 * (pair - split)
+
     fun threshold(grain: Grain): Int = when (grain) {
         Grain.COARSE -> coarse
         Grain.MEDIUM -> medium

@@ -62,7 +62,13 @@ class Engine(
 
     val remembered get() = memory.size
 
-    fun commit(noteId: String, text: String): NoteTopics {
+    /** Ogni frase delle note e delle trascrizioni, per cercare per senso. */
+    val ricerca = Ricerca()
+
+    /** Le frasi di un testo e il loro senso: al modello vanno solo quelle mai viste. Quante erano nuove. */
+    private class Senso(val spans: List<Span>, val prints: List<Fingerprint>, val nuove: Int)
+
+    private fun senso(text: String): Senso {
         val spans = Sentences.split(text)
         val prints = spans.map { Fingerprint.of(it.of(text)) }
         val missing = LinkedHashMap<Fingerprint, String>()
@@ -74,6 +80,24 @@ class Engine(
             memory.putAll(fresh)
             learned(fresh)
         }
+        return Senso(spans, prints, missing.size)
+    }
+
+    private fun Senso.perRicerca() = spans.indices.map { spans[it] to memory.getValue(prints[it]) }
+
+    /** Una trascrizione entra nella ricerca (non negli album: quelli sono delle note). */
+    fun indicizza(fonte: String, text: String) {
+        ricerca.metti(fonte, senso(text).perRicerca())
+    }
+
+    /** Il senso di quello che cerchi. Non si ricorda: una domanda non è una frase delle tue note. */
+    fun domanda(text: String): FloatArray = Vec.normalized(embedder.embed(listOf(text)).first())
+
+    fun commit(noteId: String, text: String): NoteTopics {
+        val s = senso(text)
+        val spans = s.spans
+        val prints = s.prints
+        ricerca.metti(FONTE_NOTA + noteId, s.perRicerca())
         val vectors = prints.map { memory.getValue(it).toFloats() }
         val seg = Segmenter.segment(vectors, profile.depthScale)
         // I pezzi degli album sono quelli della grana media che vedi pizzicando.
@@ -94,11 +118,12 @@ class Engine(
         }
         notePieces[noteId] = pieces.map { it.first }
         if (spans.isEmpty()) notePieces.remove(noteId)
-        return NoteTopics(spans, seg, pieces, missing.size, vectors)
+        return NoteTopics(spans, seg, pieces, s.nuove, vectors)
     }
 
     /** La nota è stata eliminata: i suoi pezzi escono dagli album. Il senso delle frasi resta ricordato. */
     fun forget(noteId: String) {
+        ricerca.togli(FONTE_NOTA + noteId)
         for (id in notePieces.remove(noteId).orEmpty()) {
             topics.remove(id)
             pieceAt.remove(id)
@@ -113,4 +138,10 @@ class Engine(
     }
 
     private fun longToBytes(x: Long) = ByteArray(8) { (x ushr (8 * it)).toByte() }
+
+    companion object {
+        /** Le fonti della ricerca: «n:» + id della nota, «t:» + quando è nata la trascrizione. */
+        const val FONTE_NOTA = "n:"
+        const val FONTE_TRASCRIZIONE = "t:"
+    }
 }
