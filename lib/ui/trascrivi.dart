@@ -783,25 +783,27 @@ class _EntrySheetState extends State<_EntrySheet> {
               ),
             ),
             // Sempre lì, anche in fondo a un testo lungo e sopra la tastiera.
-            Container(
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: tk.linea)),
-              ),
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 6, 10, 6),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: VoceInBarra(at: entry.at, onStart: _addVoice),
-                      ),
-                      DeleteButton(onDelete: widget.onDelete),
-                      ListenableBuilder(
-                        listenable: _text,
-                        builder: (context, _) => CopyButton(text: _text.text),
-                      ),
-                    ],
+            BarraInFondo(
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: tk.linea)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 6, 10, 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: VoceInBarra(at: entry.at, onStart: _addVoice),
+                        ),
+                        DeleteButton(onDelete: widget.onDelete),
+                        ListenableBuilder(
+                          listenable: _text,
+                          builder: (context, _) => CopyButton(text: _text.text),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

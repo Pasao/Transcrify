@@ -51,46 +51,48 @@ class Dock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const margine = (Misura.isola - Misura.tondo) / 2;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Spazio.s3, 0, Spazio.s3, Spazio.s3),
-      child: Row(
-        children: [
-          // Il medaglione davanti, le pagine che escono da dietro di lui (e rientrano cambiando potere).
-          Stack(
-            alignment: Alignment.centerLeft,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(left: Misura.isola / 2),
-                child: Rientra(
-                  id: pages.length > 1 ? pages.map((p) => p.$2).join() : null,
-                  da: Alignment.centerLeft,
-                  child: PillolaPagine(pagine: pages, pagina: page, onPagina: (i) => onPage?.call(i)),
-                ),
-              ),
-              Medaglione(potere: power, onTocco: onTocco, onProssimo: onProssimo, onTira: onTira),
-            ],
-          ),
-          const Spacer(),
-          Isola(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+    return BarraInFondo(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(Spazio.s3, 0, Spazio.s3, Spazio.s3),
+        child: Row(
+          children: [
+            // Il medaglione davanti, le pagine che escono da dietro di lui (e rientrano cambiando potere).
+            Stack(
+              alignment: Alignment.centerLeft,
               children: [
-                // L'azione esce da Transcri: l'isola si allunga verso sinistra.
-                Rientra(
-                  id: action?.$1,
-                  da: Alignment.centerRight,
-                  child: action == null
-                      ? const SizedBox.shrink()
-                      : Padding(
-                          padding: const EdgeInsets.only(right: margine),
-                          child: BottoneIcona(action!.$1, etichetta: action!.$2, onTap: action!.$3, misura: Misura.tondo),
-                        ),
+                Padding(
+                  padding: const EdgeInsets.only(left: Misura.isola / 2),
+                  child: Rientra(
+                    id: pages.length > 1 ? pages.map((p) => p.$2).join() : null,
+                    da: Alignment.centerLeft,
+                    child: PillolaPagine(pagine: pages, pagina: page, onPagina: (i) => onPage?.call(i)),
+                  ),
                 ),
-                nest,
+                Medaglione(potere: power, onTocco: onTocco, onProssimo: onProssimo, onTira: onTira),
               ],
             ),
-          ),
-        ],
+            const Spacer(),
+            Isola(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // L'azione esce da Transcri: l'isola si allunga verso sinistra.
+                  Rientra(
+                    id: action?.$1,
+                    da: Alignment.centerRight,
+                    child: action == null
+                        ? const SizedBox.shrink()
+                        : Padding(
+                            padding: const EdgeInsets.only(right: margine),
+                            child: BottoneIcona(action!.$1, etichetta: action!.$2, onTap: action!.$3, misura: Misura.tondo),
+                          ),
+                  ),
+                  nest,
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

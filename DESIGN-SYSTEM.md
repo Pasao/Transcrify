@@ -65,6 +65,7 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
 ### Atomi
 - ☑ Bottone: `atomi/bottone.dart`; FilledButton/OutlinedButton/TextButton prendono lo stesso stile dal tema (Pieno / Tenue senza contorno / Testo)
 - ☑ BottoneIcona: `atomi/bottone_icona.dart` (icona piccola sotto i 40: lo usano anche i ComandiVoce); RoundAction (ora nuda) e PowerBadge passano da lì, IconButton dal tema; nel Kotlin i tasti del Floater prendono i colori da Palette (token)
+- ☑ BarraInFondo: `atomi/barra_in_fondo.dart`, le barre in fondo (Dock, barra delle cose scelte, barra sotto la nota e sotto la trascrizione): i suggerimenti dei tasti escono sopra il dito, non sotto
 - ☑ Chip: `atomi/chip_stato.dart` («Dati finti»; StatusChip tolto)
 - ☑ Interruttore e Campo: dal tema (suggerimento leggibile, contorno solo da attivo)
 - ☑ Scheda: `atomi/scheda.dart`, la usano MiniCard, NoteCard, PezzoArgomento, Chiave trovata

@@ -51,6 +51,7 @@ class MainActivity : FlutterActivity() {
                 })
                 "discardPending" -> {
                     queue.remove(call.argument<String>("id")!!)
+                    PillService.instance?.session?.codaCambiata()
                     result.success(null)
                 }
                 "flushPending" -> {

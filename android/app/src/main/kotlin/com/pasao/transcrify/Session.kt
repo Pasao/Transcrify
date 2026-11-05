@@ -406,7 +406,7 @@ class Session(private val context: Context, private val store: Store, private va
                     if (outcome.result != null) done++
                 } else break
             }
-            waiting = queue.all().size
+            codaCambiata()
             flushing = false
             if (done > 0) {
                 hasLast = true
@@ -414,6 +414,15 @@ class Session(private val context: Context, private val store: Store, private va
                 say(if (done == 1) "Trascrizione pronta in Transcrify" else "$done trascrizioni pronte in Transcrify")
             }
         }
+    }
+
+    /**
+     * La coda è cambiata (l'app ha buttato o trascritto quello che aspettava): si riconta e, se non resta
+     * niente da riprovare, il giallo di «Riprova» se ne va subito, come quando lo tocchi a coda vuota.
+     */
+    fun codaCambiata() {
+        waiting = queue.all().size
+        if (phase == Phase.ERROR && fix == Fix.RETRY && waiting == 0) refreshLimits()
     }
 
     /** Il cestino: butta la registrazione in corso o, dopo un errore, quella che non è riuscita. */

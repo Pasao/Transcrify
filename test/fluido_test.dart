@@ -59,7 +59,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('transcrify/core');
   final r = math.Random(7);
-  final ora = DateTime(2026, 11, 3, 20).millisecondsSinceEpoch;
+  // Sempre stasera: la giornata più nuova deve risultare «Oggi» in qualsiasi giorno girino i test.
+  final adesso = DateTime.now();
+  final ora = DateTime(adesso.year, adesso.month, adesso.day, 20).millisecondsSinceEpoch;
   // Cinque al giorno, per 400 giorni: dalla più nuova.
   final storia = [
     for (var i = 0; i < 2000; i++)

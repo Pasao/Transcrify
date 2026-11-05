@@ -1223,74 +1223,76 @@ class NoteToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tk = context.col;
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-        child: Row(
-          children: [
-            ValueListenableBuilder<UndoHistoryValue>(
-              valueListenable: undo,
-              builder: (context, v, _) => Row(
-                children: [
-                  IconButton(onPressed: v.canUndo ? undo.undo : null, icon: const Icon(Icons.undo_rounded), tooltip: 'Annulla'),
-                  IconButton(onPressed: v.canRedo ? undo.redo : null, icon: const Icon(Icons.redo_rounded), tooltip: 'Ripeti'),
-                ],
-              ),
-            ),
-            IconButton(
-              onPressed: onList,
-              icon: Icon(Icons.format_list_bulleted_rounded, color: tk.testo),
-              tooltip: 'Elenco',
-            ),
-            // Gli argomenti: lo stesso del pizzico, per chi non lo conosce. Acceso = colorato.
-            Tooltip(
-                message: 'Tocca, tira su o pizzica la nota',
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onTopics,
-                  onVerticalDragStart: (_) => onSlideStart(),
-                  onVerticalDragUpdate: (d) => onSlide(d.globalPosition),
-                  onVerticalDragEnd: (_) => onSlideEnd(),
-                  onVerticalDragCancel: onSlideEnd,
-                  onLongPressStart: (_) => onSlideStart(),
-                  onLongPressMoveUpdate: (d) => onSlide(d.globalPosition),
-                  onLongPressEnd: (_) => onSlideEnd(),
-                  child: Padding(padding: const EdgeInsets.all(12), child: GrainIcon(level: topics)),
+    return BarraInFondo(
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+          child: Row(
+            children: [
+              ValueListenableBuilder<UndoHistoryValue>(
+                valueListenable: undo,
+                builder: (context, v, _) => Row(
+                  children: [
+                    IconButton(onPressed: v.canUndo ? undo.undo : null, icon: const Icon(Icons.undo_rounded), tooltip: 'Annulla'),
+                    IconButton(onPressed: v.canRedo ? undo.redo : null, icon: const Icon(Icons.redo_rounded), tooltip: 'Ripeti'),
+                  ],
                 ),
               ),
-            IconButton(
-                onPressed: onSummarize,
-                tooltip: summaryOn ? 'Torna al testo intero' : 'Riassumi',
-                icon: summarizing
-                    ? const SizedBox.square(dimension: 24, child: VoiceCircle(phase: 'PROCESSING', size: 24))
-                    : Icon(Icons.short_text_rounded, color: summaryOn ? context.col.azione : tk.testo),
+              IconButton(
+                onPressed: onList,
+                icon: Icon(Icons.format_list_bulleted_rounded, color: tk.testo),
+                tooltip: 'Elenco',
               ),
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: AnimatedSwitcher(
-                  duration: Durata.normale,
-                  transitionBuilder: (c, a) => ScaleTransition(
-                    scale: a,
-                    child: FadeTransition(opacity: a, child: c),
+              // Gli argomenti: lo stesso del pizzico, per chi non lo conosce. Acceso = colorato.
+              Tooltip(
+                  message: 'Tocca, tira su o pizzica la nota',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onTopics,
+                    onVerticalDragStart: (_) => onSlideStart(),
+                    onVerticalDragUpdate: (d) => onSlide(d.globalPosition),
+                    onVerticalDragEnd: (_) => onSlideEnd(),
+                    onVerticalDragCancel: onSlideEnd,
+                    onLongPressStart: (_) => onSlideStart(),
+                    onLongPressMoveUpdate: (d) => onSlide(d.globalPosition),
+                    onLongPressEnd: (_) => onSlideEnd(),
+                    child: Padding(padding: const EdgeInsets.all(12), child: GrainIcon(level: topics)),
                   ),
-                  child: dictation == null
-                      ? const SizedBox.shrink()
-                      : Tooltip(
-                          key: ValueKey(dictation!.at),
-                          message: 'Incolla la dettatura',
-                          child: FilledButton.icon(
-                            onPressed: onPaste,
-                            style: FilledButton.styleFrom(minimumSize: const Size(0, 40), padding: const EdgeInsets.symmetric(horizontal: 12)),
-                            icon: const Icon(Icons.mic_rounded, size: 18),
-                            label: const Text('Incolla', maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              IconButton(
+                  onPressed: onSummarize,
+                  tooltip: summaryOn ? 'Torna al testo intero' : 'Riassumi',
+                  icon: summarizing
+                      ? const SizedBox.square(dimension: 24, child: VoiceCircle(phase: 'PROCESSING', size: 24))
+                      : Icon(Icons.short_text_rounded, color: summaryOn ? context.col.azione : tk.testo),
+                ),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: AnimatedSwitcher(
+                    duration: Durata.normale,
+                    transitionBuilder: (c, a) => ScaleTransition(
+                      scale: a,
+                      child: FadeTransition(opacity: a, child: c),
+                    ),
+                    child: dictation == null
+                        ? const SizedBox.shrink()
+                        : Tooltip(
+                            key: ValueKey(dictation!.at),
+                            message: 'Incolla la dettatura',
+                            child: FilledButton.icon(
+                              onPressed: onPaste,
+                              style: FilledButton.styleFrom(minimumSize: const Size(0, 40), padding: const EdgeInsets.symmetric(horizontal: 12)),
+                              icon: const Icon(Icons.mic_rounded, size: 18),
+                              label: const Text('Incolla', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ),
                           ),
-                        ),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

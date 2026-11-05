@@ -3,6 +3,7 @@
 library;
 
 export 'atomi/anteprima.dart';
+export 'atomi/barra_in_fondo.dart';
 export 'atomi/blob_lavoro.dart';
 export 'atomi/bottone.dart';
 export 'atomi/bottone_icona.dart';

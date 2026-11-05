@@ -206,33 +206,35 @@ class _SelectionBarState extends State<SelectionBar> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
-      decoration: BoxDecoration(color: context.col.floater, borderRadius: BorderRadius.circular(Raggio.pillola), boxShadow: Ombra.sospeso),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: widget.onClose,
-            icon: Icon(Icons.close_rounded, color: context.col.suFloater),
-            tooltip: 'Annulla',
-          ),
-          Expanded(
-            child: Text(
-              widget.label,
-              style: Testo.titoloScheda.copyWith(color: context.col.suFloater),
-            ),
-          ),
-          for (final (icon, name, onTap) in widget.actions)
+    return BarraInFondo(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
+        decoration: BoxDecoration(color: context.col.floater, borderRadius: BorderRadius.circular(Raggio.pillola), boxShadow: Ombra.sospeso),
+        child: Row(
+          children: [
             IconButton(
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                onTap();
-              },
-              tooltip: name,
-              // Sul fondo scuro, l'errore usa il suo tono tenue (regola di Figma per ciò che è sospeso).
-              icon: Icon(icon, color: name == 'Elimina' ? context.col.erroreTenue : context.col.suFloater),
+              onPressed: widget.onClose,
+              icon: Icon(Icons.close_rounded, color: context.col.suFloater),
+              tooltip: 'Annulla',
             ),
-        ],
+            Expanded(
+              child: Text(
+                widget.label,
+                style: Testo.titoloScheda.copyWith(color: context.col.suFloater),
+              ),
+            ),
+            for (final (icon, name, onTap) in widget.actions)
+              IconButton(
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  onTap();
+                },
+                tooltip: name,
+                // Sul fondo scuro, l'errore usa il suo tono tenue (regola di Figma per ciò che è sospeso).
+                icon: Icon(icon, color: name == 'Elimina' ? context.col.erroreTenue : context.col.suFloater),
+              ),
+          ],
+        ),
       ),
     );
   }
