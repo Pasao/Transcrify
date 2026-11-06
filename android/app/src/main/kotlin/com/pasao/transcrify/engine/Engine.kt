@@ -25,10 +25,40 @@ class NoteTopics(
     fun keySentences(cuts: IntArray): IntArray {
         if (vectors.isEmpty()) return IntArray(0)
         return segmentation.pieces(cuts).map { r ->
-            val center = FloatArray(vectors[0].size)
-            for (i in r) Vec.addTo(center, vectors[i])
+            val center = center(r)
             r.maxBy { Vec.dot(vectors[it], center) }
         }.toIntArray()
+    }
+
+    /**
+     * Il gruppo di senso di ogni pezzo: i pezzi che parlano della stessa cosa, anche lontani nella nota, hanno lo
+     * stesso numero (nell'app, lo stesso colore: «le frasi dello stesso colore vogliono dire cose simili»).
+     * È la regola degli album ([Topics]) dentro una nota sola: in ordine di testo, un pezzo va nel gruppo a cui
+     * somiglia di più in media, se almeno [pair] (dal profilo del modello); sennò ne apre uno nuovo. Il primo è 0.
+     * O(pezzi · gruppi · dim), senza modello.
+     */
+    fun groups(cuts: IntArray, pair: Float): IntArray {
+        if (vectors.isEmpty()) return IntArray(0)
+        val sums = ArrayList<FloatArray>()
+        val sizes = ArrayList<Int>()
+        return segmentation.pieces(cuts).map { r ->
+            val v = Vec.normalized(center(r))
+            val best = sums.indices.maxByOrNull { Vec.dot(sums[it], v) / sizes[it] }
+            val g = if (best != null && Vec.dot(sums[best], v) / sizes[best] >= pair) best else sums.size.also {
+                sums.add(FloatArray(v.size))
+                sizes.add(0)
+            }
+            Vec.addTo(sums[g], v)
+            sizes[g] = sizes[g] + 1
+            g
+        }.toIntArray()
+    }
+
+    /** La somma del senso delle frasi [r]: la direzione media del pezzo. */
+    private fun center(r: IntRange): FloatArray {
+        val c = FloatArray(vectors[0].size)
+        for (i in r) Vec.addTo(c, vectors[i])
+        return c
     }
 }
 
@@ -76,6 +106,18 @@ class Engine(
         return v.toFloats()
     }
 
+    /**
+     * Il senso di frasi intere, per una prova che non deve lasciare tracce: quelle già capite si prendono
+     * dalla memoria, le altre si chiedono al modello e NON si ricordano (niente su disco). Lunghi 1.
+     */
+    fun sensoSenzaRicordare(testi: List<String>): List<FloatArray> {
+        val prints = testi.map { Fingerprint.of(it) }
+        val mancano = testi.indices.filter { prints[it] !in memory }
+        val nuovi = if (mancano.isEmpty()) emptyList() else embedder.embed(mancano.map { testi[it] })
+        val daModello = mancano.withIndex().associate { (k, i) -> i to Vec.normalized(nuovi[k]) }
+        return testi.indices.map { daModello[it] ?: memory.getValue(prints[it]).toFloats() }
+    }
+
     val remembered get() = memory.size
 
     /** Ogni frase delle note e delle trascrizioni, per cercare per senso. */
@@ -116,8 +158,8 @@ class Engine(
         ricerca.metti(FONTE_NOTA + noteId, s.perRicerca())
         val vectors = prints.map { memory.getValue(it).toFloats() }
         val seg = Segmenter.segment(vectors, profile.depthScale)
-        // I pezzi degli album sono quelli della grana media che vedi pizzicando.
-        val ranges = seg.pieces(seg.levelCuts(2, profile))
+        // I pezzi degli album sono quelli che vedi negli argomenti della nota.
+        val ranges = seg.pieces(seg.mediumCuts(profile))
         val pieces = ranges.map { pieceId(noteId, prints, it) to it }
         val before = notePieces[noteId].orEmpty().toHashSet()
         val now = pieces.map { it.first }.toHashSet()

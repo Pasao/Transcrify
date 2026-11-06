@@ -1,19 +1,52 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/native.dart';
 import '../atomi.dart';
 import '../ds.dart';
 import 'comandi_voce.dart';
 
-/// La parte sinistra della barra in fondo alla trascrizione aperta (B6 «BarraTrascrizione»).
-/// A riposo il microfono e «Aggiungi a voce» (il testo dettato entra dove sta il cursore); mentre detta qui, i ComandiVoce piccoli (gli stessi
-/// del Floater) col tempo accanto. Cresce e si taglia: le icone a destra della barra non si spostano.
-class VoceInBarra extends StatelessWidget {
-  const VoceInBarra({super.key, required this.at, required this.onStart});
+/// La parte sinistra della barra in fondo alla trascrizione aperta (B6 «BarraTrascrizione»), l'area della voce.
+/// A riposo il bottone tenue «Detta qui» col microfono (Figma D2, riga 2b: niente Transcri qui; il testo dettato
+/// entra dove sta il cursore); mentre detta qui, i ComandiVoce piccoli (gli stessi del Floater) col tempo accanto.
+/// Toccando «Detta qui» si registra subito; intanto la pillola sul bordo sparisce (la nasconde il nativo, `Dettatura.kt`:
+/// sono due cose diverse) e torna a fine dettatura. Se il foglio si chiude a metà, torna subito (`Core.lasciaDettatura`).
+/// Cresce e si taglia: le icone a destra della barra non si spostano.
+class VoceInBarra extends StatefulWidget {
+  const VoceInBarra({super.key, required this.at, required this.prepara, required this.punto});
 
   /// La trascrizione aperta: la voce si aggiunge qui solo se Transcri sta dettando per lei.
   final DateTime at;
-  final VoidCallback onStart;
+
+  /// Prima di dettare: salva, chiede i permessi, chiude la tastiera. False = non si parte.
+  final Future<bool> Function() prepara;
+
+  /// Dove entrerà la voce nel testo (-1 = in fondo).
+  final int Function() punto;
+
+  /// Transcri sta dettando (o trascrivendo) per la trascrizione [at].
+  static bool dettaIn(Live live, DateTime at) => live.appendTo == at.millisecondsSinceEpoch && (live.listening || live.phase == 'PROCESSING');
+
+  @override
+  State<VoceInBarra> createState() => _VoceInBarraState();
+}
+
+class _VoceInBarraState extends State<VoceInBarra> {
+  DateTime get at => widget.at;
+
+  @override
+  void dispose() {
+    // Il foglio si chiude mentre detta qui: la pillola torna sul bordo, coi suoi comandi.
+    if (VoceInBarra.dettaIn(Core.live.value, at)) Core.lasciaDettatura();
+    super.dispose();
+  }
+
+  /// Il tocco su «Detta qui»: la registrazione parte subito (i comandi stanno nella barra, niente pannello del Floater).
+  Future<void> _detta() async {
+    if (!await widget.prepara() || !mounted) return;
+    HapticFeedback.heavyImpact();
+    Core.listen(appendTo: at, cursor: widget.punto());
+  }
 
   static String _tempo(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
 
@@ -31,8 +64,7 @@ class VoceInBarra extends StatelessWidget {
     return ValueListenableBuilder<Live>(
       valueListenable: Core.live,
       builder: (context, live, _) {
-        final mio = live.appendTo == at.millisecondsSinceEpoch;
-        if (mio && (live.listening || live.phase == 'PROCESSING')) {
+        if (VoceInBarra.dettaIn(live, at)) {
           final fase = live.phase == 'PROCESSING' ? FaseVoce.lavora : (live.paused ? FaseVoce.pausa : FaseVoce.ascolta);
           return Row(
             spacing: Spazio.s2,
@@ -56,23 +88,9 @@ class VoceInBarra extends StatelessWidget {
         }
         // Mentre detta altrove aspetta: Transcri fa una cosa alla volta.
         final occupato = live.listening || live.phase == 'PROCESSING';
-        return Opacity(
-          opacity: occupato ? 0.5 : 1,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(Raggio.pillola),
-            onTap: occupato ? null : onStart,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: Spazio.s1, horizontal: Spazio.s1),
-              child: Row(
-                spacing: Spazio.s2,
-                children: [
-                  // Il microfono (sua scelta, 2 nov: non Transcri piccolo).
-                  Icon(Icons.mic_none_rounded, size: Misura.iconaGrande, color: c.azione),
-                  testo('Aggiungi a voce', Testo.etichetta),
-                ],
-              ),
-            ),
-          ),
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Bottone('Detta qui', icona: Icons.mic_rounded, tipo: TipoBottone.tenue, alto: false, onPressed: occupato ? null : _detta),
         );
       },
     );

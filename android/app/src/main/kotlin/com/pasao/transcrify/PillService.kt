@@ -170,12 +170,30 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         readAccent()
         instance = this
 
+        // La pausa apre e chiude da sola il suo cassetto (Cassettiera.pausa): lunga si apre, ripreso si chiude.
+        scope.launch {
+            snapshotFlow { session.pausaLunga to (session.phase == Phase.RECORDING && session.paused) }.collect { (lunga, inPausa) ->
+                carta = Cassettiera.pausa(carta, lunga, inPausa)
+            }
+        }
         scope.launch {
             snapshotFlow { session.phase == Phase.RECORDING }.collect { rec ->
                 wide = rec
                 pillView?.let { v ->
                     pillParams.width = touchW
                     pillParams.x = if (pillRight) screen.width() - touchW else 0
+                    wm.updateViewLayout(v, pillParams)
+                }
+            }
+        }
+        // «Detta qui»: la pillola si seppellisce nel bordo mentre detta nell'app (la disegna PillBar) e intanto non si
+        // tocca; rispunta appena ha finito (o l'app va via).
+        scope.launch {
+            snapshotFlow { Dettatura.inCorso(session.phase) to sepolta }.collect { (inCorso, giu) ->
+                if (!inCorso) dettaInApp = false
+                pillView?.let { v ->
+                    val intoccabile = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    pillParams.flags = if (giu) pillParams.flags or intoccabile else pillParams.flags and intoccabile.inv()
                     wm.updateViewLayout(v, pillParams)
                 }
             }
@@ -187,7 +205,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // «Chiudi» nella notifica: rientra come con la X, e se stava registrando manda quello che ha sentito.
+        // «Richiama» nella notifica: rientra come con la X, e se stava registrando manda quello che ha sentito.
         if (intent?.action == ACTION_STOP) {
             rientra()
             return START_NOT_STICKY
@@ -245,8 +263,24 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     /** Ascolta: dal Dock, senza finestre sopra le altre app; se è già fuori, lo vedi sulla sua pillola. */
     private fun listen(appendTo: Long?, cursor: Int) {
         session.start(appendTo, cursor)
+        // Ogni voce che entra in una trascrizione parte da «Detta qui», nell'app.
+        dettaInApp = appendTo != null && Dettatura.inCorso(session.phase)
         if (!out && session.phase != Phase.RECORDING) rest()
     }
+
+    /**
+     * «Detta qui» nell'app (vedi [Dettatura]): vero dal tocco finché quella dettatura non è finita o il foglio
+     * non si chiude ([lasciaDettatura]). Intanto la pillola è sepolta nel bordo.
+     */
+    private var dettaInApp by mutableStateOf(false)
+
+    /** Il foglio della trascrizione si è chiuso mentre dettava: la pillola torna sul bordo coi suoi comandi. */
+    fun lasciaDettatura() {
+        dettaInApp = false
+    }
+
+    /** La pillola è sepolta nel bordo per «Detta qui» (vedi [Dettatura]): PillBar la fa scivolare dentro e fuori. */
+    val sepolta get() = Dettatura.seppellisce(dettaInApp, appDavanti, session.phase)
 
     /** Ferma e manda quello che ha sentito. Se era nel Dock, il servizio si spegne appena ha finito. */
     fun stopListening() {
@@ -296,6 +330,9 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
     /** Quale carta è fuori (i cassetti la aprono, la scambiano, la chiudono); null: nessuna. */
     var carta by mutableStateOf<Carta?>(null)
+
+    /** Un cassetto si sta fondendo con la sua carta: il pannello la segue passo passo, senza la sua molla. */
+    var morfa by mutableStateOf(false)
 
     /** Tutti i vocali sulla carta, dal primo all'ultimo. */
     val vocali: List<Pair<Transcription, Origin>> get() = listOfNotNull(vocale) + messages
@@ -699,7 +736,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     fun recall(to: Offset, home: Rect?, toApp: Boolean = false) = showStage(Stage.Outro(to, home, toApp))
 
     /**
-     * Torna a casa senza sapere dove (un tocco sul widget senza la sua posizione, «Chiudi» nella notifica):
+     * Torna a casa senza sapere dove (un tocco sul widget senza la sua posizione, «Richiama» nella notifica):
      * se è fuori rientra nella casa in basso, se è nel Dock si ferma. In tutti e due i casi quello che stava
      * registrando, anche in pausa, si trascrive e si copia come quando lo fermi tu: non si butta e non resta in attesa.
      */
@@ -713,7 +750,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         session.clearError()
     }
 
-    // --- Notifica: una sola, con il modo di chiudere ---
+    // --- Notifica: una sola, con il modo di richiamarlo (AvvisoFuori) ---
 
     private fun notification(): Notification {
         val nm = getSystemService(NotificationManager::class.java)
@@ -732,10 +769,15 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         )
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_mic)
-            .setContentTitle("Transcrify")
-            .setContentText("Per farlo rientrare, trascinalo nella sua casa in basso")
+            .setContentTitle(AvvisoFuori.TITOLO)
+            .setContentText(AvvisoFuori.TESTO)
             .setContentIntent(open)
-            .addAction(Notification.Action.Builder(null, "Chiudi", stop).build())
+            .apply {
+                AvvisoFuori.tasti.forEach { tasto ->
+                    val azione = when (tasto) { AvvisoFuori.Tasto.RICHIAMA -> stop }
+                    addAction(Notification.Action.Builder(null, tasto.etichetta, azione).build())
+                }
+            }
             .setOngoing(true)
             .build()
     }
@@ -765,6 +807,9 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
         /** Avvisato quando cambia quello che Transcri sta facendo: stato e volume, per il Dock. */
         var liveListener: ((Map<String, Any?>) -> Unit)? = null
+
+        /** L'app si vede (tra onStart e onStop): «Detta qui» nasconde la pillola solo così. */
+        var appDavanti by mutableStateOf(false)
 
 
         /** Comincia ad ascoltare con l'app aperta: è qui che Android concede il microfono anche per dopo. */
@@ -811,4 +856,4 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 }
 
 /** Le carte che escono sopra il registratore del Floater. */
-enum class Carta { VOCALI, ULTIMA }
+enum class Carta { ULTIMA, VOCALI, PAUSA }

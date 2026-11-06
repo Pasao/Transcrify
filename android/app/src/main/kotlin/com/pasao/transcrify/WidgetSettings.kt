@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -41,12 +42,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Le impostazioni di un widget: colore, scritta, sfondo. Si aprono quando lo aggiungi
+ * Le impostazioni di un widget: colore, scritta, cosa c'è nel 2 × 1 (le parole o il tondo che apre l'app), sfondo. Si aprono quando lo aggiungi
  * (ma si possono saltare) e, dopo, tenendolo premuto. Sopra c'è l'anteprima, che cambia
  * mentre scegli.
  */
@@ -96,6 +98,8 @@ private fun Screen(start: WidgetLook, onDone: (WidgetLook) -> Unit) {
             look = look.copy(style = it)
         }
         Choice("Scritta", listOf(true to "Con la scritta", false to "Solo Transcri"), look.text) { look = look.copy(text = it) }
+        // 6 nov, giro 6: nel 2 × 1 piccolo le parole servono a poco; il tondo apre l'app.
+        Choice("Nel 2 × 1", listOf(false to "Testo", true to "Apri l'app"), look.apri) { look = look.copy(apri = it) }
         Choice("Sfondo", listOf(true to "Pieno", false to "Trasparente"), look.filled) { look = look.copy(filled = it) }
         Spacer(Modifier.weight(1f))
         Button(onClick = { onDone(look) }, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Fatto", style = Caratteri.testoGrande) }
@@ -132,13 +136,21 @@ private fun Preview(look: WidgetLook) {
     val shape = CircleShape
     val base = Modifier
         .then(if (look.filled) Modifier.background(Brush.horizontalGradient(bg), shape) else Modifier.border(1.dp, text.copy(alpha = 0.2f), shape))
-    if (look.text) {
-        Row(base.width(260.dp).height(76.dp).padding(start = 10.dp, end = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+    if (look.dueXUno) {
+        Row(base.width(260.dp).height(76.dp).padding(start = 10.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) { Blob(blob, big = true) }
             Spacer(Modifier.width(12.dp))
-            Column {
-                Text("Detta", style = Caratteri.titoloScheda, color = text)
-                Text("Tocca e parla, poi incolla dove vuoi", style = Caratteri.piccolo, color = text.copy(alpha = 0.7f), maxLines = 2)
+            if (look.apri) {
+                // Il tondo che apre l'app, a destra: come widget_open_round (il fondo è il testo, tenue).
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.size(52.dp).background(text.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(R.drawable.ic_widget_open), contentDescription = "Apri Transcrify", tint = text, modifier = Modifier.size(22.dp))
+                }
+            } else {
+                Column {
+                    Text("Detta", style = Caratteri.titoloScheda, color = text)
+                    Text("Tocca e parla, poi incolla dove vuoi", style = Caratteri.piccolo, color = text.copy(alpha = 0.7f), maxLines = 2)
+                }
             }
         }
     } else {

@@ -112,6 +112,18 @@ class EngineTest {
         assertTrue(seg.pieces(seg.cuts(20)).all { it.count() >= 2 })
     }
 
+    @Test
+    fun piecesAboutTheSameThingShareAGroup() {
+        // Tre pezzi: A, B, poi di nuovo A più avanti nella nota. Il terzo prende il gruppo del primo (lo stesso colore).
+        val f = Fake(256, 2, 7)
+        val vs = List(4) { f.sentence(0) } + List(4) { f.sentence(1) } + List(4) { f.sentence(0) }
+        val seg = Segmenter.segment(vs)
+        val t = NoteTopics(emptyList(), seg, emptyList(), 0, vs)
+        val cuts = seg.cuts(3)
+        assertArrayEquals(intArrayOf(3, 7), cuts)
+        assertArrayEquals(intArrayOf(0, 1, 0), t.groups(cuts, EngineProfile.DEFAULT.pair))
+    }
+
     // --- album ---
 
     @Test

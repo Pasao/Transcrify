@@ -20,8 +20,9 @@ TextStyle display(BuildContext context, {double size = 34, bool strong = false, 
   );
 }
 
-TextStyle monoStyle(BuildContext context, {double size = 11, Color? color}) =>
-    TextStyle(fontFamily: Testo.fontMono, fontSize: size, color: color ?? context.col.testoSecondario, letterSpacing: 0.2); // ds:eccezione: la funzione degli orari
+/// [Testo.orario] (cifre tabellari) in un'altra grandezza, di base nel colore secondario.
+TextStyle orarioStyle(BuildContext context, {double? size, Color? color}) =>
+    Testo.orario.copyWith(fontSize: size, color: color ?? context.col.testoSecondario); // ds:eccezione: gli orari in altre grandezze
 
 ThemeData buildTheme(Brightness b) {
   final col = b == Brightness.light ? Colori.chiaro : Colori.scuro;

@@ -42,17 +42,21 @@ object Sandbox {
     private fun seed(folder: File) {
         val now = System.currentTimeMillis()
         val hour = 3_600_000L
-        fun entry(text: String, ago: Long, mode: String?, source: String? = null) = JSONObject()
+        // Alcune con un colore («tinta:luce», vedi Tinte nell'app) e una privata, per provare cartelle e lucchetto.
+        fun entry(text: String, ago: Long, mode: String?, source: String? = null, colore: String? = null, privata: Boolean = false) = JSONObject()
             .put("text", text).put("at", now - ago * hour).put("purified", mode != null).put("mode", mode).put("source", source)
+            .put("colore", colore).put("privata", privata)
         File(folder, "history.json").writeText(
             JSONArray(
                 listOf(
-                    entry("Ciao, arrivo alle otto. Se ti serve qualcosa dal supermercato scrivimi prima delle sette.", 1, "pulita"),
-                    entry("Il messaggio per il condominio: la riunione è spostata a giovedì alle 21, nella sala al piano terra.", 3, "pulita"),
+                    entry("Ciao, arrivo alle otto. Se ti serve qualcosa dal supermercato scrivimi prima delle sette.", 1, "pulita", colore = "0:4"),
+                    entry("Il messaggio per il condominio: la riunione è spostata a giovedì alle 21, nella sala al piano terra.", 3, "pulita", colore = "4:4", privata = true),
                     entry("Vocale finto: domani passo a prendere le chiavi, poi andiamo insieme a vedere la macchina.", 5, "fedele", "whatsapp"),
-                    entry("Ricordarsi di chiamare il meccanico.", 26, null),
+                    entry("Ricordarsi di chiamare il meccanico.", 26, null, colore = "0:4"),
                     entry("Prova di un testo più lungo per vedere come sta nella scheda. " + "Una frase in più per riempire lo spazio. ".repeat(8), 30, "pulita"),
-                ) + (2..40).map { day -> entry("Trascrizione finta di $day giorni fa: la ferramenta chiude alle sette.", day * 24L + 3, "fedele") }
+                ) + (2..40).map { day ->
+                    entry("Trascrizione finta di $day giorni fa: la ferramenta chiude alle sette.", day * 24L + 3, "fedele", colore = if (day % 5 == 0) "3:4" else null)
+                }
             ).toString()
         )
         fun note(id: String, title: String, text: String, ago: Long, source: String? = null, summary: String? = null) = JSONObject()

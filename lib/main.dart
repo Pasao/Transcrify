@@ -22,14 +22,14 @@ class TranscrifyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     // Un colore solo per tutto: se cambia (nuovo sfondo), si ridisegna l'app intera.
     return ValueListenableBuilder<int>(
-      valueListenable: Colori.versione,
-      builder: (context, _, _) => MaterialApp(
-        title: 'Transcrify',
-        debugShowCheckedModeBanner: false,
-        theme: buildTheme(Brightness.light),
-        darkTheme: buildTheme(Brightness.dark),
-        home: const _Root(),
-      ),
+        valueListenable: Colori.versione,
+        builder: (context, _, _) => MaterialApp(
+          title: 'Transcrify',
+          debugShowCheckedModeBanner: false,
+          theme: buildTheme(Brightness.light),
+          darkTheme: buildTheme(Brightness.dark),
+          home: const _Root(),
+        ),
     );
   }
 }

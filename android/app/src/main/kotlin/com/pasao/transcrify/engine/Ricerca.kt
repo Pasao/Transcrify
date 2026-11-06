@@ -56,4 +56,16 @@ object Parole {
         val i = t.indexOf(parole.first())
         return if (t.length == testo.length) i else 0
     }
+
+    /** Un testo dove cercare: da quale fonte, e quando è cambiato l'ultima volta. */
+    data class Fonte(val fonte: String, val testo: String, val quando: Long)
+
+    /**
+     * Le fonti con tutte le [parole], dalla più recente (note e trascrizioni insieme, per data):
+     * di ognuna la frase dove compare la prima parola. Vengono sempre prima di quelle trovate per senso.
+     */
+    fun esatti(fonti: List<Fonte>, parole: List<String>): List<Trovato> = fonti.sortedByDescending { it.quando }.mapNotNull { f ->
+        val i = trova(f.testo, parole) ?: return@mapNotNull null
+        Trovato(f.fonte, Sentences.split(f.testo).firstOrNull { i < it.end } ?: Span(0, f.testo.length), 1f, esatto = true)
+    }
 }

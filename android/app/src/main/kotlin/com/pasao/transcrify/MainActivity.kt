@@ -44,7 +44,7 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(mapOf("nome" to Provenienza.nome(this, source), "icona" to png))
                 }
-                "history" -> background(result, letture) { store.history().map { mapOf("text" to it.text, "at" to it.at, "purified" to it.purified, "mode" to it.mode, "source" to it.source) } }
+                "history" -> background(result, letture) { store.history().map { it.toMap() } }
                 // Quello che si sta trascrivendo adesso non è "in attesa": compare solo se fallisce.
                 "pending" -> result.success(queue.all().filter { it.id !in (PillService.instance?.session?.working ?: emptySet()) }.map {
                     mapOf("id" to it.id, "at" to it.at, "seconds" to it.seconds, "mode" to it.mode)
@@ -89,12 +89,43 @@ class MainActivity : FlutterActivity() {
                     store.editEntry(call.argument<Number>("at")!!.toLong(), call.argument<String>("text")!!)
                     result.success(null)
                 }
+                // Colore, privata e titolo, su una o più trascrizioni: c'è solo quello che cambia. Un titolo vuoto lo toglie.
+                "segnaHistory" -> {
+                    val ats = call.argument<List<Number>>("ats")!!.map { it.toLong() }.toSet()
+                    val colore = call.hasArgument("colore")
+                    val privata = call.argument<Boolean>("privata")
+                    val titolo = call.hasArgument("titolo")
+                    store.cambia(ats) { t ->
+                        t.copy(
+                            colore = if (colore) call.argument<String>("colore") else t.colore,
+                            privata = privata ?: t.privata,
+                            titolo = if (titolo) call.argument<String>("titolo")?.trim()?.ifEmpty { null } else t.titolo,
+                        )
+                    }
+                    result.success(null)
+                }
+                "unisciHistory" -> result.success(store.unisci(call.argument<List<Number>>("ats")!!.map { it.toLong() })?.toMap())
+                "rimettiHistory" -> {
+                    store.rimetti(call.argument<List<Map<*, *>>>("voci")!!.map(Transcription::fromMap))
+                    result.success(null)
+                }
+                "nomiColori" -> result.success(store.nomiColori)
+                "nomeColore" -> {
+                    val colore = call.argument<String>("colore")!!
+                    val nome = call.argument<String>("nome")?.trim().orEmpty()
+                    store.nomiColori = store.nomiColori.toMutableMap().apply { if (nome.isEmpty()) remove(colore) else put(colore, nome) }
+                    result.success(null)
+                }
                 "listen" -> {
                     // Parte con l'app davanti: Android poi lascia il microfono acceso anche fuori.
                     PillService.listen(
                         this, call.argument<Number>("appendTo")?.toLong(), call.argument<Number>("cursor")?.toInt() ?: -1,
                         call.argument<List<Double>>("panel")?.map { it.toFloat() }?.toFloatArray(),
                     )
+                    result.success(null)
+                }
+                "lasciaDettatura" -> {
+                    PillService.instance?.lasciaDettatura()
                     result.success(null)
                 }
                 "openPanel" -> {
@@ -164,7 +195,9 @@ class MainActivity : FlutterActivity() {
                 "noteTopics" -> result.success(topics.topics(call.argument<String>("id")!!))
                 "albums" -> background(result, letture) { topics.albums() }
                 "categorie" -> background(result, letture) { topics.categorie() }
-                "cerca" -> topics.cerca(call.argument<String>("testo").orEmpty()) { trovati -> runOnUiThread { result.success(trovati) } }
+                "cerca" -> topics.cerca(call.argument<String>("testo").orEmpty(), call.argument<Boolean>("senso") == true) { trovati -> runOnUiThread { result.success(trovati) } }
+                "ricercaAperta" -> { topics.ricercaAperta(call.argument<Boolean>("aperta") == true); result.success(null) }
+                "estratto" -> topics.estratto(call.argument<String>("testo").orEmpty()) { r -> runOnUiThread { result.success(r) } }
                 "share" -> {
                     val send = android.content.Intent(android.content.Intent.ACTION_SEND)
                         .setType("text/plain")
@@ -340,7 +373,13 @@ class MainActivity : FlutterActivity() {
         PillService.instance?.appLeft(PillService.appNest ?: lastNest)
     }
 
+    override fun onStart() {
+        super.onStart()
+        PillService.appDavanti = true
+    }
+
     override fun onStop() {
+        PillService.appDavanti = false
         PillService.instance?.appLeft(lastNest)
         super.onStop()
     }
@@ -384,6 +423,7 @@ class MainActivity : FlutterActivity() {
             "simOffline" to Simulated.offline,
             "simBadKey" to Simulated.badKey,
             "simNoMic" to Simulated.noMic,
+            "provaRespiro" to Simulated.respiro,
             "sttModel" to store.transcriptionModel,
             "llmModel" to store.cleanupModel,
             "sttLimits" to store.modelLimits(store.transcriptionModel),

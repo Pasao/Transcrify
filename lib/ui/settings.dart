@@ -7,8 +7,11 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../core/native.dart';
 import '../core/ricerca.dart';
+import '../core/titoli.dart';
+import 'cartelle.dart';
 import 'mode_icon.dart';
 import 'onboarding.dart';
+import 'prova_estratto.dart';
 import 'theme.dart';
 
 /// Le due scelte che si capiscono, «più preciso» e «più veloce», ricavate dall'elenco dei modelli
@@ -347,9 +350,26 @@ class _SettingsPageState extends State<SettingsPage> {
                           trailing: Switch(value: st.simulateLimit, onChanged: _setLimit),
                           onTap: () => _setLimit(!st.simulateLimit),
                         ),
+                        _interruttore(Icons.folder_rounded, 'Mostra le cartelle', 'La pagina Cartelle nel Dock di Trascrivi', CartellePage.mostra),
+                        _interruttore(Icons.title_rounded, 'Titoli automatici', 'Sulle schede e nella trascrizione aperta, proposti dal riassunto', Titoli.automatici),
+                        _interruttore(Icons.bubble_chart_rounded, 'Mostra gli argomenti', 'La pagina Argomenti accanto alle Note', Core.mostraArgomenti),
                         _interruttore(Icons.pinch_rounded, 'Pizzico al contrario', 'Stringere le dita = più argomenti', Core.pinchReversed),
-                        _interruttore(Icons.format_list_bulleted_rounded, 'Ricerca come frasi', 'Le frasi trovate, da note e trascrizioni; spento: le schede delle note', Ricerca.comeFrasi),
                         _interruttore(Icons.category_rounded, 'Argomenti per categorie', 'Categorie fisse con le frasi chiave; spento: gli album del motore', Ricerca.perCategorie),
+                        SettingsRow(
+                          icon: Icons.format_quote_rounded,
+                          color: context.col.azione,
+                          title: 'Prova il riassunto estrattivo',
+                          subtitle: 'Le frasi che contano di una tua trascrizione o nota. Solo lettura, niente rete',
+                          onTap: () => _open(const ProvaEstrattoPage()),
+                        ),
+                        SettingsRow(
+                          icon: Icons.air_rounded,
+                          color: context.col.azione,
+                          title: 'Successo: l\'ultimo respiro',
+                          subtitle: 'Finito, si stringe e respira diventando verde; spento: il salto di prima',
+                          trailing: Switch(value: st.provaRespiro, onChanged: (on) => _simulate('respiro', on)),
+                          onTap: () => _simulate('respiro', !st.provaRespiro),
+                        ),
                         SettingsRow(
                           icon: Icons.wifi_off_rounded,
                           color: context.col.azione,
@@ -512,7 +532,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 Expanded(
                   child: Text(
                     st.maskedKey ?? 'Nessuna chiave',
-                    style: has ? monoStyle(context, size: 15, color: tk.testo) : t.bodyLarge?.copyWith(color: tk.testoSecondario),
+                    style: has ? orarioStyle(context, size: 15, color: tk.testo) : t.bodyLarge?.copyWith(color: tk.testoSecondario),
                   ),
                 ),
                 TextButton(onPressed: change, child: Text(has ? 'Modifica' : 'Aggiungi')),
@@ -1061,7 +1081,7 @@ class _PromptEditorState extends State<PromptEditor> {
             children: [
               Text('Prompt della pulizia', style: t.titleMedium),
               const SizedBox(width: 8),
-              Text(widget.custom ? 'tuo' : 'predefinito', style: monoStyle(context, color: tk.testoSecondario)),
+              Text(widget.custom ? 'tuo' : 'predefinito', style: orarioStyle(context, color: tk.testoSecondario)),
             ],
           ),
           const SizedBox(height: 8),
@@ -1170,7 +1190,7 @@ class _Meter extends StatelessWidget {
             Text(label, style: t.bodyMedium?.copyWith(color: tk.testoSecondario)),
             const Spacer(),
             Text(value, style: display(context, size: 20, color: full ? context.col.errore : null)),
-            if (of != null) Text(' / $of', style: monoStyle(context)),
+            if (of != null) Text(' / $of', style: orarioStyle(context)),
           ],
         ),
         if (fraction != null) ...[
@@ -1191,7 +1211,7 @@ class _Meter extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             full ? 'Finito. Torna ${_when(resets!)}' : 'Si azzera ${_when(resets!)}',
-            style: monoStyle(context).copyWith(color: full ? context.col.errore : null),
+            style: orarioStyle(context).copyWith(color: full ? context.col.errore : null),
           ),
         ],
       ],
@@ -1351,7 +1371,7 @@ class SettingsRow extends StatelessWidget {
   final Widget? trailing;
   final VoidCallback? onTap;
 
-  /// Il valore è un codice (la chiave): in DM Mono.
+  /// Il valore è un codice (la chiave): con le cifre degli orari.
   final bool mono;
 
   @override
@@ -1387,7 +1407,7 @@ class SettingsRow extends StatelessWidget {
                 child: Text(
                   value!,
                   overflow: TextOverflow.ellipsis,
-                  style: mono ? monoStyle(context, size: 12) : t.bodyMedium?.copyWith(color: tk.testoSecondario),
+                  style: mono ? orarioStyle(context, size: 12) : t.bodyMedium?.copyWith(color: tk.testoSecondario),
                 ),
               ),
             ],
@@ -1580,7 +1600,7 @@ class _Choice extends StatelessWidget {
                           if (hint != null) ...[const SizedBox(height: 2), Text(hint!, style: t.bodySmall)],
                           const SizedBox(height: 2),
                           // Il nome del modello, piccolo: per chi lo conosce.
-                          Text(subtitle, style: monoStyle(context, size: 11)),
+                          Text(subtitle, style: orarioStyle(context, size: 11)),
                         ],
                       ),
                     ),

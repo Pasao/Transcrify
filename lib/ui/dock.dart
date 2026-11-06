@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'atomi.dart';
 import 'ds.dart';
+import 'molecole/barra_scelte.dart';
 import 'molecole/isola.dart';
 import 'molecole/medaglione.dart';
 import 'molecole/pillola_pagine.dart';
@@ -25,6 +26,7 @@ class Dock extends StatelessWidget {
     this.pages = const [],
     this.page = 0,
     this.onPage,
+    this.nascosto = false,
   });
 
   /// Quanto spazio prende, dal fondo: le pagine lasciano libero questo.
@@ -48,9 +50,14 @@ class Dock extends StatelessWidget {
   final int page;
   final ValueChanged<int>? onPage;
 
+  /// Mentre si sceglie, al suo posto c'è la barra delle scelte ([Scelta.attiva]): il Dock scende e sparisce, e a
+  /// scelta finita risale. Lo stesso movimento della barra ([Scelta.transizione]): si danno il cambio.
+  final bool nascosto;
+
   @override
-  Widget build(BuildContext context) {
-    const margine = (Misura.isola - Misura.tondo) / 2;
+  Widget build(BuildContext context) => _Sparisce(nascosto: nascosto, child: _isole());
+
+  Widget _isole() {
     return BarraInFondo(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(Spazio.s3, 0, Spazio.s3, Spazio.s3),
@@ -83,7 +90,7 @@ class Dock extends StatelessWidget {
                     child: action == null
                         ? const SizedBox.shrink()
                         : Padding(
-                            padding: const EdgeInsets.only(right: margine),
+                            padding: const EdgeInsets.only(right: Isola.margine),
                             child: BottoneIcona(action!.$1, etichetta: action!.$2, onTap: action!.$3, misura: Misura.tondo),
                           ),
                   ),
@@ -96,4 +103,34 @@ class Dock extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Il Dock che si fa da parte e torna, col movimento della barra delle scelte. Nascosto non si tocca.
+class _Sparisce extends StatefulWidget {
+  const _Sparisce({required this.nascosto, required this.child});
+
+  final bool nascosto;
+  final Widget child;
+
+  @override
+  State<_Sparisce> createState() => _SparisceState();
+}
+
+class _SparisceState extends State<_Sparisce> with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(vsync: this, duration: Scelta.durata, value: widget.nascosto ? 0 : 1);
+
+  @override
+  void didUpdateWidget(covariant _Sparisce prima) {
+    super.didUpdateWidget(prima);
+    if (prima.nascosto != widget.nascosto) widget.nascosto ? _c.reverse() : _c.forward();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(ignoring: widget.nascosto, child: Scelta.transizione(widget.child, _c));
 }

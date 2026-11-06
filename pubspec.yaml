@@ -26,6 +26,6 @@ flutter:
     - family: Bricolage Grotesque
       fonts:
         - asset: assets/fonts/BricolageGrotesque.ttf
-    - family: DM Mono
+    - family: Onest
       fonts:
-        - asset: assets/fonts/DMMono-Regular.ttf
+        - asset: assets/fonts/Onest.ttf

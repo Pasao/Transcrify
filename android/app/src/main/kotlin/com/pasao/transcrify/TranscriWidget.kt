@@ -16,8 +16,14 @@ import android.view.View
 import android.widget.RemoteViews
 import androidx.compose.ui.geometry.Rect
 
-/** Come appare un widget: lo sceglie chi lo aggiunge (vedi [WidgetSettings]). */
-data class WidgetLook(val style: String = PHONE, val text: Boolean = true, val filled: Boolean = true) {
+/**
+ * Come appare un widget: lo sceglie chi lo aggiunge (vedi [WidgetSettings]). [apri] (6 nov, giro 6: «se il 2 × 1 è
+ * piccolo tenere il testo è inutile»): nel 2 × 1, accanto a Transcri, il tondo che apre l'app invece delle parole.
+ */
+data class WidgetLook(val style: String = PHONE, val text: Boolean = true, val filled: Boolean = true, val apri: Boolean = false) {
+    /** C'è il disegno 2 × 1: con le parole o col tondo che apre l'app (senza nessuno dei due, resta lui al centro). */
+    val dueXUno get() = text || apri
+
     companion object {
         const val PHONE = "phone"
         const val LIGHT = "light"
@@ -26,19 +32,22 @@ data class WidgetLook(val style: String = PHONE, val text: Boolean = true, val f
         private fun prefs(context: Context) = context.getSharedPreferences("widgets", Context.MODE_PRIVATE)
 
         fun of(context: Context, id: Int) = prefs(context).let {
-            WidgetLook(it.getString("style_$id", PHONE)!!, it.getBoolean("text_$id", true), it.getBoolean("filled_$id", true))
+            WidgetLook(it.getString("style_$id", PHONE)!!, it.getBoolean("text_$id", true), it.getBoolean("filled_$id", true), it.getBoolean("apri_$id", false))
         }
 
         fun save(context: Context, id: Int, look: WidgetLook) = prefs(context).edit()
-            .putString("style_$id", look.style).putBoolean("text_$id", look.text).putBoolean("filled_$id", look.filled).apply()
+            .putString("style_$id", look.style).putBoolean("text_$id", look.text).putBoolean("filled_$id", look.filled)
+            .putBoolean("apri_$id", look.apri).apply()
 
-        fun forget(context: Context, id: Int) = prefs(context).edit().remove("style_$id").remove("text_$id").remove("filled_$id").apply()
+        fun forget(context: Context, id: Int) =
+            prefs(context).edit().remove("style_$id").remove("text_$id").remove("filled_$id").remove("apri_$id").apply()
     }
 }
 
 /**
  * Il widget: la casa di Transcri sulla schermata home, una pillola come i widget di Samsung.
- * 2 × 1 dice cosa fa ("Detta" / "È fuori"); stretto a 1 × 1, o senza scritta, resta lui al centro.
+ * 2 × 1 dice cosa fa ("Detta" / "Richiama") o, se l'hai scelto ([WidgetLook.apri]), ha il tondo che apre l'app;
+ * stretto a 1 × 1, o senza scritta né tondo, resta lui al centro.
  * Toccandolo Transcri esce e vola al bordo; se è già fuori, rientra qui (e se stava registrando manda quello che ha sentito).
  * Il 4 × 1 ha anche «Apri» e, con lui a casa, il tasto che lo fa uscire già in ascolto.
  */
@@ -67,7 +76,7 @@ class TranscriWidget : AppWidgetProvider() {
                 // Due disegni, e il launcher sceglie quello che entra nella casella.
                 val small = views(context, id, look, away, wide = false)
                 val long = SizeF(LONG_FROM_DP, 40f) to views(context, id, look, away, wide = true, open = true)
-                val views = if (look.text) {
+                val views = if (look.dueXUno) {
                     RemoteViews(mapOf(SizeF(40f, 40f) to small, SizeF(WIDE_FROM_DP, 40f) to views(context, id, look, away, wide = true), long))
                 } else {
                     RemoteViews(mapOf(SizeF(40f, 40f) to small, long))
@@ -94,14 +103,20 @@ class TranscriWidget : AppWidgetProvider() {
                     setColorStateList(R.id.widget_line, "setTextColor", text)
                     setTextViewText(R.id.widget_title, if (away) "Richiama" else "Detta")
                     setTextViewText(R.id.widget_line, if (away) "Tocca per richiamarlo" else "Tocca e parla, poi incolla dove vuoi")
-                    setViewVisibility(R.id.widget_words, if (look.text) View.VISIBLE else View.INVISIBLE)
+                    // Nel 2 × 1 le parole o il tondo che apre l'app (a destra: le parole restano invisibili a fargli posto).
+                    val tondo = !open && look.apri
+                    setViewVisibility(R.id.widget_words, if (look.text && !tondo) View.VISIBLE else View.INVISIBLE)
                     setViewVisibility(R.id.widget_open, if (open) View.VISIBLE else View.GONE)
                     // Il tasto che detta c'è solo con lui a casa: è da lì che esce.
                     setViewVisibility(R.id.widget_record, if (open && !away) View.VISIBLE else View.GONE)
+                    // Nel 2 × 1 l'app si apre dal tondo a destra (nel 4 × 1 da «Apri»): lo stesso PendingIntent.
+                    setViewVisibility(R.id.widget_open_round, if (tondo) View.VISIBLE else View.GONE)
                     if (open) {
                         tasto(R.id.widget_open, R.id.widget_open_icon, text, openApp(context, id))
                         setColorStateList(R.id.widget_open_text, "setTextColor", text)
                         if (!away) tasto(R.id.widget_record, R.id.widget_record_icon, text, tap(context, id, record = true))
+                    } else if (tondo) {
+                        tasto(R.id.widget_open_round, R.id.widget_open_round_icon, text, openApp(context, id))
                     }
                 } else {
                     setTextViewText(R.id.widget_title, if (away) "Richiama" else "Detta")
@@ -166,7 +181,7 @@ class WidgetTrampoline : Activity() {
             val w = b.width() * ratio
             val h = b.height() * ratio
             val look = if (id == AppWidgetManager.INVALID_APPWIDGET_ID) WidgetLook() else WidgetLook.of(this, id)
-            val wide = !record && (w / d >= TranscriWidget.LONG_FROM_DP || (look.text && w / d >= TranscriWidget.WIDE_FROM_DP))
+            val wide = !record && (w / d >= TranscriWidget.LONG_FROM_DP || (look.dueXUno && w / d >= TranscriWidget.WIDE_FROM_DP))
             // Dov'è Transcri nel disegno: nel 2 × 1 a sinistra, grande (10 dp + metà del suo posto da 56),
             // nel 1 × 1 al centro, un po' più su per lasciare posto alla parola sotto.
             val cx = if (wide) b.left + 38f * d * ratio else b.left + w / 2f

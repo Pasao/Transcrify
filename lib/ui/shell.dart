@@ -3,8 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/native.dart';
+import 'cartelle.dart';
+import 'azioni_pagina.dart';
 import 'dock.dart';
 import 'molecole/colonna_poteri.dart';
+import 'molecole/barra_scelte.dart';
+import 'filtri_trascrivi.dart';
 import 'molecole/foglio_in_attesa.dart';
 import 'molecole/intestazione.dart';
 import 'molecole/riga_in_attesa.dart';
@@ -31,6 +35,14 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   /// In Pensieri: 0 Note, 1 Argomenti.
   int thoughts = 0;
+
+  /// Le Note senza la pagina Argomenti (7 nov: «nelle Note solo le note»): torna solo dalle prove.
+  void _argomentiCambiati() => setState(() {
+    if (!Core.mostraArgomenti.value) thoughts = 0;
+  });
+
+  /// In Trascrivi: 0 le trascrizioni, 1 le cartelle.
+  int trascrizioni = 0;
   bool pillOn = false;
   bool hasKey = true;
 
@@ -41,9 +53,6 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   /// «Riprova» sta trascrivendo le registrazioni in attesa.
   bool riprovando = false;
-
-  /// La pagina è scorsa: il titolo si rimpicciolisce.
-  bool ridotta = false;
 
   /// La colonna dei poteri è aperta (un tocco sul medaglione).
   bool colonna = false;
@@ -61,14 +70,17 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     Core.addListener(_load);
     Core.live.addListener(_liveChanged);
+    Core.mostraArgomenti.addListener(_argomentiCambiati);
     _load();
   }
+
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     Core.removeListener(_load);
     Core.live.removeListener(_liveChanged);
+    Core.mostraArgomenti.removeListener(_argomentiCambiati);
     _nome?.cancel();
     super.dispose();
   }
@@ -157,8 +169,16 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   void _go(Power p) => setState(() {
     power = p;
     colonna = false;
-    ridotta = false;
   });
+
+  /// Si sta scegliendo (in qualunque pagina): il Dock si fa da parte.
+  ValueNotifier<bool> get _scegliendo => Scelta.attiva;
+
+  /// «Seleziona» nel ⋮: comincia a scegliere nella pagina in cui sei (null dove non si sceglie: Argomenti).
+  VoidCallback? get _seleziona => switch (power) {
+    Power.trascrivi => trascrizioni == 0 || !CartellePage.mostra.value ? () => TrascriviPage.scegliendo.value = true : null,
+    Power.pensieri => null,
+  };
 
   /// «Riprova»: trascrive quello che è rimasto indietro.
   Future<void> _riprova() async {
@@ -168,15 +188,6 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     if (!mounted) return;
     setState(() => riprovando = false);
     Core.refresh();
-  }
-
-  /// Il titolo si riduce quando la pagina scorre in verticale (le liste di lato non contano).
-  bool _scorre(ScrollNotification n) {
-    if (n.depth == 0 && n.metrics.axis == Axis.vertical) {
-      final r = n.metrics.pixels > Spazio.s6;
-      if (r != ridotta) setState(() => ridotta = r);
-    }
-    return false;
   }
 
   /// Tirato su abbastanza: il prossimo potere, e il suo nome resta un attimo.
@@ -192,13 +203,30 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final bottom = Dock.height + MediaQuery.paddingOf(context).bottom;
+    // Le cartelle (6 nov, giro 7) si vedono solo dalle prove: i colori come filtri ne fanno le veci.
+    final cartelle = power == Power.trascrivi && trascrizioni == 1 && CartellePage.mostra.value;
+    final listaTrascrizioni = power == Power.trascrivi && !cartelle;
     final page = switch (power) {
-      Power.trascrivi => TrascriviPage(key: const ValueKey(Power.trascrivi), bottom: bottom),
+      Power.trascrivi =>
+        cartelle
+            ? CartellePage(key: const ValueKey('cartelle'), bottom: bottom)
+            : TrascriviPage(key: const ValueKey(Power.trascrivi), bottom: bottom),
       Power.pensieri =>
-        thoughts == 0
+        thoughts == 0 || !Core.mostraArgomenti.value
             ? PensieriPage(key: const ValueKey('note'), bottom: bottom)
             : ArgomentiPage(key: const ValueKey('argomenti'), bottom: bottom),
     };
+    // Cambiando potere o pagina la nuova sale appena mentre compare, la vecchia sfuma.
+    final pagina = AnimatedSwitcher(
+      duration: Durata.normale,
+      switchInCurve: Curva.standard,
+      switchOutCurve: Curva.uscita,
+      transitionBuilder: (w, a) => FadeTransition(
+        opacity: a,
+        child: SlideTransition(position: Tween(begin: const Offset(0, 0.02), end: Offset.zero).animate(a), child: w),
+      ),
+      child: page,
+    );
     return Paper(
       child: Scaffold(
         resizeToAvoidBottomInset: false,
@@ -206,28 +234,27 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
           children: [
             SafeArea(
               bottom: false,
-              child: Column(
-                children: [
-                  Intestazione(
-                    titolo: power.label,
-                    ridotta: ridotta,
-                    sotto: waiting > 0
-                        ? RigaInAttesa(quante: waiting, riprovando: riprovando, onRiprova: _riprova, onApri: () => apriInAttesa(context, onRiprova: _riprova))
-                        : null,
-                    accanto: waiting > 0 ? InAttesaCorto(quante: waiting) : null,
-                    azioni: [
-                      if (sandbox) const Padding(padding: EdgeInsets.only(right: Spazio.s1), child: ChipStato('Dati finti', tipo: TipoChip.azione)),
-                      IconButton(onPressed: _openSettings, icon: const Icon(Icons.settings_rounded), tooltip: 'Impostazioni'),
-                    ],
-                  ),
-                  Expanded(
-                    // Cambiando potere la pagina sfuma nell'altra, senza scorrere di lato.
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: _scorre,
-                      child: AnimatedSwitcher(duration: Durata.normale, child: page),
-                    ),
-                  ),
-                ],
+              // In cima la barra, che scorrendo diventa due pillole sopra la pagina (come il Dock in fondo).
+              // In Trascrivi, sotto il titolo, i filtri della lista (si ridisegna solo l'intestazione: la pagina è la stessa).
+              child: ListenableBuilder(
+                listenable: FiltriTrascrivi.cambia,
+                builder: (context, _) => Intestazione(
+                  titolo: cartelle ? 'Cartelle' : power.label,
+                  pagina: page.key,
+                  segno: sandbox ? const ChipStato('Dati finti', tipo: TipoChip.azione) : null,
+                  sotto: waiting > 0
+                      ? RigaInAttesa(quante: waiting, riprovando: riprovando, onRiprova: _riprova, onApri: () => apriInAttesa(context, onRiprova: _riprova))
+                      : null,
+                  accanto: waiting > 0 ? InAttesaCorto(quante: waiting) : null,
+                  // La lente e il ⋮ (sua scelta, 6 nov): «Seleziona» dove si può scegliere, e le impostazioni.
+                  // In Trascrivi, prima, il tasto «Filtri» (solo se c'è qualcosa da filtrare).
+                  azioni: [
+                    if (listaTrascrizioni) ?FiltriTrascrivi.tasto(),
+                    ...azioniPagina(context, onSeleziona: _seleziona, onImpostazioni: _openSettings),
+                  ],
+                  filtri: listaTrascrizioni ? FiltriTrascrivi.accesi() : null,
+                  child: pagina,
+                ),
               ),
             ),
             // La colonna aperta: un velo leggero sopra la pagina, toccandolo si richiude.
@@ -244,20 +271,24 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
               bottom: 0,
               child: SafeArea(
                 top: false,
-                child: ValueListenableBuilder<bool>(
-                  // Solo quando comincia o smette di ascoltare: il volume non ridisegna tutto il Dock.
-                  valueListenable: _heard,
-                  builder: (context, heard, _) => Dock(
+                child: ListenableBuilder(
+                  // Solo quando comincia o smette di ascoltare, o di scegliere: il volume non ridisegna tutto il Dock.
+                  listenable: Listenable.merge([_heard, _scegliendo]),
+                  builder: (context, _) => Dock(
                     power: power,
+                    // Mentre si sceglie, al posto del Dock c'è la barra delle scelte.
+                    nascosto: _scegliendo.value,
                     onTocco: () => setState(() => colonna = !colonna),
                     onProssimo: _prossimo,
                     onTira: (t) => setState(() => tira = t),
-                    action: _action(heard),
-                    pages: power == Power.pensieri
-                        ? const [(Icons.notes_rounded, 'Note'), (Icons.bubble_chart_rounded, 'Argomenti')]
-                        : const [],
-                    page: thoughts,
-                    onPage: (i) => setState(() => thoughts = i),
+                    action: _action(_heard.value),
+                    pages: switch (power) {
+                      // Una pagina sola: la pillola delle pagine non c'è.
+                      Power.pensieri => [(Icons.notes_rounded, 'Note'), if (Core.mostraArgomenti.value) (Icons.bubble_chart_rounded, 'Argomenti')],
+                      Power.trascrivi => CartellePage.mostra.value ? const [(Icons.subject_rounded, 'Trascrizioni'), (Icons.folder_rounded, 'Cartelle')] : const [],
+                    },
+                    page: power == Power.pensieri ? thoughts : trascrizioni,
+                    onPage: (i) => setState(() => power == Power.pensieri ? thoughts = i : trascrizioni = i),
                     nest: TranscriNest(
                       key: _nest,
                       on: pillOn,
@@ -276,8 +307,10 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             Positioned(
               left: Spazio.s3,
               bottom: MediaQuery.paddingOf(context).bottom + Spazio.s3 + Misura.isola + Spazio.s2,
+              // La colonna spunta dal medaglione, come un fumetto dal suo tasto.
               child: AnimatedSwitcher(
-                duration: Durata.veloce,
+                duration: Durata.normale,
+                transitionBuilder: (w, a) => Spunta(animazione: a, da: Alignment.bottomLeft, child: w),
                 child: colonna
                     ? ColonnaPoteri(attuale: power, onScegli: _go)
                     : tira > 0 || nomeVisibile

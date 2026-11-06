@@ -61,7 +61,10 @@ data class Token(
             val tenue = if (scuro) 30 else 90
             val tr = Hct.fromInt(Blend.harmonize(TRANSCRI, seme))
             return Token(
-                pagina = m.surface().getArgb(s), scheda = m.surfaceContainer().getArgb(s), // L'isola sta SOPRA la pagina: di giorno il bianco più chiaro, di notte il fondo più alto (se no sembra un buco).
+                // La scheda stacca dalla pagina (6 nov, giro 7: «le schede e lo sfondo sembrano uguali»): non più
+                // surfaceContainer (tono 94 / 12) ma il neutro più lontano dalla pagina, 89 di giorno e 18 di notte;
+                // almeno 1,25:1 col fondo (TokenTest). Qui ci si stacca da Figma B2, che va aggiornato.
+                pagina = m.surface().getArgb(s), scheda = s.neutralPalette.tone(if (scuro) 18 else 89), // L'isola sta SOPRA la pagina: di giorno il bianco più chiaro, di notte il fondo più alto (se no sembra un buco).
                 isola = (if (scuro) m.surfaceContainerHighest() else m.surfaceContainerLowest()).getArgb(s),
                 testo = m.onSurface().getArgb(s), testoSecondario = m.onSurfaceVariant().getArgb(s), linea = m.outlineVariant().getArgb(s),
                 azione = m.primary().getArgb(s), suAzione = m.onPrimary().getArgb(s),

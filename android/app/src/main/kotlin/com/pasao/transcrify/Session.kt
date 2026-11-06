@@ -37,6 +37,16 @@ class Session(private val context: Context, private val store: Store, private va
 
     /** Registrazione in pausa: il tempo si ferma, il microfono anche. */
     var paused by mutableStateOf(false); private set
+
+    /**
+     * In pausa da più di [Durate.PAUSA_SI_APRE]: il registratore si chiude (il pezzo fin qui si può leggere) e
+     * [bozza] diventa il testo di quello che hai detto, chiesto una volta sola per pausa. Senza rete resta null.
+     */
+    var pausaLunga by mutableStateOf(false); private set
+    var bozza by mutableStateOf<String?>(null); private set
+    private val bozze = Bozza(::trascriviPezzo)
+    private val spezzoni = mutableListOf<File>()
+    private var pausaJob: Job? = null
     var fix by mutableStateOf(Fix.NONE); private set
     var error by mutableStateOf<String?>(null); private set
     var elapsedMs by mutableLongStateOf(0); private set
@@ -157,20 +167,11 @@ class Session(private val context: Context, private val store: Store, private va
         }
         try {
             recording.delete()
+            buttaSpezzoni()
             // Chiede il focus audio: musica e vocali in riproduzione si fermano
             // e non finiscono nella trascrizione.
             audio.requestAudioFocus(focus)
-            recorder = MediaRecorder(context).apply {
-                setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioSamplingRate(16_000)
-                setAudioChannels(1)
-                setAudioEncodingBitRate(32_000)
-                setOutputFile(recording.absolutePath)
-                prepare()
-                start()
-            }
+            recorder = nuovoRegistratore()
         } catch (e: Exception) {
             recorder?.release()
             recorder = null
@@ -211,17 +212,93 @@ class Session(private val context: Context, private val store: Store, private va
         }
     }
 
+    /** Il registratore, sempre uguale: all'inizio e quando riprendi dopo una pausa lunga (un pezzo nuovo). */
+    private fun nuovoRegistratore() = MediaRecorder(context).apply {
+        setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+        setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+        setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+        setAudioSamplingRate(16_000)
+        setAudioChannels(1)
+        setAudioEncodingBitRate(32_000)
+        setOutputFile(recording.absolutePath)
+        prepare()
+        start()
+    }
+
     fun togglePause() {
-        val r = recorder ?: return
+        val r = recorder
         if (phase != Phase.RECORDING) return
         if (paused) {
-            r.resume()
+            // Dopo una pausa lunga il registratore era chiuso: ne riparte uno, su un pezzo nuovo.
+            if (r == null) recorder = runCatching { nuovoRegistratore() }.getOrElse { return fail("Il microfono non parte", Fix.NONE) }
+            else r.resume()
             pausedMs += SystemClock.elapsedRealtime() - pausedAt
         } else {
-            r.pause()
+            r?.pause()
             pausedAt = SystemClock.elapsedRealtime()
         }
         paused = !paused
+        pausaJob?.cancel()
+        pausaLunga = false
+        bozza = null
+        if (paused) pausaJob = scope.launch { aspettaPausa() }
+    }
+
+    /** Ferma da [Durate.PAUSA_SI_APRE]: si chiude il pezzo e si chiede cosa hai detto fin qui (una volta). */
+    private suspend fun aspettaPausa() {
+        delay(Durate.PAUSA_SI_APRE)
+        if (!paused || phase != Phase.RECORDING) return
+        chiudiPezzo()
+        pausaLunga = true
+        val pezzi = spezzoni.toList()
+        val testo = withContext(Dispatchers.IO) { bozze.di(pezzi) }
+        if (paused && pausaLunga) bozza = testo
+    }
+
+    /** Il registratore si chiude e il suo file diventa un pezzo; il focus audio resta (sei ancora in pausa). */
+    private fun chiudiPezzo() {
+        val r = recorder ?: return
+        recorder = null
+        val ok = runCatching { r.stop() }.isSuccess
+        r.release()
+        if (ok) aggiungiPezzo()
+    }
+
+    private fun aggiungiPezzo() {
+        val pezzo = File(Sandbox.dir(context), "pezzo-${spezzoni.size}.m4a")
+        if (recording.renameTo(pezzo)) spezzoni += pezzo
+    }
+
+    /** Un pezzo a Groq, solo il testo (niente pulizia, niente storia): per la bozza della pausa. */
+    private fun trascriviPezzo(f: File): String? {
+        val key = store.apiKey ?: return null
+        return runCatching { Groq(key).transcribe(f, store.transcriptionModel) }.getOrNull()?.also { store.countUse(store.transcriptionModel) }
+    }
+
+    private fun buttaSpezzoni() {
+        spezzoni.forEach { it.delete() }
+        spezzoni.clear()
+        bozze.svuota()
+        pausaJob?.cancel()
+        pausaLunga = false
+        bozza = null
+    }
+
+    /**
+     * La registrazione intera in [recording]: se una pausa lunga l'ha divisa, i pezzi si riuniscono. Se non ci si
+     * riesce, i pezzi di prima vanno in coda da soli (l'audio non si perde) e resta l'ultimo.
+     */
+    private fun riunisci(): Boolean {
+        if (spezzoni.isEmpty()) return true.also { buttaSpezzoni() }
+        if (recording.exists() && recording.length() > 0) aggiungiPezzo()
+        val tutti = spezzoni.toList()
+        if (!Spezzoni.unisci(tutti, recording)) {
+            recording.delete()
+            tutti.dropLast(1).forEach { queue.add(it, 0, if (purify) mode else null) }
+            tutti.last().renameTo(recording)
+        }
+        buttaSpezzoni()
+        return recording.exists()
     }
 
     /** Dalla pillola chiusa, tenendola premuta: se è ferma detta, se detta si ferma e trascrive. */
@@ -258,7 +335,11 @@ class Session(private val context: Context, private val store: Store, private va
             paused = false
         }
         val duration = SystemClock.elapsedRealtime() - startedAt - pausedMs
-        val ok = stopRecorder()
+        // Dopo una pausa lunga il registratore può essere già chiuso: l'audio sta nei pezzi.
+        val chiuso = recorder == null && spezzoni.isNotEmpty()
+        val fermato = stopRecorder()
+        if (chiuso) audio.abandonAudioFocusRequest(focus)
+        val ok = (fermato || chiuso) && riunisci()
         if (!ok || duration < 400) {
             // Tocco accidentale o niente audio: si torna pronti senza errori.
             recording.delete()
@@ -429,8 +510,10 @@ class Session(private val context: Context, private val store: Store, private va
     fun discard() {
         ticker?.cancel()
         if (phase == Phase.RECORDING) {
+            if (recorder == null) audio.abandonAudioFocusRequest(focus)
             stopRecorder()
             recording.delete()
+            buttaSpezzoni()
         } else if (phase == Phase.ERROR) {
             queue.all().lastOrNull()?.let { queue.remove(it.id) }
             waiting = queue.all().size
@@ -456,7 +539,7 @@ class Session(private val context: Context, private val store: Store, private va
     }
 
     /**
-     * Il servizio si spegne (per esempio "Chiudi" nella notifica): se stava ascoltando, l'audio
+     * Il servizio si spegne (per esempio «Richiama» nella notifica): se stava ascoltando, l'audio
      * resta in coda e l'app lo mostra "in attesa". Buttarlo è solo del cestino e della X.
      */
     fun release() {

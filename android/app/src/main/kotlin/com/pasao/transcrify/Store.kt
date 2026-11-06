@@ -14,9 +14,21 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Una trascrizione salvata. */
-data class Transcription(val text: String, val at: Long, val purified: Boolean, val mode: String? = null, val source: String? = null, val noteId: String? = null) {
+/**
+ * Una trascrizione salvata. [colore]: il suo colore («tinta:luce», lo legge solo l'app; null = nessuno).
+ * [privata]: sulla scheda il testo non si vede. [titolo]: il suo titolo (6 nov), scritto da te o proposto dall'app col
+ * riassunto estrattivo; null = non ne ha ancora uno (quelle di prima dei titoli).
+ */
+data class Transcription(
+    val text: String, val at: Long, val purified: Boolean, val mode: String? = null, val source: String? = null, val noteId: String? = null,
+    val colore: String? = null, val privata: Boolean = false, val titolo: String? = null,
+) {
     fun toJson(): JSONObject = JSONObject().put("text", text).put("at", at).put("purified", purified).put("mode", mode).put("source", source)
+        .put("colore", colore).put("privata", privata).put("titolo", titolo)
+
+    /** Quello che arriva all'app (e che l'app rimanda indietro per rimettere com'era). */
+    fun toMap(): Map<String, Any?> =
+        mapOf("text" to text, "at" to at, "purified" to purified, "mode" to mode, "source" to source, "colore" to colore, "privata" to privata, "titolo" to titolo)
 
     companion object {
         fun fromJson(j: JSONObject) = Transcription(
@@ -24,6 +36,17 @@ data class Transcription(val text: String, val at: Long, val purified: Boolean, 
             // Le trascrizioni di prima dei modi erano tutte "pulite".
             if (j.isNull("mode")) (if (j.optBoolean("purified")) "pulita" else null) else j.getString("mode"),
             if (j.isNull("source")) null else j.getString("source"),
+            // Quelle di prima dei colori: nessun colore, non private.
+            colore = if (j.isNull("colore")) null else j.getString("colore"),
+            privata = j.optBoolean("privata"),
+            // Quelle di prima dei titoli: nessun titolo.
+            titolo = if (j.isNull("titolo")) null else j.getString("titolo"),
+        )
+
+        /** Da quello che rimanda l'app (vedi [toMap]). */
+        fun fromMap(m: Map<*, *>) = Transcription(
+            m["text"] as String, (m["at"] as Number).toLong(), m["purified"] as? Boolean ?: false, m["mode"] as String?, m["source"] as String?,
+            colore = m["colore"] as String?, privata = m["privata"] as? Boolean ?: false, titolo = m["titolo"] as String?,
         )
     }
 }
@@ -202,6 +225,12 @@ class Store(context: Context) {
 
     private fun today() = java.time.LocalDate.now().toString()
 
+    // --- I nomi dei colori delle trascrizioni («tinta:luce» → nome), si vedono nelle cartelle ---
+
+    var nomiColori: Map<String, String>
+        get() = prefs.getString("nomi_colori", null)?.let { JSONObject(it).let { j -> j.keys().asSequence().associateWith(j::getString) } } ?: emptyMap()
+        set(v) = prefs.edit().putString("nomi_colori", JSONObject(v).toString()).apply()
+
     // --- Dove stava la pillola ---
 
     var pillRight: Boolean
@@ -237,7 +266,23 @@ class Store(context: Context) {
 
     /** Il testo l'hai cambiato tu: tutto il resto resta com'è. */
     @Synchronized
-    fun editEntry(at: Long, text: String) = writeHistory(history().map { if (it.at == at) it.copy(text = text) else it })
+    fun editEntry(at: Long, text: String) = writeHistory(segna(history(), setOf(at)) { it.copy(text = text) })
+
+    /** Colore, privata o titolo, a una o più trascrizioni insieme: una scrittura sola. */
+    @Synchronized
+    fun cambia(ats: Set<Long>, come: (Transcription) -> Transcription) = writeHistory(segna(history(), ats, come))
+
+    /** Unisce le trascrizioni nell'ordine scelto (vedi [unisci]). Null se non ce ne sono almeno due. */
+    @Synchronized
+    fun unisci(ordine: List<Long>): Transcription? {
+        val (resto, fusa) = com.pasao.transcrify.unisci(history(), ordine) ?: return null
+        writeHistory(resto)
+        return fusa
+    }
+
+    /** «Annulla»: le trascrizioni tornano com'erano (vedi [rimetti]). */
+    @Synchronized
+    fun rimetti(voci: List<Transcription>) = writeHistory(com.pasao.transcrify.rimetti(history(), voci))
 
     /** Nuove parole in una trascrizione, dove c'era il cursore. Null se nel frattempo è stata eliminata. */
     @Synchronized

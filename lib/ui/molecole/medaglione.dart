@@ -25,7 +25,22 @@ class Medaglione extends StatefulWidget {
   State<Medaglione> createState() => _MedaglioneState();
 }
 
-class _MedaglioneState extends State<Medaglione> {
+class _MedaglioneState extends State<Medaglione> with SingleTickerProviderStateMixin {
+  /// Il battito quando arriva un altro potere.
+  late final _battito = AnimationController(vsync: this, duration: Durata.battito);
+
+  @override
+  void didUpdateWidget(covariant Medaglione prima) {
+    super.didUpdateWidget(prima);
+    if (prima.potere != widget.potere) _battito.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _battito.dispose();
+    super.dispose();
+  }
+
   /// Quanto l'hai tirato su, in punti (positivo = su).
   double _tirato = 0;
 
@@ -63,17 +78,28 @@ class _MedaglioneState extends State<Medaglione> {
           offset: Offset(0, -_tirato / Misura.isola * 0.35),
           duration: _tirato == 0 ? Durata.normale : Duration.zero,
           curve: Curva.rimbalzo,
-          child: Container(
-            width: Misura.isola,
-            height: Misura.isola,
-            decoration: BoxDecoration(color: c.azione, shape: BoxShape.circle, boxShadow: Ombra.appoggiato),
-            child: AnimatedSwitcher(
-              duration: Durata.normale,
-              transitionBuilder: (w, a) => ScaleTransition(
-                scale: a,
-                child: FadeTransition(opacity: a, child: w),
+          // Cambiando potere batte una volta, e dentro il segno di prima esce in alto mentre quello nuovo sale dal
+          // basso: lo stesso verso del gesto (tirarlo su porta al prossimo).
+          child: ScaleTransition(
+            scale: _battito.drive(TweenSequence([
+              TweenSequenceItem(tween: Tween(begin: 1.0, end: Scala.battito).chain(CurveTween(curve: Curva.standard)), weight: 1),
+              TweenSequenceItem(tween: Tween(begin: Scala.battito, end: 1.0).chain(CurveTween(curve: Curva.scambio)), weight: 1),
+            ])),
+            child: Container(
+              width: Misura.isola,
+              height: Misura.isola,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(color: c.azione, shape: BoxShape.circle, boxShadow: Ombra.appoggiato),
+              child: AnimatedSwitcher(
+                duration: Durata.normale,
+                switchInCurve: Curva.standard,
+                switchOutCurve: Curva.uscita,
+                transitionBuilder: (w, a) => SlideTransition(
+                  position: Tween(begin: Offset(0, w.key == ValueKey(widget.potere) ? 1 : -1), end: Offset.zero).animate(a),
+                  child: FadeTransition(opacity: a, child: w),
+                ),
+                child: Icon(widget.potere.icon, key: ValueKey(widget.potere), size: Misura.iconaGrande, color: c.suAzione),
               ),
-              child: Icon(widget.potere.icon, key: ValueKey(widget.potere), size: Misura.iconaGrande, color: c.suAzione),
             ),
           ),
         ),

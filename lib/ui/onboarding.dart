@@ -226,7 +226,7 @@ class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
               children: [
                 Text(
                   'Transcrify',
-                  style: monoStyle(context, size: 13, color: _suTranscri.withValues(alpha: 0.75)),
+                  style: orarioStyle(context, size: 13, color: _suTranscri.withValues(alpha: 0.75)),
                 ),
                 const SizedBox(height: 12),
                 Text.rich(
@@ -355,7 +355,7 @@ class _FoundCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(masked, style: monoStyle(context, size: 16, color: context.col.testo)),
+          Text(masked, style: orarioStyle(context, size: 16, color: context.col.testo)),
           const SizedBox(height: 14),
           FilledButton(
             onPressed: checking ? null : onUse,

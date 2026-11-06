@@ -109,7 +109,7 @@ class Colori extends ThemeExtension<Colori> {
   /// copiati dal Kotlin. Non si calcolano qui: la fonte è una sola.
   static const _salmoneChiaro = Colori(
     pagina: Color(0xFFFFF8F6),
-    scheda: Color(0xFFFBEAE7),
+    scheda: Color(0xFFECDCD9),
     isola: Color(0xFFFFFFFF),
     testo: Color(0xFF221A18),
     testoSecondario: Color(0xFF54433F),
@@ -132,7 +132,7 @@ class Colori extends ThemeExtension<Colori> {
   );
   static const _salmoneScuro = Colori(
     pagina: Color(0xFF191210),
-    scheda: Color(0xFF261E1C),
+    scheda: Color(0xFF332A28),
     isola: Color(0xFF3C3331),
     testo: Color(0xFFEFDFDC),
     testoSecondario: Color(0xFFDAC1BC),
@@ -167,6 +167,12 @@ class Colori extends ThemeExtension<Colori> {
     scuro = s;
     versione.value++;
   }
+
+  /// Quello che sta sul fondo «floater» (la barra delle scelte, «Annulla»): è sempre scuro, anche col telefono chiaro,
+  /// quindi prende i token del tema SCURO, fatti per un fondo scuro. La stessa regola della pillola (`Palette` in
+  /// PillUi.kt). Così l'errore (Elimina) è il rosso giusto e si legge (6 nov: «il rosso nella barra si legge male»:
+  /// era `erroreTenue`, che nel tema scuro è un rosso scuro su un fondo scuro). I contrasti: `TokenTest`, `segni_test`.
+  static Colori get sospesi => scuro;
 
   /// I colori di adesso, per chi non ha un BuildContext (o finché un pezzo non è passato a [ColoriDi]).
   static Colori get adesso => PlatformDispatcher.instance.platformBrightness == Brightness.dark ? scuro : chiaro;

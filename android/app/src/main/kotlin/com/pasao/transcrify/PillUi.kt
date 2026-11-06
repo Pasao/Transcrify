@@ -1,6 +1,7 @@
 package com.pasao.transcrify
 
 import androidx.compose.foundation.layout.heightIn
+import android.view.animation.OvershootInterpolator
 import kotlin.math.cos
 import kotlin.math.sin
 import androidx.compose.runtime.mutableFloatStateOf
@@ -8,10 +9,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.Canvas
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -19,7 +16,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -263,21 +259,34 @@ fun PillBar(svc: PillService) {
         }
     }
     val wobble = if (shake.value in 0.001f..0.999f) kotlin.math.sin(shake.value * Math.PI.toFloat() * 4f) * (1f - shake.value) * 5f else 0f
-    // Fatto: un piccolo salto.
+    // Fatto: l'ultimo respiro (si stringe, si gonfia diventando verde, si calma) o, spento nelle Prove, il salto di prima.
+    val respiro = Simulated.respiro
+    val fiato = ultimoRespiro(phase)
+    val respira = respiro && phase == Phase.SUCCESS
     val hop = remember { Animatable(0f) }
     LaunchedEffect(phase) {
-        if (phase == Phase.SUCCESS) {
+        if (phase == Phase.SUCCESS && !respiro) {
             hop.snapTo(0f)
             hop.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
         }
     }
     val jump = kotlin.math.sin(hop.value * Math.PI.toFloat()) * 8f
     // Mentre trascrive dal fianco verso il centro escono onde; il lato sul bordo resta fermo.
-    val working by animateFloatAsState(if (phase == Phase.PROCESSING) 1f else 0f, tween(300), label = "working")
+    val lavoro by animateFloatAsState(if (phase == Phase.PROCESSING) 1f else 0f, tween(300), label = "working")
+    // Nell'ultimo respiro l'onda si ferma mentre si stringe.
+    val working = if (respira) minOf(lavoro, 1f - fiato.calma) else lavoro
     val shape = if (working > 0f) OutwardWave(svc.pillRight, shift, working) else CircleShape
+    // «Detta qui»: scivola tutta dentro il bordo, e a dettatura finita ne rispunta con un piccolo rimbalzo.
+    val sepoltura by animateFloatAsState(
+        if (svc.sepolta) 1f else 0f,
+        if (svc.sepolta) tween(Durate.SEPPELLISCE, easing = FastOutSlowInEasing)
+        else tween(Durate.RISPUNTA, easing = { OvershootInterpolator(Durate.RIMBALZO_RISPUNTA).getInterpolation(it) }),
+        label = "sepoltura",
+    )
     Box(
         Modifier
             .fillMaxSize()
+            .graphicsLayer { translationX = Dettatura.scostamento(sepoltura, size.width, svc.pillRight) }
             .padding(horizontal = PillGeometry.BAR_INSET.dp)
             .semantics { contentDescription = "Transcrify: tocca per aprire, trascina per spostare" },
         contentAlignment = if (svc.pillRight) Alignment.CenterEnd else Alignment.CenterStart,
@@ -291,8 +300,9 @@ fun PillBar(svc: PillService) {
                     // Mentre ascolta si ingrossa con la voce: la forma resta, cambia quanto è grande.
                     // Cresce solo verso il centro dello schermo: il lato sul bordo resta dov'è.
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(if (svc.pillRight) 1f else 0f, 0.5f)
-                    scaleX = 1f + voice * 0.45f + hold.coerceAtLeast(0f) * 0.9f + awake * 0.08f + working * WORK_GROW
-                    scaleY = 1f + voice * 0.08f + hold.coerceAtLeast(0f) * 0.14f
+                    val fiatoScala = if (respira) fiato.scala else 1f
+                    scaleX = (1f + voice * 0.45f + hold.coerceAtLeast(0f) * 0.9f + awake * 0.08f + working * WORK_GROW) * fiatoScala
+                    scaleY = (1f + voice * 0.08f + hold.coerceAtLeast(0f) * 0.14f) * fiatoScala
                     alpha = if (phase == Phase.LIMITED) 0.5f else lerp(Palette.smokeAlpha, 1f, awake)
                 }
                 .shadow((3 * awake).dp, shape, clip = false) // ds:eccezione: il movimento di Transcri (l'ombra cresce mentre si apre)
@@ -300,7 +310,7 @@ fun PillBar(svc: PillService) {
                 // Spento è fumo; sveglio ha i suoi colori; sopra, il colore dello stato.
                 .background(Palette.Smoke)
                 .background(transcriBrush(), alpha = awake)
-                .background(if (rest) Color.Transparent else color)
+                .background(if (rest) Color.Transparent else if (respira) Palette.Green.copy(alpha = fiato.verde) else color)
                 .drawWithContent {
                     drawContent()
                     if (phase == Phase.PROCESSING) {
@@ -682,13 +692,14 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
     var closing by remember { mutableStateOf(false) }
     // Dalla pillola sul bordo o, con Transcri nel Dock, dal suo posto.
     val bar = remember { nest ?: svc.barRect() }
-    LaunchedEffect(Unit) { t.animateTo(1f, spring(dampingRatio = 0.68f, stiffness = Spring.StiffnessMediumLow)) }
+    // Lo scatto del Floater (Scatto): lo stesso con cui esce la carta dell'ultima trascrizione.
+    LaunchedEffect(Unit) { t.animateTo(1f, Scatto.molla()) }
 
     fun collapse() {
         if (closing) return
         closing = true
         scope.launch {
-            t.animateTo(0f, tween(Durate.VELOCE, easing = FastOutSlowInEasing))
+            t.animateTo(0f, Scatto.svelto())
             svc.stageDone()
         }
     }
@@ -697,19 +708,24 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
         val margin = with(density) { PillGeometry.MENU_MARGIN.dp.toPx() }
-        // Il pannello è largo quanto la carta; alto quanto serve: si misura il contenuto e il pannello lo segue.
+        // Il pannello è largo quanto la carta; alto quanto serve: si misura il contenuto e il pannello lo segue
+        // con lo scatto della pillola (Scatto): è lui il movimento della carta che esce, una molla sola.
         // Stretto (i cassetti e il microfono) finché non esce una carta o non parli: allora si allarga (morfa tra le fasi).
         val largo = svc.carta != null || svc.session.phase !in setOf(Phase.IDLE, Phase.SUCCESS)
         val mwDp by animateFloatAsState(
             if (largo) PillGeometry.PANNELLO_W else PillGeometry.PANNELLO_STRETTO,
-            spring(dampingRatio = 0.8f, stiffness = 420f), label = "menuW",
+            Scatto.molla(), label = "menuW",
         )
         val mw = minOf(with(density) { mwDp.dp.toPx() }, w - margin * 2)
         var contenuto by remember { mutableFloatStateOf(0f) }
-        val mh by animateFloatAsState(
-            if (contenuto > 0f) contenuto else with(density) { PillGeometry.PANNELLO_MIN.dp.toPx() },
-            spring(dampingRatio = 0.8f, stiffness = 420f), label = "menuH",
-        )
+        // Mentre un cassetto si fonde con la sua carta (CarteFuse) il pannello la segue passo passo: la molla è
+        // già della carta, e due molle in fila farebbero inseguire il bordo.
+        val alto = remember { Animatable(0f) }
+        val voluto = if (contenuto > 0f) contenuto else with(density) { PillGeometry.PANNELLO_MIN.dp.toPx() }
+        LaunchedEffect(voluto) {
+            if (alto.value == 0f || svc.morfa) alto.snapTo(voluto) else alto.animateTo(voluto, Scatto.molla())
+        }
+        val mh = alto.value.coerceAtLeast(1f)
         // Il registratore resta accanto alla pillola: la carta cresce verso l'alto.
         val right = if (nest != null) nest.center.x > w / 2 else svc.pillRight
         val left = if (right) w - mw - margin else margin
@@ -787,23 +803,11 @@ private fun Blob(
 private fun Pannello(svc: PillService, maxCarta: Dp, onCollapse: () -> Unit, modifier: Modifier) {
     val s = svc.session
     val haUltima = s.hasLast && s.phase != Phase.LIMITED
-    val carta = svc.carta?.takeIf { it == Carta.ULTIMA && haUltima || it == Carta.VOCALI && svc.vocali.isNotEmpty() }
+    val quali = Cassettiera.quali(haUltima, svc.vocali.isNotEmpty(), s.phase == Phase.RECORDING && s.paused)
     val parla = s.phase == Phase.RECORDING || s.phase == Phase.PROCESSING
     Column(modifier.padding(horizontal = 12.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        AnimatedVisibility(
-            carta != null,
-            enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
-            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(),
-        ) {
-            Column {
-                // Tenuta durante l'uscita: la carta che rientra resta quella di prima.
-                val ultima = remember { mutableStateOf(Carta.ULTIMA) }
-                if (carta != null) ultima.value = carta
-                CartaFuori(svc, ultima.value, maxCarta)
-                Spacer(Modifier.height(8.dp))
-            }
-        }
-        if (haUltima || svc.vocali.isNotEmpty()) Cassetti(svc, haUltima)
+        // I cassetti, e la carta di quello aperto che cresce da lui: una forma sola (CarteFuse).
+        CarteFuse(svc, quali, maxCarta)
         StatoRegistratore(svc.session)
         Spacer(Modifier.height(6.dp))
         TastiVoce(svc, onCollapse)
@@ -855,7 +859,8 @@ private fun TastiVoce(svc: PillService, onCollapse: () -> Unit) {
 private fun MainButton(svc: PillService, onCollapse: () -> Unit) {
     val s = svc.session
     when (s.phase) {
-        Phase.IDLE, Phase.SUCCESS -> RoundButton(Icons.Rounded.Mic, "Registra", Palette.Blue, Palette.Text) { s.start() }
+        Phase.SUCCESS -> if (Simulated.respiro) CerchioRespiro(s) else RoundButton(Icons.Rounded.Mic, "Registra", Palette.Blue, Palette.Text) { s.start() }
+        Phase.IDLE -> RoundButton(Icons.Rounded.Mic, "Registra", Palette.Blue, Palette.Text) { s.start() }
         Phase.RECORDING -> RoundButton(Icons.Rounded.Check, "Ferma e trascrivi", Palette.Red, Palette.Text) {
             // Mandato a trascrivere: hai finito, il pannello si chiude (la pausa invece non chiude niente).
             s.stopAndSend()
@@ -875,9 +880,22 @@ private fun MainButton(svc: PillService, onCollapse: () -> Unit) {
     }
 }
 
-/** Transcri al lavoro: una goccia coi suoi due toni, il bordo che ondeggia piano. */
+/**
+ * Il cerchio quando ha finito, con «l'ultimo respiro»: il blob al lavoro smette di ondulare e si stringe, poi
+ * respira diventando il tasto verde (sempre «Registra»), e si calma. Resta verde finché dura il «Fatto».
+ */
 @Composable
-internal fun BlobLavoro(modifier: Modifier) {
+private fun CerchioRespiro(s: Session) {
+    val fiato = ultimoRespiro(s.phase)
+    Box(Modifier.graphicsLayer { scaleX = fiato.scala; scaleY = fiato.scala }, contentAlignment = Alignment.Center) {
+        if (fiato.verde < 1f) BlobLavoro(Modifier.size(52.dp), onda = 1f - fiato.calma)
+        Box(Modifier.alpha(fiato.verde)) { RoundButton(Icons.Rounded.Mic, "Registra", Palette.Green, Palette.Text) { s.start() } }
+    }
+}
+
+/** Transcri al lavoro: una goccia coi suoi due toni, il bordo che ondeggia piano ([onda] = quanto: 0 è fermo). */
+@Composable
+internal fun BlobLavoro(modifier: Modifier, onda: Float = 1f) {
     val giro by rememberInfiniteTransition(label = "blob").animateFloat(
         0f, (2 * Math.PI).toFloat(), infiniteRepeatable(tween(BLOB_GIRO_MS, easing = LinearEasing)), label = "giro",
     )
@@ -887,7 +905,7 @@ internal fun BlobLavoro(modifier: Modifier) {
         val r0 = size.minDimension / 2 * 0.86f
         for (i in 0..BLOB_PUNTI) {
             val a = i * 2 * Math.PI / BLOB_PUNTI
-            val r = r0 * (1 + 0.07f * sin(3 * a + giro).toFloat() + 0.05f * sin(2 * a - 1.7 * giro).toFloat())
+            val r = r0 * (1 + onda * (0.07f * sin(3 * a + giro).toFloat() + 0.05f * sin(2 * a - 1.7 * giro).toFloat()))
             val x = center.x + r * cos(a).toFloat()
             val y = center.y + r * sin(a).toFloat()
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
@@ -954,7 +972,7 @@ private fun Headline(s: Session) {
         Spacer(Modifier.width(6.dp))
         Text(
             if (s.paused) "in pausa" else "%02d:%02d".format(sec / 60, sec % 60),
-            style = Caratteri.etichetta.copy(color = if (s.paused) Palette.Paused else Palette.Text),
+            style = Caratteri.tempo.copy(color = if (s.paused) Palette.Paused else Palette.Text),
         )
     }
 }

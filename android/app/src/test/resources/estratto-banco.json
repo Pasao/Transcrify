@@ -1,0 +1,57 @@
+{
+ "nota": "Trascrizioni FINTE, parlate, con le frasi che si sceglierebbero a mano: ogni «ideale» deve stare dentro una frase scelta (pulita). Copiate da banco.py della prova in Python (precisione 0,64, copertura 0,69).",
+ "banco": [
+  {
+   "nome": "giornata e preventivo",
+   "testo": "Allora, cioè, oggi giornata lunga, tipo sono uscito alle otto e sono tornato adesso. Comunque la cosa importante è che devo mandare il preventivo a Luca entro giovedì, perché se no perdiamo il cliente. Poi niente, a pranzo ho mangiato al bar sotto l'ufficio, il solito panino. Ah, e mi sono ricordato che il dentista ha spostato l'appuntamento a lunedì alle dieci. Boh, insomma, adesso sono stanco morto, capito? Domani provo a svegliarmi prima e a fare la lista delle cose.",
+   "ideali": [
+    "preventivo a Luca entro giovedì",
+    "dentista ha spostato l'appuntamento a lunedì"
+   ]
+  },
+  {
+   "nome": "vocale di un amico sul weekend",
+   "testo": "Ehi ciao, allora ascolta, per sabato, cioè, io pensavo, non so se ti va, di andare al lago, quello vicino a Como, partendo verso le nove. Tipo, Marco ha la macchina grande quindi andiamo tutti con lui. Però, eh, se piove, cioè se le previsioni dicono pioggia, allora facciamo la cena da me invece. Porta tu il vino, dai, che l'ultima volta l'ho portato io. Niente, fammi sapere entro domani sera così mi organizzo con la spesa. Ciao ciao.",
+   "ideali": [
+    "andare al lago",
+    "se piove",
+    "fammi sapere entro domani sera"
+   ]
+  },
+  {
+   "nome": "idea per un'app",
+   "testo": "Mi è venuta un'idea, aspetta che la dico bene. Cioè, sarebbe figo avere un'app che, quando ricevi un vocale lungo, te lo trasforma in tre righe, tipo le cose da fare e basta. Perché il problema vero è che i vocali lunghi non li ascolto mai, li lascio lì per giorni. Insomma, non è per pigrizia, è che non ho il tempo di stare quattro minuti ad ascoltare. Ecco, quindi il punto è risparmiare tempo senza perdere le cose importanti. Poi boh, magari si potrebbe anche colorare per argomento, ma questo dopo.",
+   "ideali": [
+    "vocale lungo, te lo trasforma in tre righe",
+    "i vocali lunghi non li ascolto mai",
+    "risparmiare tempo senza perdere le cose importanti"
+   ]
+  },
+  {
+   "nome": "come mi sento",
+   "testo": "Niente, volevo solo scrivermi due cose su come sto. Tipo, questa settimana è stata pesante, ma, cioè, alla fine meglio del previsto. Mi sento più leggero da quando ho smesso di rimandare le cose piccole, tipo rispondere alle mail o sistemare la camera. E poi, boh, la passeggiata di domenica al parco mi ha rimesso a posto la testa. Insomma, devo ricordarmi che camminare mi fa bene, capito, anche solo mezz'ora. Ok basta, vado a dormire.",
+   "ideali": [
+    "più leggero da quando ho smesso di rimandare",
+    "camminare mi fa bene"
+   ]
+  },
+  {
+   "nome": "dettato senza punti",
+   "testo": "allora praticamente domani devo passare in comune per i documenti della carta d'identità che scade a dicembre e poi tipo chiamare l'idraulico perché il lavandino perde ancora e insomma se ho tempo passo anche in ferramenta a prendere le viti da quattro che servono per la mensola della cucina e poi niente la sera c'è la cena con i colleghi alle otto e mezza al ristorante giapponese",
+   "ideali": [
+    "comune per i documenti",
+    "chiamare l'idraulico",
+    "cena con i colleghi"
+   ]
+  },
+  {
+   "nome": "riunione di lavoro",
+   "testo": "Ok, appunti della riunione. Allora, il cliente vuole la nuova schermata di login entro venerdì, e su questo non si discute. Poi abbiamo parlato del bug della sincronizzazione, che va sistemato prima del rilascio, se no ci ammazzano. Giulia dice che serve un'altra settimana per i test, però, cioè, il capo non era molto d'accordo. Ah, ci sono anche i biscotti in cucina, li ha portati Sara. Comunque, decisione finale: rilascio spostato al venti, e io mi occupo del login.",
+   "ideali": [
+    "login entro venerdì",
+    "bug della sincronizzazione",
+    "rilascio spostato al venti"
+   ]
+  }
+ ]
+}

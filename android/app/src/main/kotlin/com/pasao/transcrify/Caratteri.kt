@@ -21,8 +21,11 @@ object Caratteri {
     /** 16 · leggere: il testo di un vocale. */
     val testoGrande = TextStyle(fontSize = 16.sp, lineHeight = 23.sp)
 
-    /** 13 · i titoletti, le voci, il tempo. */
+    /** 13 · i titoletti, le voci. */
     val etichetta = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+
+    /** 13 · il tempo che scorre mentre registri: le cifre tutte larghe uguali («tnum»), così non ballano (come `Testo.orario`). */
+    val tempo = etichetta.copy(fontFeatureSettings = "tnum")
 
     /** 12 · le scritte piccole («Copia ultima»). */
     val piccolo = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium)

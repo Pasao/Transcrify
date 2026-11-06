@@ -1,9 +1,7 @@
 package com.pasao.transcrify
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.NoteAdd
 import androidx.compose.material.icons.rounded.Reply
@@ -37,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -54,58 +51,33 @@ import java.util.Locale
  * stai rispondendo a quei vocali (il pulitore li riceve come contesto).
  */
 
-/**
- * I cassetti sopra il registratore (sua idea, 2 nov notte): uno per ogni carta che c'è. Con dei vocali, il loro
- * (l'icona dell'app) e accanto quello dell'ultima trascrizione; senza, solo quello dell'ultima. Tocchi un cassetto
- * e esce la sua carta; tocchi l'altro e si scambiano; tocchi quello aperto e la carta rientra.
- */
-@Composable
-internal fun Cassetti(svc: PillService, haUltima: Boolean) {
-    val vocali = svc.vocali.isNotEmpty()
-    // Una carta sola (l'ultima): il caret, come prima. Due carte: due bottoni, ognuno con la sua icona.
-    if (!vocali) {
-        Cassetto(svc, Carta.ULTIMA, "l'ultima trascrizione") { aperto -> Freccia(aperto) }
-        return
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Cassetto(svc, Carta.VOCALI, if (svc.vocali.size > 1) "i vocali" else "il vocale") { IconaProvenienza(svc.vocali.first().second.source) }
-        if (haUltima) Cassetto(svc, Carta.ULTIMA, "l'ultima trascrizione") { Icon(CopyAgain, null, tint = Palette.Text, modifier = Modifier.size(16.dp)) }
-    }
-}
-
-@Composable
-private fun Freccia(aperto: Boolean) {
-    val giro by animateFloatAsState(if (aperto) 180f else 0f, label = "freccia")
-    Icon(Icons.Rounded.ExpandLess, null, tint = Palette.Text, modifier = Modifier.size(18.dp).rotate(giro))
-}
-
-/** Un cassetto: tutti uguali, il contenuto al centro; acceso quando la sua carta è fuori. */
-@Composable
-private fun Cassetto(svc: PillService, quale: Carta, nome: String, contenuto: @Composable (aperto: Boolean) -> Unit) {
-    val aperto = svc.carta == quale
-    Box(
-        Modifier
-            .size(CASSETTO_W, 28.dp)
-            .clip(Forme.pillola)
-            .background(Palette.Text.copy(alpha = if (aperto) 0.26f else 0.12f))
-            .clickable(onClickLabel = if (aperto) "Chiudi $nome" else "Apri $nome") { svc.carta = if (aperto) null else quale },
-        contentAlignment = Alignment.Center,
-    ) { contenuto(aperto) }
-}
-
+/** Il contenuto della carta di [quale]: il fondo e il contorno sono della forma che cresce dal cassetto (CarteFuse). */
 @Composable
 internal fun CartaFuori(svc: PillService, quale: Carta, maxAltezza: Dp) {
     val risponde = svc.session.phase == Phase.RECORDING
     val vocali = svc.vocali
-    val dei = quale == Carta.VOCALI && vocali.isNotEmpty()
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(Forme.scheda)
-            .background(Palette.Carta)
-            .then(if (risponde && dei) Modifier.border(2.dp, Palette.Blue, Forme.scheda) else Modifier),
-    ) {
-        if (dei) CartaVocali(svc, vocali, risponde, maxAltezza) else CartaUltima(svc)
+    Column(Modifier.fillMaxWidth()) {
+        when {
+            quale == Carta.VOCALI && vocali.isNotEmpty() -> CartaVocali(svc, vocali, risponde, maxAltezza)
+            quale == Carta.PAUSA -> CartaPausa(svc.session)
+            else -> CartaUltima(svc)
+        }
+    }
+}
+
+/**
+ * Dove eri arrivato: in pausa da un po', la fine di quello che hai detto (trascritto una volta, solo per farlo
+ * vedere). Senza rete, o finché non arriva, solo il tempo.
+ */
+@Composable
+private fun CartaPausa(s: Session) {
+    val sec = s.elapsedMs / 1000
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Text("In pausa · %d:%02d".format(sec / 60, sec % 60), style = Caratteri.orario.copy(color = Palette.SuCartaTenue))
+        s.bozza?.let {
+            Spacer(Modifier.height(2.dp))
+            Text(Bozza.coda(it), style = Caratteri.testo.copy(color = Palette.SuCarta), maxLines = 4, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -183,18 +155,24 @@ private fun CartaUltima(svc: PillService) {
             copiata = false
         }
     }
+    val copia = {
+        s.copyLast()
+        copiata = true
+    }
     Column(
         Modifier
             .fillMaxWidth()
-            .clickable(onClickLabel = "Copia l'ultima trascrizione") {
-                s.copyLast()
-                copiata = true
-            }
+            .clickable(onClickLabel = "Copia l'ultima trascrizione", onClick = copia)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Text(if (copiata) "Copiata ✓" else "Ultima · tocca per copiare", style = Caratteri.orario.copy(color = if (copiata) Palette.Green else Palette.SuCartaTenue))
         Spacer(Modifier.height(2.dp))
         Text(testo, style = Caratteri.testo.copy(color = Palette.SuCarta), maxLines = 4, overflow = TextOverflow.Ellipsis)
+    }
+    Linea()
+    ComandiCarta {
+        Comando(Icons.Rounded.ContentCopy, "Copia", copia)
+        Comando(Icons.Rounded.NoteAdd, "Salva come nota") { svc.ultimaInNota() }
     }
 }
 
@@ -220,7 +198,7 @@ private fun Comando(icona: ImageVector, testo: String, onClick: () -> Unit) {
 
 /** L'icona vera dell'app da cui arriva l'audio; se non la conosciamo, l'onda. */
 @Composable
-private fun IconaProvenienza(source: String?) {
+internal fun IconaProvenienza(source: String?) {
     val ctx = LocalContext.current
     val icona = remember(source) { Provenienza.icona(ctx, source)?.asImageBitmap() }
     if (icona != null) Image(icona, null, Modifier.size(16.dp).clip(CircleShape))
@@ -228,4 +206,3 @@ private fun IconaProvenienza(source: String?) {
 }
 
 private val ORA = SimpleDateFormat("HH:mm", Locale.ITALIAN)
-private val CASSETTO_W = 56.dp

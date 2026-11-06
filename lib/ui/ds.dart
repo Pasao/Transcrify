@@ -5,3 +5,4 @@ library;
 export 'ds/colori.dart';
 export 'ds/misure.dart';
 export 'ds/testo.dart';
+export 'ds/tinte.dart';

@@ -45,17 +45,21 @@ class Categoria {
 abstract final class Ricerca {
   static const _ch = MethodChannel('transcrify/core');
 
-  /// Nelle prove, per scegliere: i risultati come schede di note (false) o come frasi trovate, note e trascrizioni insieme (true).
-  static final comeFrasi = ValueNotifier<bool>(false);
-
   /// Nelle prove: gli Argomenti come categorie fisse (true) o come album fatti dal motore (false).
   static final perCategorie = ValueNotifier<bool>(true);
 
-  /// Prima quelle con tutte le parole, poi quelle vicine per senso (se il modello degli argomenti c'è).
-  static Future<List<Trovato>> cerca(String testo) async {
+  /// Si cerca in due tempi: [senso] false, quelle con tutte le parole (subito, dalla più recente); true, solo quelle
+  /// vicine per senso che per parola non c'erano (se il modello degli argomenti c'è), sopra la soglia del motore.
+  static Future<List<Trovato>> cerca(String testo, {required bool senso}) async {
     if (Core.preview.value || testo.trim().isEmpty) return [];
-    final out = await _ch.invokeMethod('cerca', {'testo': testo}) as List? ?? const [];
+    final out = await _ch.invokeMethod('cerca', {'testo': testo, 'senso': senso}) as List? ?? const [];
     return [for (final m in out.cast<Map>()) Trovato(m)];
+  }
+
+  /// La pagina della ricerca si apre ([aperta] true) o si chiude: aperta, il modello si carica e resta pronto.
+  static Future<void> aperta(bool aperta) async {
+    if (Core.preview.value) return;
+    await _ch.invokeMethod('ricercaAperta', {'aperta': aperta});
   }
 
   static Future<List<Categoria>> categorie() async {

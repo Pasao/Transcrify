@@ -46,7 +46,7 @@ Future<bool> transcriReady(BuildContext context) async {
 
 /// Il nido di Transcri: la sua casa tonda dentro l'isola di destra del Dock. Lì sta seduto, respira,
 /// sbatte gli occhi e si guarda intorno. Toccando il nido esce e vola al bordo; toccandolo di
-/// nuovo torna, atterra con un sobbalzo e il nido si illumina. Quando è fuori resta il suo contorno.
+/// nuovo torna, atterra con un sobbalzo e il nido si illumina. Quando è fuori resta l'incavo ([Ombra.incavo]).
 /// Tenendolo premuto ascolta restando qui: il suo cerchio diventa rosso e si allarga con la voce, come
 /// la pillola. Se lo trascini fuori, o esci dall'app, continua dal bordo; se torna qui, continua da qui.
 class TranscriNest extends StatefulWidget {
@@ -383,8 +383,9 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
     // Una pagina sopra (impostazioni, una nota aperta): il nido non si vede, non si rientra lì.
     final visible = ModalRoute.of(context)?.isCurrent ?? true;
     WidgetsBinding.instance.addPostFrameCallback((_) => _reportNest(visible));
-    // Il nido è neutro: il colore lo porta Transcri. Quando è fuori il nido resta vuoto.
+    // Il nido è neutro: il colore lo porta Transcri. Quando è fuori il nido resta vuoto: un incavo.
     final home = (!on && !sleeping) || _hot;
+    final away = on || _carried != null;
     // Il posto di Transcri. Toccandolo si gonfia un attimo (prende la rincorsa) e da lì parte.
     final face = SizedBox(
       width: slot,
@@ -396,7 +397,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
           builder: (context, child) => Transform.scale(scale: _inNest * (1 + 0.3 * _swell.value), child: child),
           child: KeyedSubtree(
             key: _transcriKey,
-            child: TranscriCorpo(away: on || _carried != null, sleeping: sleeping, land: _land),
+            child: TranscriCorpo(away: away, sleeping: sleeping, land: _land),
           ),
         ),
       ),
@@ -406,7 +407,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
       curve: Curves.easeOutCubic,
       width: slot,
       height: slot,
-      decoration: BoxDecoration(gradient: _fill(context.col.isola, home), shape: BoxShape.circle),
+      decoration: BoxDecoration(gradient: _fill(context.col.isola, home, away), shape: BoxShape.circle),
       child: face,
     );
     return GestureDetector(
@@ -446,9 +447,9 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
     );
   }
 
-  /// Il fondo del nido: con lui a casa prende i suoi colori, tutto; quando esce si spegne. Niente alone.
-  /// Mentre lavora il fondo è il suo cerchio, sotto: il nido si fa da parte.
-  Gradient _fill(Color base, bool home) => LinearGradient(
+  /// Il fondo del nido: con lui a casa prende i suoi colori, tutto; quando esce resta l'incavo, il posto vuoto
+  /// (6 nov: prima un contorno tratteggiato). Niente alone. Mentre lavora il fondo è il suo cerchio, sotto: il nido si fa da parte.
+  Gradient _fill(Color base, bool home, bool away) => _working == null && away && !home ? Ombra.incavo(Theme.of(context).brightness) : LinearGradient(
     colors: [
       for (final c in [Colori.adesso.transcriA, Colori.adesso.transcriB])
         _working != null ? base.withValues(alpha: 0) : (home ? Color.alphaBlend(c.withValues(alpha: 0.24), base) : base),
@@ -457,7 +458,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
 }
 
 /// Transcri a casa: una capsula bianca con due occhi. Respira, ogni tanto sbatte gli occhi,
-/// si guarda intorno e fa un piccolo saltello. Quando è fuori resta il suo contorno;
+/// si guarda intorno e fa un piccolo saltello. Quando è fuori non c'è (resta l'incavo del nido);
 /// quando dorme (minuti finiti) ha gli occhi chiusi e sta fermo.
 class TranscriCorpo extends StatefulWidget {
   /// Lui, col suo ciclo di vita (respiro, occhi). [land]: il saltello quando atterra (di base niente).
@@ -496,7 +497,6 @@ class _TranscriCorpoState extends State<TranscriCorpo> with SingleTickerProvider
             land: widget.land.value,
             away: widget.away,
             sleeping: widget.sleeping,
-            outline: context.col.testoSecondario,
           ),
         ),
       ),
@@ -505,11 +505,10 @@ class _TranscriCorpoState extends State<TranscriCorpo> with SingleTickerProvider
 }
 
 class _TranscriPainter extends CustomPainter {
-  _TranscriPainter({required this.t, required this.land, required this.away, required this.sleeping, required this.outline});
+  _TranscriPainter({required this.t, required this.land, required this.away, required this.sleeping});
 
   final double t, land;
   final bool away, sleeping;
-  final Color outline;
 
   /// 0→1→0 dentro la finestra [a, b] del ciclo.
   double _bump(double a, double b) {
@@ -520,23 +519,8 @@ class _TranscriPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
-    if (away) {
-      // Il posto vuoto: contorno tratteggiato.
-      final path = Path()..addRRect(RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(TranscriCorpo.radius)));
-      final paint = Paint()
-        ..color = outline
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5;
-      for (final m in path.computeMetrics()) {
-        // Trattini tutti uguali anche dove il contorno si chiude: il passo si adatta alla lunghezza.
-        final n = (m.length / 6).round();
-        final step = m.length / n;
-        for (var i = 0; i < n; i++) {
-          canvas.drawPath(m.extractPath(i * step, i * step + step / 2), paint);
-        }
-      }
-      return;
-    }
+    // Fuori: il posto vuoto è l'incavo del nido, lui qui non si disegna.
+    if (away) return;
     final alive = !sleeping;
     // Respiro: due respiri per ciclo. Saltello verso la fine. Atterraggio: schiacciato e poi su.
     final breath = alive ? math.sin(t * math.pi * 4) * 0.025 : math.sin(t * math.pi * 2) * 0.012;
@@ -597,5 +581,5 @@ class _TranscriPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TranscriPainter old) =>
-      old.t != t || old.land != land || old.away != away || old.sleeping != sleeping || old.outline != outline;
+      old.t != t || old.land != land || old.away != away || old.sleeping != sleeping;
 }

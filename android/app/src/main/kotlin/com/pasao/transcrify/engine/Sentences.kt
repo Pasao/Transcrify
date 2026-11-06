@@ -20,7 +20,8 @@ data class Span(val start: Int, val end: Int) {
 object Sentences {
     const val MAX_CHARS = 240
 
-    fun split(text: String): List<Span> {
+    /** [maxChars]: oltre, una frase si spezza ([MAX_CHARS] di base; il riassunto estrattivo ne usa un altro, vedi [Tagli]). */
+    fun split(text: String, maxChars: Int = MAX_CHARS): List<Span> {
         val out = ArrayList<Span>()
         var start = 0
         var i = 0
@@ -28,21 +29,21 @@ object Sentences {
         while (i < n) {
             val c = text[i]
             if (c == '\n') {
-                add(text, start, i, out)
+                add(text, start, i, maxChars, out)
                 start = i + 1
             } else if (c == '.' || c == '!' || c == '?' || c == '…') {
                 // I segni di fila («?!», «...») restano attaccati alla frase.
                 var j = i + 1
                 while (j < n && (text[j] == '.' || text[j] == '!' || text[j] == '?' || text[j] == '…' || text[j] == '»' || text[j] == '"' || text[j] == ')')) j++
                 if (closes(text, i, j)) {
-                    add(text, start, j, out)
+                    add(text, start, j, maxChars, out)
                     start = j
                 }
                 i = j - 1
             }
             i++
         }
-        add(text, start, n, out)
+        add(text, start, n, maxChars, out)
         return out
     }
 
@@ -64,7 +65,7 @@ object Sentences {
         return word.lowercase() !in ABBREVIATIONS
     }
 
-    private fun add(text: String, from: Int, to: Int, out: MutableList<Span>) {
+    private fun add(text: String, from: Int, to: Int, max: Int, out: MutableList<Span>) {
         var a = from
         var b = to
         while (a < b && text[a].isWhitespace()) a++
@@ -76,19 +77,19 @@ object Sentences {
             while (a < b && text[a].isWhitespace()) a++
         }
         if (a >= b) return
-        if (b - a <= MAX_CHARS) {
+        if (b - a <= max) {
             out.add(Span(a, b))
             return
         }
         // Troppo lunga: si spezza nel punto buono più vicino al limite, e si continua col resto.
-        val cut = breakPoint(text, a, a + MAX_CHARS)
-        add(text, a, cut, out)
-        add(text, cut, b, out)
+        val cut = breakPoint(text, a, a + max, max)
+        add(text, a, cut, max, out)
+        add(text, cut, b, max, out)
     }
 
     /** Il punto dove spezzare tra [from] e [limit]: una virgola, poi una congiunzione; se non c'è, l'ultimo spazio. */
-    private fun breakPoint(text: String, from: Int, limit: Int): Int {
-        val min = from + MAX_CHARS / 3
+    private fun breakPoint(text: String, from: Int, limit: Int, max: Int): Int {
+        val min = from + max / 3
         for (k in limit - 1 downTo min) if (text[k] == ',' || text[k] == ';' || text[k] == ':') return k + 1
         for (k in limit - 1 downTo min) {
             if (text[k] != ' ') continue

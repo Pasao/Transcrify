@@ -2,6 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'segni.dart';
+
+export 'segni.dart';
+
 /// Lo stato che arriva dal nucleo nativo (Kotlin).
 class CoreState {
   CoreState(Map m)
@@ -22,6 +26,7 @@ class CoreState {
       simOffline = m['simOffline'] as bool,
       simBadKey = m['simBadKey'] as bool,
       simNoMic = m['simNoMic'] as bool,
+      provaRespiro = m['provaRespiro'] as bool,
       sttModel = m['sttModel'] as String,
       llmModel = m['llmModel'] as String,
       sttLimits = (m['sttLimits'] as Map).cast<String, String>(),
@@ -44,6 +49,9 @@ class CoreState {
 
   /// I guasti finti delle prove: niente rete, chiave rifiutata, microfono negato.
   final bool simOffline, simBadKey, simNoMic;
+
+  /// Il successo di Transcri: «l'ultimo respiro» (true) o il salto di prima (false). Una prova, come i guasti finti.
+  final bool provaRespiro;
 
   /// L'introduzione è già stata vista o saltata.
   final bool introSeen;
@@ -78,7 +86,10 @@ class Entry {
       at = DateTime.fromMillisecondsSinceEpoch(m['at'] as int),
       purified = m['purified'] as bool,
       mode = m['mode'] as String?,
-      source = m['source'] as String?;
+      source = m['source'] as String?,
+      colore = Colore.da(m['colore'] as String?),
+      privata = m['privata'] as bool? ?? false,
+      titolo = m['titolo'] as String?;
 
   final String text;
   final DateTime at;
@@ -90,12 +101,43 @@ class Entry {
   /// Il modo di pulizia usato ("fedele", "pulita", "riassunto"), null se è il testo così com'è.
   final String? mode;
 
+  /// Il suo colore (uno solo), null se non ne ha. Le trascrizioni di prima dei colori non ne hanno.
+  final Colore? colore;
+
+  /// Privata: sulla scheda il testo è coperto, e la ricerca non lo mostra.
+  final bool privata;
+
+  /// Il suo titolo (6 nov): scritto da te, o proposto dal riassunto estrattivo (`Titoli`). Null finché non ne ha uno:
+  /// sulla scheda si vede l'inizio del testo (vedi `Titoli.di`).
+  final String? titolo;
+
   /// Uguale se non è cambiato niente: rileggendo dal nativo, la lista si ridisegna solo se serve.
   @override
-  bool operator ==(Object other) => other is Entry && other.at == at && other.text == text && other.purified == purified && other.mode == mode && other.source == source;
+  bool operator ==(Object other) =>
+      other is Entry &&
+      other.at == at &&
+      other.text == text &&
+      other.purified == purified &&
+      other.mode == mode &&
+      other.source == source &&
+      other.colore == colore &&
+      other.privata == privata &&
+      other.titolo == titolo;
 
   @override
-  int get hashCode => Object.hash(at, text, purified, mode, source);
+  int get hashCode => Object.hash(at, text, purified, mode, source, colore, privata, titolo);
+
+  /// Com'è, per rimetterla tale e quale (l'«Annulla» dopo averle unite).
+  Map<String, Object?> toMap() => {
+    'text': text,
+    'at': at.millisecondsSinceEpoch,
+    'purified': purified,
+    'mode': mode,
+    'source': source,
+    'colore': colore?.chiave,
+    'privata': privata,
+    'titolo': titolo,
+  };
 }
 
 /// Una nota: tua, da rileggere. Si scrive a mano (per ora); il titolo può restare vuoto.
@@ -160,14 +202,20 @@ class Note {
 class NoteTopics {
   NoteTopics(Map m)
     : spans = (m['spans'] as List).cast<int>(),
-      _cuts = [(m['wide'] as List).cast<int>(), (m['medium'] as List).cast<int>()],
+      _cuts = (m['medium'] as List).cast<int>(),
+      _gruppi = (m['groups'] as List).cast<int>(),
       keys = (m['keys'] as List).cast<int>(),
       keywords = (m['keywords'] as List).cast<int>();
 
   final List<int> spans;
-  final List<List<int>> _cuts;
 
-  /// Le frasi chiave: per ogni pezzo medio, la frase che gli somiglia di più (indici di frase).
+  /// I confini tra i pezzi: dopo quale frase cambia argomento.
+  final List<int> _cuts;
+
+  /// Il gruppo di senso di ogni pezzo: i pezzi che dicono cose simili hanno lo stesso (il motore, `NoteTopics.groups`).
+  final List<int> _gruppi;
+
+  /// Le frasi chiave: per ogni pezzo, la frase che gli somiglia di più (indici di frase).
   final List<int> keys;
 
   /// Le parole chiave: coppie inizio–fine.
@@ -178,13 +226,15 @@ class NoteTopics {
 
   int get sentences => spans.length ~/ 2;
 
-  /// I pezzi del testo a una grana (1 larga, 2 media, 3 una frase per pezzo), come intervalli di caratteri.
-  List<TextRange> pieces(int grain) {
+  /// Il gruppo di senso del pezzo [i] (da 0): lo stesso colore per i pezzi che dicono cose simili.
+  int gruppo(int i) => i < _gruppi.length ? _gruppi[i] : i;
+
+  /// I pezzi del testo, uno per argomento, come intervalli di caratteri.
+  List<TextRange> get pieces {
     if (sentences == 0) return const [];
-    final cuts = grain >= 3 ? [for (var i = 0; i < sentences - 1; i++) i] : _cuts[grain - 1];
     final out = <TextRange>[];
     var from = 0;
-    for (final c in cuts) {
+    for (final c in _cuts) {
       out.add(TextRange(start: spans[2 * from], end: spans[2 * c + 1]));
       from = c + 1;
     }
@@ -351,6 +401,12 @@ class Core {
   /// [panel]: dove aprire subito il player (l, t, r, b, in pixel fisici).
   static Future<void> listen({DateTime? appendTo, int cursor = -1, List<double>? panel}) =>
       _ch.invokeMethod('listen', {'appendTo': appendTo?.millisecondsSinceEpoch, 'cursor': cursor, 'panel': panel});
+
+  /// Il foglio della trascrizione si chiude mentre «Detta qui» detta: la pillola torna sul bordo (il nativo la
+  /// nasconde da solo mentre si detta nell'app, e la rimette a fine dettatura o se l'app va via).
+  static Future<void> lasciaDettatura() async {
+    if (!preview.value) await _ch.invokeMethod('lasciaDettatura');
+  }
 
   /// Apre il player del Floater (butta, ferma, pausa, modi) vicino a [rect] (l, t, r, b, in pixel fisici).
   /// La pagina della trasparenza (nativa): la pillola, il Floater e la casa sul tuo sfondo, con lo slider.
@@ -571,6 +627,9 @@ class Core {
 
   /// Nelle prove: il pizzico al contrario (stringere = più argomenti), per provare tutte e due le direzioni.
   static final pinchReversed = ValueNotifier<bool>(false);
+
+  /// Nelle prove: la pagina Argomenti accanto alle Note (7 nov: nascosta, «troppo»). Il codice resta.
+  static final mostraArgomenti = ValueNotifier<bool>(false);
 
   /// Apre il «Condividi» di Android col testo.
   static Future<void> share(String text) => _ch.invokeMethod('share', {'text': text});

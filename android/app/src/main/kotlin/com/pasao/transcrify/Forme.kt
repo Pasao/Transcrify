@@ -9,7 +9,8 @@ object Forme {
     val pillola = RoundedCornerShape(percent = 50)
 
     /** raggio/scheda (18): le schede (il vocale nel pannello). */
-    val scheda = RoundedCornerShape(18.dp)
+    val raggioScheda = 18.dp
+    val scheda = RoundedCornerShape(raggioScheda)
 
     /** raggio/foglio (28): i riquadri grandi. */
     val raggioFoglio = 28.dp

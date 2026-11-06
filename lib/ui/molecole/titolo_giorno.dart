@@ -11,6 +11,10 @@ class TitoloGiorno extends StatelessWidget {
   final String giorno;
   final int quante;
 
+  /// Lo spazio attorno al titolo, sopra la fila delle sue schede (i giorni di Trascrivi, le cartelle).
+  static const margine = EdgeInsets.fromLTRB(Spazio.s5, Spazio.s6, Spazio.s2, Spazio.s3);
+
+
   /// null: niente «Tutte» (il giorno ne ha poche).
   final bool? aperto;
   final VoidCallback? onApri;

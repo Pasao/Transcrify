@@ -32,4 +32,17 @@ class RicercaTest {
         assertEquals(t.indexOf("Dentista"), Parole.trova(t, Parole.di("dentista CAFFE")))
         assertNull(Parole.trova(t, Parole.di("dentista pane")))
     }
+
+    @Test
+    fun perParolaPrimaLaPiuRecenteTraNoteETrascrizioni() {
+        val fonti = listOf(
+            Parole.Fonte("n:vecchia", "Il dentista domani", quando = 10),
+            Parole.Fonte("n:altro", "Niente qui", quando = 50),
+            Parole.Fonte("t:30", "Chiamare il dentista. Poi pane", quando = 30),
+            Parole.Fonte("t:40", "Prima frase. Dal dentista alle tre", quando = 40),
+        )
+        val trovati = Parole.esatti(fonti, Parole.di("dentista"))
+        assertEquals(listOf("t:40", "t:30", "n:vecchia"), trovati.map { it.fonte })
+        assertEquals(true, trovati.first().span.of(fonti[3].testo).contains("Dal dentista"))
+    }
 }

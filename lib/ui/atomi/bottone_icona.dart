@@ -18,7 +18,8 @@ enum TipoIcona {
   pieno,
 }
 
-/// Ogni bottone tondo con un'icona. Tre misure: 40, 48 (il minimo per un dito), 52 (Dock).
+/// Ogni bottone tondo con un'icona. Due misure: 40 e 48 (il minimo per un dito; anche nel Dock).
+/// Cambiando [tipo] il colore dell'icona passa piano all'altro, come il fondo: nessun salto.
 class BottoneIcona extends StatelessWidget {
   const BottoneIcona(
     this.icona, {
@@ -28,6 +29,7 @@ class BottoneIcona extends StatelessWidget {
     this.misura = Misura.tocco,
     this.etichetta,
     this.figlio,
+    this.conFondo = true,
   });
 
   final IconData icona;
@@ -38,8 +40,11 @@ class BottoneIcona extends StatelessWidget {
   /// Il suggerimento (e il nome per chi usa il lettore dello schermo).
   final String? etichetta;
 
-  /// Al posto dell'icona, se serve disegnare qualcosa di suo (il Mirino).
+  /// Al posto dell'icona, se serve disegnare qualcosa di suo (le barre della grana).
   final Widget? figlio;
+
+  /// Senza: il fondo del tipo lo disegna qualcun altro (nella pillola delle pagine scivola da una pagina all'altra).
+  final bool conFondo;
 
   static (Color?, Color) colori(Colori c, TipoIcona tipo) => switch (tipo) {
     TipoIcona.trasparente => (null, c.testoSecondario),
@@ -57,9 +62,16 @@ class BottoneIcona extends StatelessWidget {
         : (misura <= Misura.bottoneBasso
               ? Misura.iconaMedia
               : Misura.iconaGrande);
-    final icona = figlio ?? Icon(this.icona, size: dim, color: su);
+    final icona =
+        figlio ??
+        TweenAnimationBuilder<Color?>(
+          tween: ColorTween(end: su),
+          duration: Durata.normale,
+          curve: Curva.standard,
+          builder: (context, colore, _) => Icon(this.icona, size: dim, color: colore),
+        );
     final b = Material(
-      color: fondo ?? Colors.transparent,
+      color: conFondo ? fondo ?? Colors.transparent : Colors.transparent,
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),

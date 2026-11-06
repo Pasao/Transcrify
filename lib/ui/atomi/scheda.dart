@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../ds.dart';
 
-/// Il foglio su cui stanno una nota o una trascrizione. «Scelta» = fondo tenue e contorno:
-/// l'unico contorno dell'app.
+/// Il foglio su cui stanno una nota o una trascrizione. «Scelta» = fondo tenue e contorno spesso
+/// nel colore del testo: l'unico contorno dell'app.
 class Scheda extends StatelessWidget {
   const Scheda({
     super.key,
@@ -24,8 +24,9 @@ class Scheda extends StatelessWidget {
   static Color fondo(Colori c, {bool scelta = false}) =>
       scelta ? c.azioneTenue : c.scheda;
 
+  // Il contorno della scelta nel colore del testo, spesso: si vede su ogni tinta, nel chiaro e nello scuro.
   static BorderSide _bordo(Colori c, bool scelta) =>
-      BorderSide(color: scelta ? c.azione : Colors.transparent, width: 1.5);
+      BorderSide(color: scelta ? c.testo : Colors.transparent, width: Misura.bordoScelta);
 
   /// Per un Material (con l'onda del tocco): fondo con [fondo], forma con questa.
   static RoundedRectangleBorder forma(Colori c, {bool scelta = false}) =>

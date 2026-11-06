@@ -55,13 +55,15 @@ class _RientraState extends State<Rientra> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final v = CurvedAnimation(parent: _aperto, curve: Curves.easeInOutCubic);
+    final v = CurvedAnimation(parent: _aperto, curve: Curva.scambio);
     return ClipRect(
       child: AnimatedBuilder(
         animation: v,
         builder: (context, child) => Align(
           alignment: widget.da,
           widthFactor: v.value,
+          // Alto quanto quello che mostra, anche dove gli darebbero di più (es. un Dock in una colonna).
+          heightFactor: 1,
           child: Opacity(opacity: v.value, child: child),
         ),
         child: _visto,

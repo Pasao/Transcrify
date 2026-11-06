@@ -86,4 +86,12 @@ void main() {
     ];
     expect(vecchi, isEmpty, reason: 'Nei pezzi nuovi: context.col e le misure di ds/.');
   });
+
+  test("Il colore ha un'icona sola: la ruota dei colori (7 nov: «c'è ancora l'icona della tavolozza»)", () {
+    final tavolozze = [
+      for (final (rel, f) in ds.fileDa(radice))
+        if (RegExp(r'Icons\.palette').hasMatch(f.readAsStringSync())) rel,
+    ];
+    expect(tavolozze, isEmpty, reason: 'Per il colore: RuotaColori (atomi/ruota_colori.dart), o SelectionBar.colore.');
+  });
 }

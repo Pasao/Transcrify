@@ -104,6 +104,25 @@
                 android:src="@drawable/ic_stat_mic" />
         </FrameLayout>
 
+        <!-- Solo nel 2 × 1: il tondo a destra apre l'app (6 nov: «tocco Detta ed esce Transcri, ma l'app non si apre»).
+             Lo stesso tondo del tasto che detta, con la freccia di «Apri»; il resto del widget fa uscire Transcri. -->
+        <FrameLayout
+            android:id="@+id/widget_open_round"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/widget_open_bg"
+            android:contentDescription="Apri Transcrify"
+            android:visibility="gone">
+            <ImageView
+                android:id="@+id/widget_open_round_icon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_widget_open" />
+        </FrameLayout>
+
         <!-- Da 4 × 1 in su: apre l'app, senza cercarla. Il resto del widget continua a far uscire Transcri. -->
         <LinearLayout
             android:id="@+id/widget_open"

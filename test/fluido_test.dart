@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:transcrify/core/native.dart';
+import 'package:transcrify/ui/cerca.dart';
 import 'package:transcrify/ui/pensieri.dart';
 import 'package:transcrify/ui/theme.dart';
 import 'package:transcrify/ui/trascrivi.dart';
@@ -97,6 +98,11 @@ void main() {
       return switch (call.method) {
         'history' => storia.take(quanteStoria).toList(),
         'notes' => note(inLavoro: inLavoro),
+        // La ricerca: 30 note per parola, 10 per senso.
+        'cerca' => [
+          for (var i = 0; i < ((call.arguments as Map)['senso'] == true ? 10 : 30); i++)
+            {'tipo': 'nota', 'id': 'n${(call.arguments as Map)['senso'] == true ? 100 + i : i}', 'start': 0, 'end': 10, 'esatto': true},
+        ],
         'albums' => [
           for (var i = 0; i < 60; i++)
             {
@@ -225,11 +231,20 @@ void main() {
     await t.drag(find.byType(Scrollable).first, const Offset(0, 4000));
     await t.pump(const Duration(seconds: 1));
     dici('Pensieri · fermo, con 3 indicatori che girano: ${await fotogrammi(t, 60)}');
+    // La ricerca sta nella sua pagina (la lente in cima, 6 nov): si misura lì, sulle stesse note.
+    await t.pumpWidget(app(const CercaPage()));
+    await t.pump();
+    // Si misura quanto costa disegnare le righe: prima quelle per parola, poi arrivano quelle per senso.
+    await t.enterText(find.byType(TextField), 'treno');
     final cerca = await ms(() async {
-      await t.enterText(find.byType(TextField), 'treno');
+      await t.pump(Durata.veloce);
       await t.pump();
     });
-    dici('Pensieri · una ricerca ${cerca.toStringAsFixed(1)} ms');
+    final senso = await ms(() async {
+      await t.pump();
+      await t.pump();
+    });
+    dici('Ricerca · per parola ${cerca.toStringAsFixed(1)} ms, poi per senso ${senso.toStringAsFixed(1)} ms');
     await t.pumpWidget(const SizedBox());
     await t.pump(const Duration(seconds: 3));
   });
