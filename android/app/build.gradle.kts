@@ -56,6 +56,8 @@ android {
     packaging {
         jniLibs {
             excludes += listOf("lib/armeabi-v7a/**", "lib/x86_64/**", "lib/x86/**")
+            // Compresse nell'APK: da scaricare pesa la metà; Android le scompatta una volta all'installazione.
+            useLegacyPackaging = true
         }
     }
 

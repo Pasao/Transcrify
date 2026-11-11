@@ -498,15 +498,21 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
                   // La versione, quieta, in fondo: dieci tocchi sbloccano le prove (come le opzioni sviluppatore).
-                  SettingsRow(
-                    icon: Icons.info_outline_rounded,
-                    color: context.col.testoSecondario,
-                    title: 'Transcrify',
-                    value: st.versione,
-                    onTap: () => _toccoVersione(st),
+                  // Nel suo gruppo, come le altre righe: l'icona allineata (11 nov).
+                  SettingsGroup(
+                    label: 'Informazioni',
+                    children: [
+                      SettingsRow(
+                        icon: Icons.info_outline_rounded,
+                        color: context.col.testoSecondario,
+                        title: 'Transcrify',
+                        value: st.versione,
+                        onTap: () => _toccoVersione(st),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 16),
                 ],
               ),
       ),
