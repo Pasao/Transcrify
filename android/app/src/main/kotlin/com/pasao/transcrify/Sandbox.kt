@@ -1,13 +1,12 @@
 package com.pasao.transcrify
 
 import android.content.Context
-import android.content.pm.ApplicationInfo
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
 /**
- * I dati finti, solo nella versione di sviluppo: con lo switch acceso l'app legge e scrive in una
+ * I dati finti, solo con le prove visibili ([Prove]: la versione di sviluppo, o sbloccate coi dieci tocchi): con lo switch acceso l'app legge e scrive in una
  * cartella a parte, con note e trascrizioni inventate. Quelle vere non vengono né lette né toccate,
  * e nemmeno gli appunti. Spegnendolo la cartella finta si butta: la prossima volta si riparte puliti.
  * Tutto passa da [dir], e cambiare richiede di riavviare l'app (vedi MainActivity).
@@ -17,7 +16,7 @@ object Sandbox {
     private fun folder(context: Context) = File(context.filesDir, "dati_finti")
 
     fun on(context: Context): Boolean =
-        context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0 && marker(context).exists()
+        Prove.visibili(context) && marker(context).exists()
 
     /** Dove stanno i dati dell'utente: quella vera o quella finta. */
     fun dir(context: Context): File {

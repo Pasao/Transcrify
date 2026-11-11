@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -133,6 +132,32 @@ class _SettingsPageState extends State<SettingsPage> {
     HapticFeedback.selectionClick();
     await Core.simulate(what, on);
     _load();
+  }
+
+  /// I tocchi sulla versione, di fila (un tocco dopo [Durata.toccoProve] ricomincia).
+  int _tocchi = 0;
+  DateTime? _ultimoTocco;
+
+  /// Dieci tocchi di fila sulla versione sbloccano le prove; dal settimo dice quanti ne mancano.
+  Future<void> _toccoVersione(CoreState st) async {
+    final avviso = ScaffoldMessenger.of(context);
+    void di(String testo) => avviso
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(testo), duration: Durata.etichetta));
+    if (st.prove) return di('Le prove sono già attive');
+    final ora = DateTime.now();
+    _tocchi = _ultimoTocco != null && ora.difference(_ultimoTocco!) < Durata.toccoProve ? _tocchi + 1 : 1;
+    _ultimoTocco = ora;
+    const tutti = 10, daQui = 7;
+    final mancano = tutti - _tocchi;
+    if (mancano <= 0) {
+      _tocchi = 0;
+      HapticFeedback.mediumImpact();
+      await Core.sbloccaProve(true);
+      di('Prove attivate');
+      return _load();
+    }
+    if (_tocchi >= daQui) di(mancano == 1 ? 'Ancora 1 tocco…' : 'Ancora $mancano tocchi…');
   }
 
   /// «Da sistemare» di prova (11 nov): registrazioni in attesa e proposte di colore finte, solo coi dati finti.
@@ -337,10 +362,22 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ],
                   ),
-                  if (kDebugMode)
+                  // Nella versione vera solo dopo dieci tocchi sulla versione, qui in fondo (11 nov).
+                  if (st.prove)
                     SettingsGroup(
                       label: 'Prove',
                       children: [
+                        if (st.proveSbloccate)
+                          SettingsRow(
+                            icon: Icons.visibility_off_rounded,
+                            color: context.col.azione,
+                            title: 'Nascondi le prove',
+                            subtitle: 'Tornano con dieci tocchi sulla versione, in fondo',
+                            onTap: () async {
+                              await Core.sbloccaProve(false);
+                              _load();
+                            },
+                          ),
                         SettingsRow(
                           icon: Icons.shield_outlined,
                           color: context.col.azione,
@@ -460,6 +497,15 @@ class _SettingsPageState extends State<SettingsPage> {
                         onTap: () => _open(LiveSettings(title: 'Chiave Groq', build: _keyPage)),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+                  // La versione, quieta, in fondo: dieci tocchi sbloccano le prove (come le opzioni sviluppatore).
+                  SettingsRow(
+                    icon: Icons.info_outline_rounded,
+                    color: context.col.testoSecondario,
+                    title: 'Transcrify',
+                    value: st.versione,
+                    onTap: () => _toccoVersione(st),
                   ),
                 ],
               ),

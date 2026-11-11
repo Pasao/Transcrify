@@ -168,6 +168,9 @@ abstract final class Durata {
   /// «un po' troppo veloce» e «troppo semplice»): il testo si sfoca, le macchie si condensano.
   static const copre = Duration(milliseconds: 700);
 
+  /// I dieci tocchi sulla versione che sbloccano le prove: un tocco più lento di così ricomincia da capo.
+  static const toccoProve = Duration(seconds: 2);
+
   /// Un giro del blob al lavoro: Transcri che ondeggia piano.
   static const giroBlob = Duration(milliseconds: 2400);
 

@@ -668,3 +668,11 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
 - **Ancora**: il titolo della fascia delle schede (`CorpoScheda`) cambia piano con l'offuscare; nella prova il tempo,
   l'onda e l'avviso arrivano con un `AnimatedSize`.
 
+### 3.0.0 (11 nov): le prove nella versione vera
+
+- **Dieci tocchi** sulla versione, in fondo alle Impostazioni («Transcrify · 3.0.0»), sbloccano le prove (dal settimo
+  «Ancora 3 tocchi…», poi «Prove attivate»; `Durata.toccoProve` tra un tocco e l'altro); «Nascondi le prove» le toglie
+  (coi dati finti accesi li spegne e riparte sui veri). Un posto solo: `Prove.kt` (sviluppo o il file `prove_sbloccate`),
+  che usano le Impostazioni (`CoreState.prove`) e i dati finti (`Sandbox.on`).
+- **Firma**: `tool/firma.py` (v3 con la storia della chiave debug → rilascio), vedi README.
+

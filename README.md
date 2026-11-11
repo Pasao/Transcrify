@@ -33,7 +33,13 @@ Il piano gratuito di Groq trascrive fino a 2 ore di audio all'ora e 8 al giorno:
 - **Transcri** nativo in Kotlin con Jetpack Compose (`android/app/src/main/kotlin/`): un servizio in primo piano con finestre sopra le altre app, la registrazione, la coda delle registrazioni e il client Groq.
 - **Widget** per la schermata home: Transcri esce dal widget e ci rientra.
 
-Per compilarlo: `flutter build apk --release --split-per-abi`. La firma si legge da `android/key.properties`, che non è nel repo.
+Per compilarlo: `flutter build apk --release --target-platform android-arm64` (solo arm64: le altre architetture le
+toglie `packaging` in `android/app/build.gradle.kts`). La firma si legge da `android/key.properties`, che non è nel repo.
+Poi, per OGNI APK da installare (anche quelli di debug: `flutter build apk --debug`), la firma con la storia della chiave
+debug → rilascio (APK Signature Scheme v3), così si installa sopra quella che c'è senza perdere i dati:
+`python tool/firma.py build/app/outputs/flutter-apk/app-release.apk` (o `app-debug.apk`). La storia
+(`transcrify-lineage.bin`) sta accanto alla chiave, fuori dal repo. La versione vera non è «debuggable»: niente
+`adb run-as`; le prove si sbloccano con dieci tocchi sulla versione, in fondo alle Impostazioni.
 
 Caratteri: Bricolage Grotesque e Inter per l'interfaccia, Onest per leggere, con licenza SIL Open Font License (in `assets/fonts`).
 

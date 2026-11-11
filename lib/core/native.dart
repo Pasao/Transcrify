@@ -17,6 +17,9 @@ class CoreState {
       maskedKey = m['maskedKey'] as String?,
       pillOn = m['pillOn'] as bool,
       sandbox = m['sandbox'] as bool,
+      prove = m['prove'] as bool? ?? false,
+      proveSbloccate = m['proveSbloccate'] as bool? ?? false,
+      versione = m['versione'] as String? ?? '',
       purify = m['purify'] as bool,
       words = (m['words'] as List).cast<String>(),
       prompt = m['prompt'] as String,
@@ -53,6 +56,13 @@ class CoreState {
 
   /// L'app sta usando i dati finti delle prove: quelli veri sono da parte.
   final bool sandbox;
+
+  /// Le prove si vedono (11 nov): nella versione di sviluppo sempre, in quella vera dopo dieci tocchi sulla versione
+  /// ([proveSbloccate]; le decide il nativo, `Prove.kt`, che le usa anche per i dati finti).
+  final bool prove, proveSbloccate;
+
+  /// La versione dell'app («3.0.0»), in fondo alle Impostazioni.
+  final String versione;
 
   /// I guasti finti delle prove: niente rete, chiave rifiutata, microfono negato.
   final bool simOffline, simBadKey, simNoMic;
@@ -771,6 +781,9 @@ class Core {
 
   /// Passa ai dati finti o torna a quelli veri. L'app si riavvia.
   static Future<void> setSandbox(bool on) => _ch.invokeMethod('setSandbox', {'on': on});
+
+  /// Sblocca (dieci tocchi sulla versione) o nasconde le prove; nascoste coi dati finti accesi, l'app riparte sui veri.
+  static Future<void> sbloccaProve(bool on) => _ch.invokeMethod('sbloccaProve', {'on': on});
 
   static Future<void> simulateLimit(bool on) => _ch.invokeMethod('simulateLimit', {'on': on});
 

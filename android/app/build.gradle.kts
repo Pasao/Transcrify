@@ -51,6 +51,14 @@ android {
         }
     }
 
+    // Il filtro qui sopra non basta per le librerie che arrivano già compilate (ONNX Runtime le porta per tre
+    // architetture: 65 MB in più). Solo arm64, come dice il filtro (11 nov).
+    packaging {
+        jniLibs {
+            excludes += listOf("lib/armeabi-v7a/**", "lib/x86_64/**", "lib/x86/**")
+        }
+    }
+
     buildTypes {
         release {
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")

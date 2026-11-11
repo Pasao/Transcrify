@@ -76,14 +76,14 @@ class MainActivity : FlutterActivity() {
                     store.removeFromHistory(call.argument<Number>("at")!!.toLong())
                     result.success(null)
                 }
-                "setSandbox" -> {
-                    // Tutto legge la cartella all'avvio: si chiude Transcri e si riparte da capo.
-                    PillService.stop(this)
-                    Sandbox.set(this, call.argument<Boolean>("on")!!)
-                    packageManager.getLaunchIntentForPackage(packageName)?.let {
-                        startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-                    }
-                    android.os.Process.killProcess(android.os.Process.myPid())
+                "setSandbox" -> cambiaSandbox(call.argument<Boolean>("on")!!)
+                // I dieci tocchi sulla versione (o «Nascondi le prove»). Nascondendole coi dati finti accesi, si spengono
+                // anche loro (e l'app riparte sui dati veri): non resta un interruttore acceso che non si vede.
+                "sbloccaProve" -> {
+                    val on = call.argument<Boolean>("on")!!
+                    val finti = Sandbox.on(this)
+                    Prove.sblocca(this, on)
+                    if (!on && !Prove.visibili(this) && finti) cambiaSandbox(false) else result.success(null)
                 }
                 "editHistory" -> {
                     store.editEntry(call.argument<Number>("at")!!.toLong(), call.argument<String>("text")!!)
@@ -511,6 +511,16 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 
+    /** Tutto legge la cartella all'avvio: si chiude Transcri e si riparte da capo. */
+    private fun cambiaSandbox(on: Boolean) {
+        PillService.stop(this)
+        Sandbox.set(this, on)
+        packageManager.getLaunchIntentForPackage(packageName)?.let {
+            startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        }
+        android.os.Process.killProcess(android.os.Process.myPid())
+    }
+
     private fun state(): Map<String, Any?> {
         val (hour, day) = store.usage()
         val (hourEnd, dayEnd) = store.windowsEnd()
@@ -520,6 +530,9 @@ class MainActivity : FlutterActivity() {
             "maskedKey" to store.maskedKey,
             "pillOn" to PillService.running,
             "sandbox" to Sandbox.on(this),
+            "prove" to Prove.visibili(this),
+            "proveSbloccate" to Prove.sbloccate(this),
+            "versione" to packageManager.getPackageInfo(packageName, 0).versionName,
             // I valori di chi apre l'app la prima volta, per la prova «come un utente nuovo».
             "sttDefault" to Groq.DEFAULT_STT,
             "llmDefault" to Groq.DEFAULT_LLM,
