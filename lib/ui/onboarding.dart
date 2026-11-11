@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/native.dart';
+import 'molecole/piede_intro.dart';
 import 'theme.dart';
 
 final _keyPattern = RegExp(r'^gsk_[A-Za-z0-9]{20,}$');
@@ -12,9 +13,9 @@ final _keyPattern = RegExp(r'^gsk_[A-Za-z0-9]{20,}$');
 /// La chiave Groq con il minimo sforzo: apri Groq, crei, copi, torni.
 /// Al ritorno la chiave si trova da sola negli appunti.
 ///
-/// È la stessa pagina ovunque: nell'introduzione (con la freccia per tornare alla prima pagina)
-/// e dalle impostazioni per cambiarla. In alto a destra la X chiude senza toccare niente:
-/// la prima volta vuol dire «salta», e la chiave si potrà mettere quando serve.
+/// È la stessa pagina ovunque: nell'introduzione (con la freccia per tornare alla prima pagina, e «Salta» in basso a
+/// sinistra: la chiave si potrà mettere quando serve) e dalle impostazioni per cambiarla (la X in alto a destra
+/// chiude senza toccare niente). L'azione che serve adesso (Apri Groq, Usa questa chiave) sta in basso a destra.
 
 /// La testata dell'introduzione è dipinta coi colori di Transcri: sopra va il bianco, e la sua ombra è nera.
 /// Eccezione dichiarata al design system (non c'è un token «su Transcri»).
@@ -26,7 +27,7 @@ class KeyPage extends StatefulWidget {
 
   final VoidCallback onSaved;
 
-  /// La X: chiude senza cambiare niente.
+  /// La X (o «Salta» nell'introduzione): chiude senza cambiare niente.
   final VoidCallback onClose;
 
   /// Solo nell'introduzione: torna alla prima pagina (freccia in alto e gesto indietro).
@@ -64,8 +65,16 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
   }
 
   Future<void> _lookInClipboard() async {
-    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim();
-    if (text != null && _keyPattern.hasMatch(text) && mounted) {
+    // Mentre controlla, o dopo che hai scelto di incollarla tu, gli appunti non cambiano quello che vedi.
+    if (checking || manual) return;
+    String? text;
+    try {
+      text = (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim();
+    } catch (_) {
+      return;
+    }
+    // La stessa chiave che Groq ha già rifiutato non torna su da sola.
+    if (text != null && _keyPattern.hasMatch(text) && text != _rifiutata && mounted) {
       setState(() {
         found = text;
         problem = null;
@@ -73,29 +82,62 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
     }
   }
 
+  /// L'ultima chiave che Groq non ha riconosciuto.
+  String? _rifiutata;
+
   Future<void> _openGroq() async {
-    setState(() => wentToGroq = true);
-    await launchUrl(Uri.parse('https://console.groq.com/keys'), mode: LaunchMode.externalApplication);
+    setState(() {
+      wentToGroq = true;
+      problem = null;
+    });
+    var aperta = false;
+    try {
+      aperta = await launchUrl(Uri.parse('https://console.groq.com/keys'), mode: LaunchMode.externalApplication);
+    } catch (_) {}
+    if (!aperta && mounted) setState(() => problem = 'Non riesco ad aprire Groq. Vai su console.groq.com/keys dal browser.');
   }
 
   Future<void> _use(String key) async {
+    if (checking || key.isEmpty) return;
     setState(() {
       checking = true;
       problem = null;
     });
-    final error = await Core.checkKey(key);
+    String? error;
+    try {
+      error = await Core.checkKey(key);
+      if (error == null) await Core.setKey(key);
+    } catch (_) {
+      error = 'Non riesco a controllarla adesso. Riprova tra poco.';
+    }
     if (!mounted) return;
     if (error != null) {
       setState(() {
         checking = false;
+        if (error == 'Chiave non valida') _rifiutata = key;
         problem = error == 'Chiave non valida' ? 'Groq non riconosce questa chiave.' : error;
       });
       return;
     }
-    await Core.setKey(key);
     // La chiave non resta negli appunti dopo averla usata.
-    await Clipboard.setData(const ClipboardData(text: ''));
+    try {
+      await Clipboard.setData(const ClipboardData(text: ''));
+    } catch (_) {}
     widget.onSaved();
+  }
+
+  /// Incollarla a mano: anche quando negli appunti ce n'era un'altra (magari quella sbagliata).
+  void _incollaIo() => setState(() {
+    manual = true;
+    found = null;
+    problem = null;
+  });
+
+  /// L'azione in basso a destra: quella che serve adesso. Mentre controlla, o col campo vuoto, spenta.
+  (String, VoidCallback?) get _principale {
+    if (found != null) return ('Usa questa chiave', checking ? null : () => _use(found!));
+    if (manual) return ('Usa questa chiave', checking || field.text.trim().isEmpty ? null : () => _use(field.text.trim()));
+    return ('Apri Groq', _openGroq);
   }
 
   static String _mask(String k) => '${k.substring(0, 4)}••••••••${k.substring(k.length - 4)}';
@@ -125,17 +167,10 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
                 child: c,
               ),
             ),
-            child: found != null
-                ? _FoundCard(key: const ValueKey('found'), masked: _mask(found!), checking: checking, onUse: () => _use(found!))
-                : FilledButton.icon(
-                    key: const ValueKey('open'),
-                    onPressed: _openGroq,
-                    icon: const Icon(Icons.north_east_rounded, size: 18),
-                    label: const Text('Apri Groq'),
-                  ),
+            child: found != null ? _FoundCard(key: const ValueKey('found'), masked: _mask(found!)) : const SizedBox.shrink(),
           ),
           if (problem != null) ...[const SizedBox(height: 12), Text(problem!, style: t.bodySmall?.copyWith(color: context.col.errore))],
-          // Gerarchia: il primario sopra (Apri Groq / Usa questa chiave), poi il secondario con il bordo.
+          // Il primario sta in basso a destra (PiedeIntro); qui il secondario con il bordo.
           if (manual) ...[
             const SizedBox(height: 12),
             TextField(
@@ -148,11 +183,12 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
               onChanged: (_) => setState(() => problem = null),
               onSubmitted: (v) => _use(v.trim()),
             ),
-            const SizedBox(height: 12),
-            OutlinedButton(onPressed: checking ? null : () => _use(field.text.trim()), child: const Text('Usa questa chiave')),
           ] else ...[
             const SizedBox(height: 12),
-            OutlinedButton(onPressed: () => setState(() => manual = true), child: const Text('Ho già una chiave, la incollo io')),
+            OutlinedButton(
+              onPressed: checking ? null : _incollaIo,
+              child: Text(found == null ? 'Ho già una chiave, la incollo io' : 'Incollo un’altra chiave'),
+            ),
           ],
           const SizedBox(height: 20),
           Text('La chiave resta cifrata su questo telefono e parla solo con Groq.', style: t.bodySmall, textAlign: TextAlign.center),
@@ -161,6 +197,8 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
     );
 
     final close = IconButton(icon: const Icon(Icons.close_rounded), tooltip: 'Chiudi', onPressed: widget.onClose);
+    final intro = widget.onBack != null;
+    final (principale, onPrincipale) = _principale;
     return PopScope(
       // Nell'introduzione il gesto indietro torna alla prima pagina; altrove chiude.
       canPop: false,
@@ -172,10 +210,16 @@ class _KeyPageState extends State<KeyPage> with WidgetsBindingObserver {
           appBar: AppBar(
             automaticallyImplyLeading: false,
             leading: widget.onBack == null ? null : IconButton(icon: const Icon(Icons.arrow_back_rounded), tooltip: 'Indietro', onPressed: widget.onBack),
-            actions: [close, const SizedBox(width: 8)],
+            actions: intro ? null : [close, const SizedBox(width: 8)],
           ),
           body: SafeArea(child: ListView(children: [steps])),
-          bottomNavigationBar: widget.onBack == null ? null : const PageCount('2 di 2'),
+          bottomNavigationBar: PiedeIntro(
+            conta: intro ? '2 di 3' : null,
+            principale: checking ? 'Controllo…' : principale,
+            onPrincipale: onPrincipale,
+            secondario: intro ? 'Salta' : null,
+            onSecondario: widget.onClose,
+          ),
         ),
       ),
     );
@@ -191,6 +235,9 @@ class _Hero extends StatefulWidget {
 }
 
 class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
+  /// Quanto è alta almeno, e quanto posto lascia sopra le parole per la bolla che vola.
+  static const _alta = 380.0, _sopra = 120.0;
+
   late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 4200))..repeat(); // ds:eccezione: il movimento di Transcri
 
   @override
@@ -202,13 +249,15 @@ class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
+    // Alta almeno [_alta]; col testo grande cresce lei (le parole non escono mai sopra, sotto la barra di stato).
     return Container(
-      height: 380 + top,
+      constraints: BoxConstraints(minHeight: _alta + top),
       decoration: BoxDecoration(
         gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [context.col.azione, context.col.transcriB]),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(Raggio.foglio)),
       ),
       child: Stack(
+        alignment: AlignmentDirectional.bottomStart,
         children: [
           // Una bolla nasce, vola al bordo e diventa la pillola, in loop.
           Positioned.fill(
@@ -217,10 +266,8 @@ class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
               builder: (_, _) => CustomPaint(painter: _PillPainter(_c.value)),
             ),
           ),
-          Positioned(
-            left: 24,
-            right: 56,
-            bottom: 32,
+          Padding(
+            padding: EdgeInsets.fromLTRB(24, top + _sopra, 56, 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -333,15 +380,13 @@ class _Passo extends StatelessWidget {
 }
 
 class _FoundCard extends StatelessWidget {
-  const _FoundCard({super.key, required this.masked, required this.checking, required this.onUse});
+  const _FoundCard({super.key, required this.masked});
 
   final String masked;
-  final bool checking;
-  final VoidCallback onUse;
 
   @override
   Widget build(BuildContext context) {
-    // B6 «ChiaveTrovata»: una scheda neutra, verde solo la spunta; il bottone è quello principale (Pieno).
+    // B6 «ChiaveTrovata»: una scheda neutra, verde solo la spunta; «Usa questa chiave» è il principale, in basso.
     return Scheda(
       padding: const EdgeInsets.all(Spazio.s5),
       child: Column(
@@ -351,38 +396,15 @@ class _FoundCard extends StatelessWidget {
             children: [
               Icon(Icons.check_circle_rounded, size: Misura.iconaPiccola, color: context.col.successo),
               const SizedBox(width: Spazio.s2),
-              Text('Trovata negli appunti', style: Testo.etichetta.copyWith(color: context.col.testo)),
+              Flexible(child: Text('Trovata negli appunti', style: Testo.etichetta.copyWith(color: context.col.testo))),
             ],
           ),
           const SizedBox(height: 8),
           Text(masked, style: orarioStyle(context, size: 16, color: context.col.testo)),
-          const SizedBox(height: 14),
-          FilledButton(
-            onPressed: checking ? null : onUse,
-            child: checking
-                ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: context.col.suAzione))
-                : const Text('Usa questa chiave'),
-          ),
         ],
       ),
     );
   }
-}
-
-/// Il contatore delle pagine dell'introduzione: sempre nello stesso punto, in fondo.
-class PageCount extends StatelessWidget {
-  const PageCount(this.label, {super.key});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: Padding(
-      padding: const EdgeInsets.only(bottom: 14, top: 6),
-      child: Text(label, style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
-    ),
-  );
 }
 
 /// Prima pagina del primo avvio: cos'è e come si usa, in tre righe. Poi la chiave.
@@ -391,63 +413,44 @@ class IntroPage extends StatelessWidget {
 
   final VoidCallback onNext;
 
-  /// La X in alto: salta l'introduzione (o la chiude, se la stai rivedendo).
+  /// «Salta» in basso a sinistra: salta l'introduzione (o la chiude, se la stai rivedendo).
   final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     return Paper(
       child: Scaffold(
-        bottomNavigationBar: const PageCount('1 di 2'),
-        body: Stack(
+        bottomNavigationBar: PiedeIntro(conta: '1 di 3', principale: 'Avanti', onPrincipale: onNext, secondario: 'Salta', onSecondario: onClose),
+        body: ListView(
+          padding: EdgeInsets.zero,
           children: [
-            ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                const _Hero(),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('Come funziona', style: display(context, size: 24)),
-                      const SizedBox(height: 18),
-                      _How(
-                        icon: Icons.bubble_chart_rounded,
-                        color: context.col.azione,
-                        title: 'Fai uscire Transcri',
-                        text: 'Dal bottone dell’app vola sul bordo dello schermo e resta lì, sopra tutto.',
-                      ),
-                      _How(
-                        icon: Icons.mic_rounded,
-                        color: context.col.transcriB,
-                        title: 'Toccalo e parla',
-                        text: 'Da WhatsApp, dalle note, dalla mail: ovunque tu stia scrivendo.',
-                      ),
-                      _How(
-                        icon: Icons.content_paste_rounded,
-                        color: context.col.successo,
-                        title: 'Incolla',
-                        text: 'Il testo è già negli appunti, anche ripulito da esitazioni e ripetizioni se vuoi.',
-                      ),
-                      const SizedBox(height: 28),
-                      FilledButton(onPressed: onNext, child: const Text('Avanti')),
-                    ],
+            const _Hero(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Come funziona', style: display(context, size: 24)),
+                  const SizedBox(height: 18),
+                  _How(
+                    icon: Icons.bubble_chart_rounded,
+                    color: context.col.azione,
+                    title: 'Fai uscire Transcri',
+                    text: 'Toccalo: vola sul bordo dello schermo e resta lì, sopra tutto.',
                   ),
-                ),
-              ],
-            ),
-            SafeArea(
-              child: Align(
-                alignment: Alignment.topRight,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: IconButton(
-                    icon: Icon(Icons.close_rounded, color: _suTranscri),
-                    tooltip: 'Chiudi',
-                    onPressed: onClose,
+                  _How(
+                    icon: Icons.mic_rounded,
+                    color: context.col.transcriB,
+                    title: 'Tienilo premuto e parla',
+                    text: 'Ti ascolta ovunque tu stia scrivendo: WhatsApp, note, mail. Per fermarlo tienilo premuto di nuovo, o aprilo e tocca Stop.',
                   ),
-                ),
+                  _How(
+                    icon: Icons.content_paste_rounded,
+                    color: context.col.successo,
+                    title: 'Incolla',
+                    text: 'Il testo è già negli appunti, anche ripulito da esitazioni e ripetizioni se vuoi.',
+                  ),
+                ],
               ),
             ),
           ],

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'proposte_colore.dart';
 import 'segni.dart';
 
 export 'segni.dart';
@@ -23,6 +26,7 @@ class CoreState {
       limited = m['limited'] as String?,
       resetAt = m['resetAt'] == null ? null : DateTime.fromMillisecondsSinceEpoch(m['resetAt'] as int),
       simulateLimit = m['simulateLimit'] as bool,
+      coloraDaSola = m['coloraDaSola'] as bool? ?? false,
       simOffline = m['simOffline'] as bool,
       simBadKey = m['simBadKey'] as bool,
       simNoMic = m['simNoMic'] as bool,
@@ -43,6 +47,9 @@ class CoreState {
       dayLimit = m['dayLimit'] as int;
 
   final bool hasKey, pillOn, purify, customPrompt, simulateLimit;
+
+  /// «Colora da sola» (Impostazioni, 7 nov): una trascrizione nuova prende il colore di quelle a cui somiglia.
+  final bool coloraDaSola;
 
   /// L'app sta usando i dati finti delle prove: quelli veri sono da parte.
   final bool sandbox;
@@ -89,7 +96,10 @@ class Entry {
       source = m['source'] as String?,
       colore = Colore.da(m['colore'] as String?),
       privata = m['privata'] as bool? ?? false,
-      titolo = m['titolo'] as String?;
+      titolo = m['titolo'] as String?,
+      titoloChiesto = m['titoloChiesto'] as bool? ?? false,
+      coloreAuto = m['coloreAuto'] as bool? ?? false,
+      titoloUtente = m['titoloUtente'] as bool? ?? false;
 
   final String text;
   final DateTime at;
@@ -107,9 +117,18 @@ class Entry {
   /// Privata: sulla scheda il testo è coperto, e la ricerca non lo mostra.
   final bool privata;
 
-  /// Il suo titolo (6 nov): scritto da te, o proposto dal riassunto estrattivo (`Titoli`). Null finché non ne ha uno:
-  /// sulla scheda si vede l'inizio del testo (vedi `Titoli.di`).
+  /// Il suo titolo: scritto da te, o (7 nov) chiesto a Groq una volta sola, in fondo, dal nativo (`Titolatore.kt`). Null
+  /// finché non ne ha uno: sulla scheda si vede l'inizio del testo, più tenue (vedi `Titoli.di`).
   final String? titolo;
+
+  /// Il titolo è già stato chiesto, o l'hai toccato tu: non si richiede più (anche se è vuoto). Lo scrive il nativo.
+  final bool titoloChiesto;
+
+  /// Il colore l'ha messo l'app da sola («Colora da sola»); toccandolo torna tuo (lo segna il nativo).
+  final bool coloreAuto;
+
+  /// Il titolo l'hai scritto (o tolto) tu: «Rifai i titoli» non lo tocca. Lo scrive il nativo.
+  final bool titoloUtente;
 
   /// Uguale se non è cambiato niente: rileggendo dal nativo, la lista si ridisegna solo se serve.
   @override
@@ -122,10 +141,13 @@ class Entry {
       other.source == source &&
       other.colore == colore &&
       other.privata == privata &&
-      other.titolo == titolo;
+      other.titolo == titolo &&
+      other.titoloChiesto == titoloChiesto &&
+      other.coloreAuto == coloreAuto &&
+      other.titoloUtente == titoloUtente;
 
   @override
-  int get hashCode => Object.hash(at, text, purified, mode, source, colore, privata, titolo);
+  int get hashCode => Object.hash(at, text, purified, mode, source, colore, privata, titolo, titoloChiesto, coloreAuto, titoloUtente);
 
   /// Com'è, per rimetterla tale e quale (l'«Annulla» dopo averle unite).
   Map<String, Object?> toMap() => {
@@ -137,12 +159,15 @@ class Entry {
     'colore': colore?.chiave,
     'privata': privata,
     'titolo': titolo,
+    'titoloChiesto': titoloChiesto,
+    'coloreAuto': coloreAuto,
+    'titoloUtente': titoloUtente,
   };
 }
 
 /// Una nota: tua, da rileggere. Si scrive a mano (per ora); il titolo può restare vuoto.
 class Note {
-  Note({required this.id, this.title = '', this.text = '', required this.created, required this.updated, this.topics = 'off', this.source, this.summary});
+  Note({required this.id, this.title = '', this.text = '', required this.created, required this.updated, this.topics = 'off', this.source, this.summary, this.privata = false});
 
   Note.fromMap(Map m)
     : id = m['id'] as String,
@@ -152,7 +177,8 @@ class Note {
       updated = DateTime.fromMillisecondsSinceEpoch(m['updated'] as int),
       topics = m['topics'] as String? ?? 'off',
       source = m['source'] as String?,
-      summary = m['summary'] as String?;
+      summary = m['summary'] as String?,
+      privata = m['privata'] as bool? ?? false;
 
   /// Una nota nuova, vuota, nata adesso.
   factory Note.blank() {
@@ -173,22 +199,30 @@ class Note {
   /// Il riassunto, se l'hai chiesto. Sta accanto al testo e non lo sostituisce mai.
   final String? summary;
 
+  /// Offuscata (7 nov), come le trascrizioni: sulla scheda il testo è coperto, il titolo resta. Le note di prima: false.
+  final bool privata;
+
   bool get isEmpty => title.trim().isEmpty && text.trim().isEmpty;
 
   /// Uguale se non è cambiato niente (anche lo stato degli argomenti): la lista si ridisegna solo se serve.
   @override
   bool operator ==(Object other) =>
-      other is Note && other.id == id && other.updated == updated && other.created == created && other.topics == topics && other.title == title && other.text == text && other.source == source && other.summary == summary;
+      other is Note && other.id == id && other.updated == updated && other.created == created && other.topics == topics && other.title == title && other.text == text && other.source == source && other.summary == summary && other.privata == privata;
 
   @override
   int get hashCode => Object.hash(id, updated, topics, title, text);
 
-  Note edited({required String title, required String text, String? summary}) =>
-      Note(id: id, title: title, text: text, created: created, updated: DateTime.now(), source: source, summary: summary);
+  Note edited({required String title, required String text, String? summary, bool? privata}) =>
+      Note(id: id, title: title, text: text, created: created, updated: DateTime.now(), source: source, summary: summary, privata: privata ?? this.privata);
+
+  /// La stessa nota, offuscata o in vista ([privata]): il resto non cambia (nemmeno quando l'hai toccata).
+  Note offuscata(bool privata) =>
+      Note(id: id, title: title, text: text, created: created, updated: updated, topics: topics, source: source, summary: summary, privata: privata);
 
   Map<String, Object?> toMap() => {
     'source': source,
     'summary': summary,
+    'privata': privata,
     'id': id,
     'title': title,
     'text': text,
@@ -365,6 +399,19 @@ class Provenienza {
 class Core {
   static const _ch = MethodChannel('transcrify/core');
 
+  /// Una chiamata al nativo che può non riuscire: senza nativo (le prove, l'utente nuovo) o se non risponde, null.
+  static Future<Object?> chiedi(String metodo, [Map<String, Object?> dati = const {}]) async {
+    if (preview.value) return null;
+    try {
+      return await _ch.invokeMethod(metodo, dati);
+    } on PlatformException {
+      // Non fatto: alla prossima apertura si rilegge quello vero.
+    } on MissingPluginException {
+      // Come sopra.
+    }
+    return null;
+  }
+
   /// Nome e icona dell'app di un audio condiviso: si chiedono una volta per app, poi restano in memoria.
   static Future<Provenienza> provenienza(String source) => _provenienze[source] ??= _ch
       .invokeMapMethod<String, Object?>('provenienza', {'source': source})
@@ -382,6 +429,8 @@ class Core {
     if (call.method == 'changed') refresh();
     if (call.method == 'nestHot') _nestHot?.call(call.arguments as bool);
     if (call.method == 'live') live.value = Live.fromMap(call.arguments as Map);
+    // «Colora da sola» ha nuove proposte (10 nov: propone, non colora): Trascrivi le mostra in cima.
+    if (call.method == 'proposteColore') unawaited(ProposteColore.leggi());
   });
 
   /// Chi vuole sapere quando la pillola cambia qualcosa (si accende, si spegne, trascrive).
@@ -392,6 +441,9 @@ class Core {
   }
 
   static void removeListener(VoidCallback cb) => _changed.remove(cb);
+
+  /// Per chi guarda solo [live] prima dell'app (la prova dell'introduzione): il nativo può già parlare.
+  static void ascoltaNativo() => _listen();
 
   /// Quello che Transcri sta facendo adesso: lo stato e il volume della voce.
   static final live = ValueNotifier<Live>(const Live());
@@ -573,6 +625,12 @@ class Core {
   /// Il riassunto di un testo, fatto col modello di pulizia. Lancia un errore se non riesce.
   static Future<String> summarize(String text) async => await _ch.invokeMethod('summarize', {'text': text}) as String;
 
+  /// «Titoli: N fatti su M · in corso», per la riga nelle Prove (solo lettura).
+  static Future<String?> titoli() async => preview.value ? null : _ch.invokeMethod<String>('titoli');
+
+  /// «Rifai i titoli» (Prove): via quelli di Groq (i tuoi restano), e si richiedono. Quanti.
+  static Future<int> rifaiTitoli() async => preview.value ? 0 : await _ch.invokeMethod<int>('rifaiTitoli') ?? 0;
+
   static Future<void> setIntroSeen() async {
     if (preview.value) {
       _previewIntro = true;
@@ -590,6 +648,14 @@ class Core {
   /// Sceglie il modello per gli argomenti (e lo scarica se manca). null = argomenti spenti.
   static Future<void> chooseTopicModel(String? id) async {
     if (!preview.value) await _ch.invokeMethod('chooseTopicModel', {'id': id});
+  }
+
+  /// Accende gli argomenti se sono spenti (il tasto delle barre nella nota): il modello già sul telefono, se c'è;
+  /// se no il più leggero, che si scarica. Se un modello è già scelto non cambia niente.
+  static Future<void> accendiArgomenti() async {
+    final list = await topicModels();
+    if (list.any((m) => m.chosen)) return;
+    await chooseTopicModel(list.where((m) => m.state == 'ready').map((m) => m.id).firstOrNull ?? 'leggero');
   }
 
   static Future<void> cancelTopicModel(String id) async {
@@ -708,6 +774,14 @@ class Core {
 
   static Future<void> simulateLimit(bool on) => _ch.invokeMethod('simulateLimit', {'on': on});
 
+  static Future<void> coloraDaSola(bool on) async {
+    if (preview.value) {
+      _previewChoices['coloraDaSola'] = on;
+    } else {
+      await _ch.invokeMethod('coloraDaSola', {'on': on});
+    }
+  }
+
   static Future<void> setPurify(bool on) async {
     if (preview.value) {
       _previewChoices['purify'] = on;
@@ -732,8 +806,11 @@ class Core {
   /// Restituisce 'overlay' se manca il permesso di stare sopra le altre app.
   /// [home]: la capsula di Transcri nel bottone (l, t, r, b, in pixel fisici): parte da lì, con la sua forma.
   /// [place]: Transcri è stato portato a mano fin lì, quindi si attacca al bordo più vicino a quel punto.
-  static Future<String?> startPill(double x, double y, {List<double>? home, bool place = false}) async =>
-      await _ch.invokeMethod('startPill', {'x': x, 'y': y, 'home': home, 'place': place}) as String?;
+  /// [ascolta]: esce già in ascolto (la prova dell'introduzione, 10 nov: la pillola vera, non una finta).
+  /// [guida]: la prova guidata (11 nov): ferma sul bordo destro a quell'altezza (frazione dello schermo), non si
+  /// trascina, nel pannello solo «ferma»; il posto salvato della pillola non cambia.
+  static Future<String?> startPill(double x, double y, {List<double>? home, bool place = false, bool ascolta = false, double? guida}) async =>
+      await _ch.invokeMethod('startPill', {'x': x, 'y': y, 'home': home, 'place': place, 'record': ascolta, 'guida': guida}) as String?;
 
   /// Con [x], [y] la pillola rientra volando in quel punto; senza, si chiude e basta.
   static Future<void> stopPill({double? x, double? y, List<double>? home}) => _ch.invokeMethod('stopPill', {'x': x, 'y': y, 'home': home});

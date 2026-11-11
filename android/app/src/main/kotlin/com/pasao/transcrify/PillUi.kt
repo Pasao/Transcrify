@@ -4,12 +4,12 @@ import androidx.compose.foundation.layout.heightIn
 import android.view.animation.OvershootInterpolator
 import kotlin.math.cos
 import kotlin.math.sin
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.unit.Dp
-import androidx.compose.foundation.Canvas
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Animatable
@@ -699,41 +699,38 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
         if (closing) return
         closing = true
         scope.launch {
-            t.animateTo(0f, Scatto.svelto())
+            // Lo stesso scatto [t] dell'apertura, all'indietro: forma, posto, colore e contenuto tornano insieme nella pillola.
+            t.animateTo(0f, Scatto.richiude())
             svc.stageDone()
         }
     }
+
+    // I due scatti del pannello (Coreografia): la carta aperta e il registratore acceso. Tutto il resto li segue.
+    val carta = remember { Animatable(0f) }
+    // Il cambio da un cassetto all'altro: la carta resta aperta e cambia forma (CarteFuse).
+    val cambio = remember { Animatable(1f) }
+    val acceso = svc.session.phase !in setOf(Phase.IDLE, Phase.SUCCESS)
+    val voce = remember { Animatable(if (acceso) 1f else 0f) }
+    // Spento (fermato o buttato) torna a riposo con lo scatto che richiude, non quello svelto: si vede passare.
+    LaunchedEffect(acceso) { voce.animateTo(if (acceso) 1f else 0f, if (acceso) Scatto.molla() else Scatto.richiude()) }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
         val margin = with(density) { PillGeometry.MENU_MARGIN.dp.toPx() }
-        // Il pannello è largo quanto la carta; alto quanto serve: si misura il contenuto e il pannello lo segue
-        // con lo scatto della pillola (Scatto): è lui il movimento della carta che esce, una molla sola.
-        // Stretto (i cassetti e il microfono) finché non esce una carta o non parli: allora si allarga (morfa tra le fasi).
-        val largo = svc.carta != null || svc.session.phase !in setOf(Phase.IDLE, Phase.SUCCESS)
-        val mwDp by animateFloatAsState(
-            if (largo) PillGeometry.PANNELLO_W else PillGeometry.PANNELLO_STRETTO,
-            Scatto.molla(), label = "menuW",
-        )
-        val mw = minOf(with(density) { mwDp.dp.toPx() }, w - margin * 2)
-        var contenuto by remember { mutableFloatStateOf(0f) }
-        // Mentre un cassetto si fonde con la sua carta (CarteFuse) il pannello la segue passo passo: la molla è
-        // già della carta, e due molle in fila farebbero inseguire il bordo.
-        val alto = remember { Animatable(0f) }
-        val voluto = if (contenuto > 0f) contenuto else with(density) { PillGeometry.PANNELLO_MIN.dp.toPx() }
-        LaunchedEffect(voluto) {
-            if (alto.value == 0f || svc.morfa) alto.snapTo(voluto) else alto.animateTo(voluto, Scatto.molla())
-        }
-        val mh = alto.value.coerceAtLeast(1f)
+        val largo = minOf(with(density) { PillGeometry.PANNELLO_W.dp.toPx() }, w - margin * 2)
+        val mw = minOf(with(density) { Coreografia.larghezza(carta.value, voce.value, PillGeometry.PANNELLO_STRETTO, PillGeometry.PANNELLO_W).dp.toPx() }, largo)
         // Il registratore resta accanto alla pillola: la carta cresce verso l'alto.
         val right = if (nest != null) nest.center.x > w / 2 else svc.pillRight
         val left = if (right) w - mw - margin else margin
-        val bottom = if (nest != null) nest.top - margin
-        // Mai fin su in cima: il pannello resta verso il centro (la carta si scorre).
-        else (bar.center.y + with(density) { PillGeometry.SOTTO_LA_PILLOLA.dp.toPx() }).coerceIn(minOf(mh + h * 0.12f, h - margin * 4), h - margin * 4)
-        val menu = Rect(left, bottom - mh, left + mw, bottom)
+        // Il pannello alto [mh] (il contenuto, misurato): mai fin su in cima, resta verso il centro (la carta si scorre).
+        fun menu(mh: Float): Rect {
+            val bottom = if (nest != null) nest.top - margin
+            else (bar.center.y + with(density) { PillGeometry.SOTTO_LA_PILLOLA.dp.toPx() }).coerceIn(minOf(mh + h * 0.12f, h - margin * 4), h - margin * 4)
+            return Rect(left, bottom - mh, left + mw, bottom)
+        }
         val p = t.value
+        var contenuto by remember { mutableFloatStateOf(0f) }
 
         // Velo: un tocco fuori richiude, la registrazione continua.
         Box(
@@ -742,8 +739,18 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
                 .background(Color.Black.copy(alpha = 0.32f * p.coerceIn(0f, 1f)))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { collapse() }
         )
+        // Il pannello (10 nov, suo: «la chiusura va a fasi, prima in verticale e poi in orizzontale; prima andava
+        // bene»): come in 95c2384, una forma sola [Blob] nel rettangolo che va dalla pillola al pannello con lo
+        // scatto [t]: larghezza e altezza insieme, dallo stesso valore. Il contenuto le sta dentro (largo quanto lei,
+        // in basso) e il pannello è alto quanto lui con la stessa molla; mentre lo scatto stesso, la carta, il cambio
+        // di cassetto o la voce lo fanno crescere lo segue passo passo (l'altezza non rincorre la larghezza), e chiudendo non si rimisura più (resta la forma di partenza).
+        val alto = remember { Animatable(0f) }
+        val voluto = if (contenuto > 0f) contenuto else with(density) { PillGeometry.PANNELLO_MIN.dp.toPx() }
+        LaunchedEffect(voluto) {
+            if (alto.value == 0f || t.isRunning || carta.isRunning || cambio.isRunning || voce.isRunning) alto.snapTo(voluto) else alto.animateTo(voluto, Scatto.molla())
+        }
         Blob(
-            rect = lerpRect(bar, menu, p),
+            rect = lerpRect(bar, menu(alto.value.coerceAtLeast(1f)), p),
             // Si apre dal suo colore (a riposo e mentre trascrive) o da quello dello stato, mai dal grigio.
             color = lerp(
                 if (isRest(svc.session.phase) || svc.session.phase == Phase.PROCESSING) Palette.AccentA else barColor(svc.session.phase),
@@ -752,16 +759,16 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
             shadow = p.coerceIn(0f, 1f),
             maxRadius = with(density) { PillGeometry.MENU_RADIUS.dp.toPx() },
         ) {
-            val visible = ((p - 0.55f) / 0.45f).coerceIn(0f, 1f)
             Pannello(
-                svc,
+                svc, carta, cambio, voce.value,
                 maxCarta = with(density) { (h * 0.36f).toDp() },
+                larghezzaCarta = with(density) { largo.toDp() } - PADDING_PANNELLO * 2,
                 onCollapse = ::collapse,
                 modifier = Modifier
                     .fillMaxSize()
                     .wrapContentHeight(Alignment.Bottom, unbounded = true)
-                    .onSizeChanged { contenuto = it.height.toFloat() }
-                    .alpha(visible),
+                    .onSizeChanged { if (!closing) contenuto = it.height.toFloat() }
+                    .alpha(((p - 0.55f) / 0.45f).coerceIn(0f, 1f)),
             )
         }
     }
@@ -778,18 +785,23 @@ private fun Blob(
     content: @Composable () -> Unit = {},
 ) {
     val density = LocalDensity.current
-    val radius = with(density) { minOf(minOf(rect.width, rect.height) / 2, maxRadius).toDp() }
-    val shape = RoundedCornerShape(radius)
     Box(
         Modifier
             .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
             .size(with(density) { rect.width.coerceAtLeast(1f).toDp() }, with(density) { rect.height.coerceAtLeast(1f).toDp() })
-            .shadow((16 * shadow).dp, shape, clip = false) // ds:eccezione: il movimento di Transcri (l'ombra cresce mentre si apre)
-            .background(color, shape)
-            .then(if (stroke) Modifier.border(1.dp, Palette.Stroke, shape) else Modifier)
-            .clip(shape),
+            .pelle(color, shadow, stroke, maxRadius),
         contentAlignment = Alignment.Center,
     ) { content() }
+}
+
+/** La pelle di Transcri: l'ombra che cresce con [shadow], il fondo, il bordo, e dentro tutto ritagliato nella capsula. */
+private fun Modifier.pelle(color: Color, shadow: Float, stroke: Boolean = true, maxRadius: Float = Float.MAX_VALUE): Modifier {
+    val shape = Capsula(maxRadius)
+    return this
+        .shadow((16 * shadow).dp, shape, clip = false) // ds:eccezione: il movimento di Transcri (l'ombra cresce mentre si apre)
+        .background(color, shape)
+        .then(if (stroke) Modifier.border(1.dp, Palette.Stroke, shape) else Modifier)
+        .clip(shape)
 }
 
 // --- Il pannello (Figma B12, riga «7 · Finale») ---
@@ -800,19 +812,25 @@ private fun Blob(
  * La pulizia (Fedele · Pulita · Riassunto) compare sotto quando parli.
  */
 @Composable
-private fun Pannello(svc: PillService, maxCarta: Dp, onCollapse: () -> Unit, modifier: Modifier) {
+private fun Pannello(
+    svc: PillService, carta: Animatable<Float, AnimationVector1D>, cambio: Animatable<Float, AnimationVector1D>, voce: Float,
+    maxCarta: Dp, larghezzaCarta: Dp,
+    onCollapse: () -> Unit, modifier: Modifier,
+) {
     val s = svc.session
     val haUltima = s.hasLast && s.phase != Phase.LIMITED
     val quali = Cassettiera.quali(haUltima, svc.vocali.isNotEmpty(), s.phase == Phase.RECORDING && s.paused)
     val parla = s.phase == Phase.RECORDING || s.phase == Phase.PROCESSING
-    Column(modifier.padding(horizontal = 12.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier.padding(horizontal = PADDING_PANNELLO, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         // I cassetti, e la carta di quello aperto che cresce da lui: una forma sola (CarteFuse).
-        CarteFuse(svc, quali, maxCarta)
-        StatoRegistratore(svc.session)
+        // Nella prova guidata dell'introduzione solo il registratore: niente cassetti (l'ultima, i vocali, la pausa).
+        if (svc.guidata == null) CarteFuse(svc, quali, carta, cambio, maxCarta, larghezzaCarta)
+        StatoRegistratore(svc.session, Coreografia.conVoce(parla, voce, s.phase != Phase.IDLE || s.notice != null))
         Spacer(Modifier.height(6.dp))
-        TastiVoce(svc, onCollapse)
-        AnimatedVisibility(parla) {
-            Column {
+        TastiVoce(svc, voce, onCollapse)
+        // La pulizia compare con la voce, dallo stesso scatto del pannello che si allarga (e se ne va con lei).
+        if ((parla || voce > 0f) && svc.guidata == null) {
+            Column(Modifier.comparsa(voce)) {
                 Spacer(Modifier.height(10.dp))
                 ModeSlider(s)
             }
@@ -820,36 +838,41 @@ private fun Pannello(svc: PillService, maxCarta: Dp, onCollapse: () -> Unit, mod
     }
 }
 
-/** Sopra i tasti: il tempo e l'onda mentre registri, un errore o un avviso; a riposo niente. */
+/** Il pannello: il margine dentro, ai lati. */
+private val PADDING_PANNELLO = 12.dp
+
+/** Sopra i tasti: il tempo e l'onda mentre registri, un errore o un avviso; a riposo niente. [quanto]: quanto si vede. */
 @Composable
-private fun StatoRegistratore(s: Session) {
-    if (s.phase == Phase.IDLE && s.notice == null) return
-    Box(Modifier.fillMaxWidth().padding(top = 6.dp).heightIn(min = 26.dp), contentAlignment = Alignment.Center) { Status(s) }
+private fun StatoRegistratore(s: Session, quanto: Float) {
+    if (quanto <= 0f) return
+    Box(Modifier.comparsa(quanto).fillMaxWidth().padding(top = 6.dp).heightIn(min = 26.dp), contentAlignment = Alignment.Center) { Status(s) }
 }
 
 /** I tasti di Transcri: butta · il tasto grande · pausa. */
 @Composable
-private fun TastiVoce(svc: PillService, onCollapse: () -> Unit) {
+private fun TastiVoce(svc: PillService, voce: Float, onCollapse: () -> Unit) {
     val s = svc.session
     val recording = s.phase == Phase.RECORDING
-    // A riposo c'è solo il microfono, al centro: i posti di butta e pausa esistono solo quando servono
-    // (vuoti, spingevano il microfono a destra nel pannello stretto).
-    if (!recording && s.phase != Phase.ERROR) {
-        Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) { MainButton(svc, onCollapse) }
-        return
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            if (recording || s.phase == Phase.ERROR) CircleButton(Icons.Rounded.DeleteOutline, "Butta l'audio", Palette.Muted) { s.discard() }
+    // A riposo c'è solo il microfono, al centro: i posti di butta e pausa si aprono di lato con la voce, dallo stesso
+    // scatto del pannello (vuoti, spingevano il microfono a destra nel pannello stretto).
+    // Nella prova guidata solo il tasto grande (fermare): niente butta né pausa.
+    val lati = if (svc.guidata != null) 0f else Coreografia.conVoce(recording, voce, s.phase == Phase.ERROR)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp * lati)) {
+        Box(Modifier.comparsa(lati, diLato = true).size(40.dp), contentAlignment = Alignment.Center) {
+            // Buttato (11 nov, suo): il pannello resta aperto e torna a riposo, col microfono; butta e pausa si
+            // ritirano con la voce ([Coreografia.conVoce]) e intanto restano disegnati, spenti.
+            if (svc.guidata == null && (recording || s.phase == Phase.ERROR || lati > 0f)) CircleButton(Icons.Rounded.DeleteOutline, "Butta l'audio", Palette.Muted) {
+                if (recording || s.phase == Phase.ERROR) s.discard()
+            }
         }
         Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) { MainButton(svc, onCollapse) }
-        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            if (recording) {
+        Box(Modifier.comparsa(lati, diLato = true).size(40.dp), contentAlignment = Alignment.Center) {
+            if (svc.guidata == null && (recording || lati > 0f)) {
                 CircleButton(
                     if (s.paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
                     if (s.paused) "Riprendi" else "Pausa",
                     if (s.paused) Palette.Paused else Palette.Text,
-                ) { s.togglePause() }
+                ) { if (recording) s.togglePause() }
             }
         }
     }

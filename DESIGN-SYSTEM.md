@@ -68,6 +68,12 @@ pezzi nuovi, solo nomi nuovi nei pezzi nuovi. I file si dividono per responsabil
 | 6 nov, giro 6: titoli (`core/titoli.dart`), la fascia a due righe, la privata a macchie (`Durata.giroPrivata`, `Tinte.macchie`), il cerchio del colore (`Misura.cerchioColore`/`anello`/`anelloStacco`), i filtri in Trascrivi, le cartelle che si aprono lì (via `cartella_aperta.dart`, `si_apre_da.dart`), `Intestazione.sottoPillole` | **0** | **0** | **0** | **0** | **0** | **0** |
 | 6 nov, giro 7: i filtri in tre file (`FiltriPossibili`, `molecole/filtri_voci.dart`, `molecole/tasto_filtri.dart`, `filtri_trascrivi.dart`), via le Cartelle dal Dock e i titoli (prove), la privata tagliata e ferma, schede più staccate (`Token.kt` scheda), l'incavo che si vede (`Ombra.incavo(luce)`), via Literata | **0** | **0** | **0** | **0** | **0** | **0** |
 | 7 nov: solo la rosa per il colore (via la fila dei nove), la ✕ al centro, il dito che scorre (`Misura.rosaSotto`/`rosaFerma`), prova/Annulla/Fatto (`core/cambio_colore.dart`), la ruota al posto di `Icons.palette` (`SelectionBar.colore`) | **0** | **0** | **0** | **0** | **0** | **0** |
+| 7 nov, rifiniture: la rosa che esce svelta dopo un colore (`Durata.rosaVia`), il puntino dei colori in uso (`Misura.rosaUso`/`rosaUsoFuori`, `Segni.usi`), la fila che scorre di lato con il bordo sfumato (`atomi/fila_scorre.dart`: filtri accesi e pannello), le ricerche recenti (`core/ricerche_recenti.dart`, `molecole/ricerche_fatte.dart`), il lucchetto nella trascrizione aperta, gli argomenti accesi dal tasto della nota (`Core.accendiArgomenti`) | **0** | **0** | **0** | **0** | **0** | **0** |
+| 7 nov, giro 2: il fondo dell'introduzione sempre uguale (`molecole/piede_intro.dart`: «Salta» a sinistra, il principale a destra), la prova di Transcri (`prova_transcri.dart`, `microfonoPronto`, `VoceInBarra.tempo`, `Shell.atterra`), «Fine» nella barra delle scelte, la copertura della privata che arriva sulla scheda (`AnimatedSwitcher`, `Durata.lenta`), il ponte del Floater in un Path solo (`PonteFuso.kt`) | **0** | **0** | **0** | **0** | **0** | **0** |
+| 7 nov, giro 3 (rifinitura): «Offusca» al posto di «Privata» (`Offusca`, `BottoneOffusca`, `CoperturaPrivata.neutra`, anche sulle note), il cestino sotto il titolo, la rosa che spegne i colori liberi (`Misura.rosaLibera`/`rosaLiberaVelo`), la regola dell'etichetta (`core/regole_colori.dart`), `SegnoAuto`, una conferma sola (`molecole/conferma.dart`), l'introduzione in `avvio.dart`, il nido vuoto con la sagoma di Transcri (`TranscriCorpo.forma`, `TrattiNido`) | **0** | **0** | **0** | **0** | **0** | **0** |
+| 10 nov, ultimo giro: `Dialogo`, `PillolaBordo`, togli/proponi etichette (`Tinte.lontane`), l'anello della prova (`Misura.anelloVoce*`, `pillola*`), la fascia della scheda | **0** | **0** | **0** | **0** | **0** | **0** |
+| 10 nov, giro finale: le proposte di colore in Trascrivi (`core/proposte_colore.dart`, `molecole/proposte_colore.dart`), «Proponi regole», `Core.chiedi` | **0** | **0** | **0** | **0** | **0** | **0** |
+| 10 nov, dopo il giro finale: la pagina «Da sistemare» (in attesa e proposte di colore), `atomi/contatore.dart`, il titolo in cima di una misura sola, la prova con la pillola vera (`inPixel`, `chiediSopraLeApp`) | **0** | **0** | **0** | **0** | **0** | **0** |
 
 ## La lista (righe di C0)
 
@@ -82,6 +88,7 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
 - ☑ BottoneIcona: `atomi/bottone_icona.dart` (icona piccola sotto i 40: lo usano anche i ComandiVoce); RoundAction (ora nuda) e PowerBadge passano da lì, IconButton dal tema; nel Kotlin i tasti del Floater prendono i colori da Palette (token)
 - ☑ BarraInFondo: `atomi/barra_in_fondo.dart`, le barre in fondo (Dock, barra delle cose scelte, barra sotto la nota e sotto la trascrizione): i suggerimenti dei tasti escono sopra il dito, non sotto
 - ☑ Chip: `atomi/chip_stato.dart` («Dati finti»; StatusChip tolto)
+- ☑ FilaScorre (7 nov): `atomi/fila_scorre.dart`, una fila che se non ci sta scorre di lato, col bordo sfumato dalla parte dove continua; la usano i filtri accesi sotto il titolo e le file del pannello dei filtri
 - ☑ Interruttore e Campo: dal tema (suggerimento leggibile, contorno solo da attivo)
 - ☑ Scheda: `atomi/scheda.dart`, la usano MiniCard, NoteCard, PezzoArgomento, Chiave trovata
 - ☑ Cestino e Copia: colori dei token (armato = errore tenue, copiato = ✓ su successo tenue)
@@ -155,7 +162,7 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
   frase, note e trascrizioni insieme; le private mai. Un campo senza fondo né contorno è uno solo: `atomi/campo_nudo.dart`
   (`CampoNudo.decorazione`, anche nella trascrizione aperta e nella nota).
 - ☑ Tolti StatusChip, StatusSheet e `status.dart`: chiave mancante → la chiede Transcri; minuti finiti → tocco su Transcri che dorme apre l'Utilizzo.
-- ☑ Buttare una registrazione in attesa (sua richiesta): toccando la riga si apre `molecole/foglio_in_attesa.dart` (giorno, ora, durata, cestino; «Riprova tutte»). Riprovarne una sola: il nativo non lo sa fare (solo tutte).
+- ☑ Buttare una registrazione in attesa (sua richiesta): toccando la riga si apre (dal 10 nov) la pagina «Da sistemare», `ui/da_sistemare.dart` con `molecole/sezione_in_attesa.dart` (giorno, ora, durata, cestino; «Riprova tutte»). Riprovarne una sola: il nativo non lo sa fare (solo tutte).
 - ☑ Trascrivi: `molecole/titolo_giorno.dart` (22) ☑; carosello con `Scheda.fondo/forma` ☑; data che scorre = `atomi/etichetta_sospesa.dart` (lo stesso del nome del potere: un atomo solo) ☑; **la data in cima**
   (6 nov, giro 4: «come Samsung Gallery»): `molecole/scorri_giorni.dart` (`ScorriGiorni`, era `_FastScroll` in Trascrivi) mette,
   mentre scorri, il giorno che stai guardando in cima, al centro sotto le pillole, e la toglie poco dopo che ti fermi; trascinando
@@ -186,7 +193,10 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
 - ☑ Liste fluide (3 nov): Trascrivi e Pensieri costruiscono solo quello che si vede (Trascrivi una lista al contrario, un giorno per riga; Pensieri due colonne pigre, `Masonry` è uno sliver); rileggendo dal nativo si ridisegna solo se qualcosa è cambiato (`==` su Entry, Note, Album); il rosso del cestino tenuto premuto è sopra la scheda, non più un filtro di colore; le letture delle liste nel Kotlin sono fuori dal thread principale. Misure: `test/fluido_test.dart`
 - ☑ Stati vuoti: `molecole/stato_vuoto.dart`, uno solo per Trascrivi, Pensieri, Argomenti
 - ☑ Impostazioni: colori, testi, raggi dai token; le etichette dei gruppi usano EtichettaGruppo (erano due copie)
-- ☑ Chiave trovata: scheda neutra (Scheda), verde solo la spunta, bottone Pieno. ◐ Introduzione: la testata coi colori di Transcri è un'eccezione dichiarata
+- ☑ Chiave trovata: scheda neutra (Scheda), verde solo la spunta; «Usa questa chiave» è il principale del fondo. ☑ Il fondo
+  dell'introduzione (`PiedeIntro`, 7 nov): su ogni pagina (1 cos'è, 2 la chiave, 3 la prova) «Salta» in basso a sinistra, il
+  conteggio in mezzo, il principale in basso a destra. ☑ La prova (`ProvaTranscri`): Prova → Stop → Trascrivo…, poi si entra
+  e Transcri atterra nel nido; senza chiave, microfono o rete lo dice in una riga e si salta. ◐ Introduzione: la testata coi colori di Transcri è un'eccezione dichiarata
 
 ### Colori, privata, unisci, cartelle (5 nov, Figma D1–D2)
 - ☑ Tavolozza: `ds/tinte.dart` (`Tinte`), 16 tinte × 7 luci in HSL (6 nov, giro 5: erano 7 × 7; le 9 nuove in fondo, vedi sotto) (saturazione 62%), un posto solo. Un colore = (tinta, luce),
@@ -203,7 +213,7 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
   **sceglie** e si comincia a scegliere (vibra), come nella Galleria; poi un tocco sceglie o toglie. Via il menu che si
   staccava (`menu_scheda.dart`, `Velo.menu`, `Scala.sollevata`, `Durata.solleva`, `Curva.dopo`: tolti).
   «Seleziona» (6 nov): non più un tasto nell'intestazione (via `tasto_scegli.dart`) ma una voce del ⋮ (dell'intestazione), che
-  accende lo stesso interruttore, `TrascriviPage.scegliendo` (lo accende anche tenere premuta una scheda; lo spegne «Annulla»).
+  accende lo stesso interruttore, `TrascriviPage.scegliendo` (lo accende anche tenere premuta una scheda; lo spegne «Fine»).
   Una cartella aperta ha un interruttore suo: scegliere lì non tocca Trascrivi sotto.
 - ☑ La scheda scelta (giro 3: «si deve staccare anche se sono tutte marroni»): resta a colori, contorno spesso nel colore
   del testo (`Misura.bordoScelta`), l'ombra «appoggiato», `atomi/spunta_scelta.dart` piena nell'angolo, si stringe a
@@ -214,8 +224,8 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
   cresce), spazio in fondo alla lista e barra; il contenuto della scheda non si ricostruisce quando arriva il filtro (GlobalKey). La regola sta in un atomo solo, `atomi/aspetto_scelta.dart`, lo stesso delle cartelle. **Ombre calde**: `Ombra.*` prendono la tinta da un posto solo (`Ombra._tinta`,
   marrone scuro), non più il nero.
 - ☑ La barra delle scelte (`molecole/barra_scelte.dart`, era in `common.dart` che la riesporta; la usano Trascrivi, Pensieri, le
-  cartelle e la cartella aperta): in alto «Nessuna scelta» / «1 scelta» / «N scelte» (`SelectionBar.etichetta`) e **«Annulla»**
-  (6 nov: la parola, non più la X); sotto le azioni coi nomi. API: `SelectionBar(quante:, onClose:, actions:)`, ogni azione
+  cartelle e la cartella aperta): in alto «Nessuna scelta» / «1 scelta» / «N scelte» (`SelectionBar.etichetta`) e **«Fine»**
+  (6 nov: la parola, non più la X; 7 nov: «Fine», non «Annulla»: le azioni valgono subito, qui si esce soltanto); sotto le azioni coi nomi. API: `SelectionBar(quante:, onClose:, actions:)`, ogni azione
   `(icona, nome, (Rect dove) {})`: `dove` è il tasto alto fino in cima alla barra, così quello che apre spunta sopra la barra.
   Trascrivi: Colore, Copia, Condividi, Unisci (da due), Privata / Visibile, Elimina.
   **Al posto del Dock** (6 nov: «è inutile navigare mentre scegli»): `ConSelezione` mette la barra nel posto del Dock (stesso
@@ -467,3 +477,183 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
   `lettura_grana_test`: almeno 1,3:1 dall'isola in alto, 1,15:1 a metà.
 - ☑ **Via Literata**: i file, la licenza, il `pubspec`, la prova «Leggere in Literata», `SceltaLettura`. Resta Onest 15/24.
 - «Seleziona» resta nel ⋮ e tenendo premuta una scheda (anche con le Cartelle nascoste).
+
+## Giro 8 (7 nov): rifinitura
+
+- **Offusca** (non chiude a chiave, copre): `Offusca` in `atomi/copertura_privata.dart` dà nome e icona (occhio chiuso /
+  «Mostra») a menu, barre e scelta; `BottoneOffusca` nelle barre in fondo (trascrizione aperta, nota). Il segno nel
+  codice resta `privata`. La scheda offuscata mostra il suo **titolo** (`Titoli.di`; senza titolo «Offuscata»). Le
+  **note** si offuscano anche loro (`Note.privata`, salvato nel JSON delle note, le vecchie: false): copertura neutra
+  (`CoperturaPrivata.neutra`) sotto il titolo, «Offusca» nella scelta e in alto nella nota; la ricerca le salta.
+- **Scheda**: fascia riga 1 solo il titolo; riga 2 l'ora, le iconcine (fonte, AI, `SegnoAuto` se il colore l'ha messo
+  l'app) e il cestino a destra.
+- **Rosa**: i colori tuoi (nome, regola o trascrizioni) pieni; i liberi più piccoli (`Misura.rosaLibera`) e velati
+  (`Misura.rosaLiberaVelo`). Sotto il nome la **regola** («Metti qui le trascrizioni che parlano di…») e «Offusca
+  sempre questa etichetta» (`RegoleColori`, canale `regoleColori` / `salvaRegola`).
+- **Conferme**: una sola (`Conferma`): a destra il principale pieno alto, a sinistra il secondario solo testo. Rosa
+  («Fatto»), titolo («Fatto»), «Rinomina», «Rimuovi» la chiave, «Apri» il permesso, «Salva» il testo del modo; «Fatto»
+  della nota e il fondo dell'introduzione usano lo stesso `Bottone` pieno alto.
+- **Introduzione** (`avvio.dart`, provata in `test/onboarding_test.dart`): non resta mai sul bianco se il nativo non
+  risponde; la chiave rifiutata non ritorna dagli appunti e se ne può incollare un'altra; il principale è spento col
+  campo vuoto; Groq che non si apre lo dice; la prova butta la voce se torni indietro mentre ascolta, scorre su un
+  telefono basso, il fondo non va a capo (`FittedBox`) e non si prende più tutta l'altezza (`heightFactor`).
+- **Nido vuoto**: buio e tratteggio con la sagoma di Transcri (`TranscriCorpo.forma`), grandi quanto lui nel nido.
+- **A pezzi** (movimenti): la barra in cima che si ritira (altezza e velo da un movimento solo), il giorno che si apre
+  e la sua freccia (stessa curva).
+- **Nel Kotlin (stesso giro, agente K)**: il Floater si muove con una coreografia sola (`Coreografia.kt`: un solo
+  avanzamento per tutti i pezzi, niente tempi propri); le regole dei colori (`RegoleColori.kt`, `engine/ColoreRegole.kt`,
+  canale `regoleColori` / `salvaRegola`): «Colora da sola» colora solo i colori con una regola e solo quando è sicuro,
+  «offusca sempre» la offusca; i titoli (`Titolatore.kt`) anche sulle offuscate, con `titoloUtente` (il titolo l'hai
+  scritto o tolto tu: «Rifai i titoli» non lo tocca).
+
+## Giro 9 (10 nov): Kotlin, agente K
+
+- **Mai tagliato** (`Pulitura.kt`, `PulituraTest`): la pulizia va a pezzi (8000 caratteri, tra le frasi), il tetto di
+  token è proporzionale al pezzo (× 1,6 più il ragionamento) con `reasoning_effort` corto; una risposta `length` o vuota
+  non si accetta mai: si riprova col tetto doppio (al modello che non ragiona, se Groq l'offre: `Store.riservaPulizia`),
+  poi il pezzo si divide in due (due volte), e in fondo restano le parole dette di quel pezzo. Titoli: un nuovo
+  tentativo col tetto largo, se no nessun titolo (mai a metà). Whisper: nessun pezzo saltato (`Groq.tuttiIPezzi`).
+- **Il Floater si richiude** con lo stesso scatto dell'apertura, all'indietro, in `Durate.NORMALE` (`Scatto.richiude`):
+  in `VELOCE` tornava al punto senza che si vedesse.
+- **Regole dei colori**: senza una regola scritta vale il nome (`RegoleColori.effettive`, `daNome` nel canale);
+  «offusca sempre» acceso offusca anche quelle che hanno già il colore (`salvaRegola` → `{offuscate}`); «colora le sue
+  di prima» (`coloraRetro` → `{ids}`, `annullaColoraRetro`, l'avviso `coloratiRetro`). Le offuscate hanno il titolo per prime.
+
+### Giro 10 nov (lucidatura v3)
+
+- **Etichette** (Impostazioni, sotto «Colora da sola»): `ui/etichette.dart` + `molecole/riga_etichetta.dart`. La rosa
+  tiene solo colore e nome; qui per ogni colore con nome o in uso: puntino, nome, quante, la regola (parte col nome,
+  uguale al nome vale vuota) e «Offusca sempre» (accesa copre anche quelle di prima: «Offuscate N · Annulla» rimette
+  in vista solo quelle che lo erano). Il primo nome nella rosa chiama `coloraRetro` → «Ho colorato N come «nome» ·
+  Annulla» (`annullaColorati`, lo stesso per l'evento nativo `coloratiRetro`).
+- **Offuscate senza titolo**: mai «Offuscata», l'ora tenue (`Titoli.inAttesa`: «Trascrizione delle 21:40», «Nota delle…»).
+  `hm` sta in `core/orario.dart` (una sola, anche per le impostazioni).
+- **Prova dell'introduzione**: dopo `Durata.provaDiLato` Transcri va sul bordo col fumetto «Io sto qui…»; tenuto premuto
+  (o «Stop») si spegne; pronta, la scheda «Ecco la tua prima trascrizione» al centro, «Entra» la fa volare nella lista
+  (`molecole/volo_prima.dart`, `Durata.voloPrima`, `attesaVoloPrima`) e Transcri atterra nel nido.
+
+### Ultimo giro 10 nov (sua lista: «è quasi tutto pronto»)
+
+- **Etichette**: in cima «Le etichette sono i colori della rosa…»; la regola vuota non riscrive il nome (si legge come
+  suggerimento «di cosa parlano (vuota: «nome»)»: era il nome «doppio»), due colori con lo stesso nome lo dicono
+  («Due colori con questo nome: questo è Blu 3»). Il cestino della riga apre `molecole/togli_etichetta.dart` (via nome,
+  regola e «Offusca sempre»; «Togli il colore dalle trascrizioni» a scelta). «Proponi etichette»: a Groq solo i titoli
+  (`Proposte.kt`, `Groq.etichette`), anteprima con le spunte (`molecole/proposte_etichette.dart`), colori liberi e
+  distinti (`Tinte.lontane`, `Tinte.giroIntero`), prima la regola poi il nome. Un nome nuovo nella rosa: Groq propone
+  la regola in fondo (`Groq.regolaPer`, scritta solo se non ne hai una: `Proposte.daSalvare`). Risposte corte mai
+  tagliate: `Risposta.primaIntera` (anche il titolo).
+- **Una cornice per i dialoghi**: `molecole/dialogo.dart` (`Dialogo`: titolo, contenuto, `Conferma`), usata da
+  «Rinomina», «Togli» e «Proponi».
+- **Prova dell'introduzione**: si parte anche toccando lui; l'anello della voce staccato dal corpo
+  (`Misura.anelloVoce`/`anelloVoceStacco`, il vuoto è `col.pagina`); di lato diventa la pillola del bordo
+  (`atomi/pillola_bordo.dart`, `Misura.pillolaLarga`/`pillolaAlta`/`pillolaVoce`); il titolo sta sopra la scheda,
+  che è la `SchedaTrascrizione` vera; con «Entra» la pillola se ne va. Il fumetto non prende i tocchi.
+- **Scheda, la fascia**: l'ora e le iconcine nel loro spazio, il cestino sempre a destra e centrato con l'ora (prima
+  `Flexible` + `Spacer` si dividevano lo spazio e il cestino si spostava); `test/scheda_fascia_test.dart`.
+- **Floater**: aprire e chiudere di nuovo come in 95c2384 (una forma sola `Blob` tra la pillola e il pannello,
+  larghezza e altezza dallo stesso scatto; chiudendo il contenuto non si rimisura). Titoli: permesso
+  `ACCESS_NETWORK_STATE` e `TitoliRegole.inRete` che non si ferma mai su un errore.
+
+### Giro finale 10 nov (Floater fluido, Condividi, etichette)
+
+- **Floater**: da un cassetto all'altro la carta non si chiude più, cambia forma (`Coreografia.passo` → `Passo.CAMBIA`,
+  uno scatto `cambio` con `Scatto.molla`: altezza da A a B, il ponte che scivola, i colori dei cassetti, il contenuto
+  che passa, `Coreografia.tra`/`esce`/`entra`). L'altezza del pannello segue passo passo anche aprendo e cambiando
+  (non rincorre la larghezza). Il bordo di «Stai rispondendo» è lo stesso Path di carta + ponte + cassetto
+  (`formaFusa(…, conCassetto = true)`, `Stroke`). Vocali: «Vocali di WhatsApp (2)» (`Provenienza.testata`) e la X
+  della testata che li toglie tutti (`togliVocali`); ognuno ha ancora la sua.
+- **Condividi**: una voce sola, «Trascrivi» (via le scorciatoie, `ShareShortcuts.ritira`); quello che non è pronto
+  (il file dell'altra app, la chiave nel Keystore) si aspetta con `Pronto.attendi` / `Store.chiavePronta`.
+- **Etichette**: «Proponi etichette» manda a Groq anche i nomi che hai (non li doppia); «Proponi regole» propone una
+  regola migliore per ognuna (`Proposte.perRegole`/`leggiRegole`, la stessa anteprima con «Applica»).
+- **Colora da sola propone**: niente più colori messi in silenzio (via «colorata», «coloratiRetro»). Il nativo tiene
+  le proposte (`ProposteColore.kt`, `Store.proposteColore`/`rifiutateColore`); in cima a Trascrivi «Proposte di colore
+  (N)» con ✓ / ✕ e «Accetta tutte» (`SezioneProposteColore`). Rifiutata non torna.
+
+### Dopo il giro finale 10 nov (sue prove)
+
+- **Proposte di colore fuori dalla lista**: stanno con le registrazioni in attesa sotto il titolo di Trascrivi
+  (`RigaInAttesa`): l'orologio giallo «2 registrazioni in attesa di rete» e, accanto, la scintilla di «Colora da sola»
+  (`Icons.auto_awesome_rounded`) «3 proposte di colore», ognuno solo se ha qualcosa; «Riprova» solo con quelle in
+  attesa. Scorrendo, nella pillola del titolo, `InAttesaCorto` (⏱ 2, scintilla 3). Ogni segno apre la pagina «Da
+  sistemare» (`ui/da_sistemare.dart`, `MaterialPageRoute`, la cornice delle sottopagine) sulla sua parte
+  (`DaSistemare.attesa`/`proposte`, `Scrollable.ensureVisible`): prima «In attesa di rete» (`SezioneInAttesa`), poi
+  «Proposte di colore» (`SezioneProposteColore`, «Accetta tutte»); toccato un titolo si apre la trascrizione sopra la
+  pagina (`openEntry`), poi ✓ / ✕. Vuota, lo dice e resta aperta. Il foglio di prima (`foglio_in_attesa.dart`) non c'è
+  più. `TrascriviPage.tutte` tiene tutte le trascrizioni, `ProposteColore.con` le conta. Il numero del tasto «Filtri»
+  è ora un atomo, `atomi/contatore.dart`.
+- **Il titolo in cima** ha una misura sola, `Testo.titoloPillola`, ferma e scorrendo.
+- **«Offusca sempre» retroattivo**: acceso copre tutte quelle dell'etichetta (anche se era già acceso: si rimettono in
+  pari), spento le rimette tutte in vista (`RegoleColori.daCambiare`, `salvaRegola`). A mano una si può ancora offuscare
+  o mostrare; vale fino al prossimo cambio dell'etichetta.
+- **Condividi**: torna la scorciatoia in cima (condivisione diretta), solo «Trascrivi» (`share_shortcuts.xml` con un
+  `share-target`, `ShareShortcuts.publish`); si ritira la vecchia «pensiero». `Pronto.attendi` resta.
+- **Prova dell'introduzione con la pillola vera**: col permesso di stare sopra le altre app parte la pillola nativa già
+  in ascolto dal posto di Transcri (`Core.startPill(ascolta:)`, `record` nel canale); la trascini, la tieni premuta per
+  spegnerla, o «Stop». Fermata da lei vale come «Stop». Senza permesso lo chiede (`chiediSopraLeApp`); con «Non ora»
+  ascolta nella pagina come prima. «Entra» (o «Salta», indietro) la ritira (`Core.stopPill`).
+
+### Giro 11 nov (le sue prove sul telefono)
+
+- **Le proposte di colore non arrivavano**: una regola (frase corta) contro una trascrizione non arriva mai alla soglia di
+  due pezzi dello stesso album (`pair`, 0,80 o 0,94 coi modelli veri). Ora ha la sua, quella della ricerca e delle
+  categorie (`ColoreRegole.decidi(sogliaRegola:)` = `EngineProfile.cercaMinimo`), e regole ed esempi si confrontano per
+  quanto superano ognuno la sua soglia. Su tutte (anche quelle di prima) si rifanno dopo `Durate.ATTESA_PROPOSTE` da
+  un cambio delle etichette, e all'avvio solo se etichette o modello sono cambiati (`Store.proposteImpronta`). Senza il
+  modello degli argomenti «Colora da sola» lo dice nella sua riga.
+- **Prova dell'introduzione a passi**: la pillola vera sta sul bordo destro all'altezza di Transcri (`place`), il fumetto
+  accanto: «Sono qui. Leggi la frase al centro.», dopo `Durata.provaPasso` «Ora tienimi premuto per fermarmi.»; al
+  centro «Leggi ad alta voce» e una frase di otto secondi; a `Durata.provaFerma` si ferma da sola. «Salta» sempre in basso.
+- **La pausa del Floater**: il cassetto si apre solo quando la trascrizione della pausa è arrivata; dentro «…» e gli ultimi
+  5 secondi circa (`Bozza.CODA` 80, da una parola intera).
+- **«Da sistemare»**: una riga in cima dice cos'è; in Impostazioni → Prove (solo coi dati finti) «Da sistemare, di
+  prova» la riempie (`Core.setFakeWaiting`, `ProposteColore.mostraFinte`: finte, mai al nativo).
+- **Note offuscate**: tre parti, titolo, anteprima, informazioni; la copertura sta esattamente sull'anteprima (alta
+  quanto lei, larga quanto la scheda), con lo stesso arrivo delle trascrizioni (`CoperturaPrivata.arriva`).
+- **Floater, «Butta»**: il pannello si richiude con lo scatto di sempre (`collapse`), invece di cambiare forma di colpo.
+- **Widget**: via il bordino chiaro di 1 px (il fondo della forma che ritaglia è trasparente).
+
+### Giro 11 nov, seconda prova
+
+- **Floater, «Butta»**: dopo un vocale condiviso la pillola restava «fuori solo per lui» (`outForShared` non si spegneva
+  mai) e, chiuso il pannello, tornava a casa da sola: ora toccarla (o aprirla) lo spegne.
+- **Note offuscate**: la copertura arriva più calma (vedi sotto, `Durata.copre`).
+- **Proposte di colore**: «Scarta tutte» accanto ad «Accetta tutte» (lo stesso bottone, sotto il titolo; `rifiutaTutte`,
+  `ProposteColore.rifiutaTutte` nel Kotlin). Nessun «Annulla», come «Accetta tutte».
+- **Prova dell'introduzione**: non si ferma più da sola. Il fumetto: «Sono qui e ti ascolto. Leggi la frase qui sotto.»
+  con la frase sotto, grande (`Testo.titoloSezione`); finita la frase (la voce tace da `Durata.provaSilenzio`, o dopo
+  `Durata.provaFatta`) «Ora tienimi premuto, oppure aprimi e tocca Stop.»; fermata «Ricevuto: trascrivo…». La prima
+  pagina dice quello che succede: «Toccalo: vola sul bordo…», «Tienilo premuto e parla… per fermarlo tienilo premuto di
+  nuovo, o aprilo e tocca Stop».
+- **Widget, «Apri»**: la freccia nel riquadro (sembrava un link) è diventata la freccina «›» (`ic_widget_open`, Material
+  arrotondato), nel 4 × 1 accanto ad «Apri» e nel 2 × 1 nel tondo.
+
+### Giro 11 nov, terza prova
+
+- **Floater, «Butta»**: il pannello resta aperto e torna a riposo, col microfono. Butta, pausa, lo stato e la pulizia se ne
+  vanno con la voce (`Coreografia.conVoce`: finita la registrazione seguono lei, non spariscono), che scende con
+  `Scatto.richiude`; il pannello si stringe e si abbassa passo passo con loro.
+- **Prova dell'introduzione**: la pillola sul bordo destro, in alto nel palco (`_Palco.alto`); sotto di lei il fumetto con
+  la freccia in su, sotto ancora la frase. Le fasi le fa avanzare lui («Avanti» nel fumetto): «Sono qui. Leggi la frase
+  qui sotto.» (con «Puoi fermarmi quando vuoi: tienimi premuto.»), «Fatto? Ora tienimi premuto per fermarmi, oppure
+  aprimi e tocca Stop.», «Ricevuto: trascrivo…». Via la voce che tace e il tempo.
+- **Offuscare, più ricco** (`Offuscabile` in `atomi/copertura_privata.dart`, uno solo per trascrizioni e note): il testo si
+  sfoca piano (`Velo.sfocatura`, `ImageFiltered` solo durante il movimento) e sbiadisce, la copertura arriva e le macchie
+  si condensano dal grande e chiaro al loro posto, una dopo l'altra (`Velo.macchieDa`/`macchieChiare`/`macchieDopo`);
+  al contrario rimettendo in vista. `Durata.copre` (700 ms), `Curva.scambio`.
+- **Schede, una forma sola** (`molecole/corpo_scheda.dart`, `CorpoScheda`): in alto il contenuto che si offusca, in fondo
+  titolo e informazioni sempre in vista. Le note come le trascrizioni: il titolo è sceso in fondo, con l'ora.
+
+### Giro 11 nov, quarta prova: la prova guidata
+
+- **La pillola a sinistra**: il lato si ricavava dal centro di Transcri (`place`), che sta due punti a sinistra del centro
+  dello schermo (il suo `Padding` a destra). Ora la prova passa `guida` (l'altezza, in frazione dello schermo): il nativo
+  (`PillService.guidata`) la mette sul bordo destro, a quell'altezza, senza salvarla (`Store.pillRight/pillY` restano i
+  suoi), non la lascia trascinare, e nel pannello c'è solo il tasto grande (niente butta, pausa, cassetti, modi).
+- **L'onda a scatti**: la pagina della prova si ridisegnava tutta a ogni volume della voce; ora ascolta `_vista`, che cambia
+  solo con fase, secondi, pausa ed errore (l'onda e l'anello leggono il volume da soli).
+- **Guidata**: mentre ascolta e trascrive il resto della pagina si spegne (`Velo.guida`); restano chiari la pillola, il
+  fumetto (sempre allo stesso posto, cambia con una dissolvenza in `Durata.lenta`) e la frase. Fasi: «Leggi la frase qui
+  sotto.» («Avanti»), «Ora tienimi premuto per fermarmi, oppure aprimi e tocca Stop.», fermata «Ricevuto: trascrivo…»,
+  poi la scheda senza cestino (`SchedaTrascrizione.onDelete` facoltativo): solo «Entra».
+

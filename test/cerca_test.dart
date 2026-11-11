@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:transcrify/core/filtro_voci.dart';
 import 'package:transcrify/core/native.dart';
+import 'package:transcrify/core/ricerche_recenti.dart';
+import 'package:transcrify/ui/molecole/ricerche_fatte.dart';
 import 'package:transcrify/ui/cerca.dart';
 import 'package:transcrify/ui/molecole/riga_trovata.dart';
 import 'package:transcrify/ui/theme.dart';
@@ -95,4 +97,30 @@ void main() {
       expect(t.takeException(), isNull);
     });
   }
+
+  test('7 nov: le ultime ricerche, al massimo cinque, l\'ultima in cima, senza doppioni', () {
+    var l = <String>[];
+    for (final q in ['uno', 'due', 'tre', 'quattro', 'cinque', 'sei']) {
+      l = RicercheRecenti.conNuova(l, q);
+    }
+    expect(l, ['sei', 'cinque', 'quattro', 'tre', 'due']);
+    expect(RicercheRecenti.conNuova(l, '  Tre  '), ['Tre', 'sei', 'cinque', 'quattro', 'due']);
+    expect(RicercheRecenti.conNuova(l, '   '), l);
+  });
+
+  testWidgets('7 nov: aperta la ricerca, le recenti (tocca e rifai, × e togli); nessuna, cosa si può cercare', (t) async {
+    final scelte = <String>[], tolte = <String>[];
+    Widget vista(List<String> r) => MaterialApp(
+      theme: buildTheme(Brightness.light),
+      home: Scaffold(body: RicercheFatte(ricerche: r, onScegli: scelte.add, onTogli: tolte.add)),
+    );
+    await t.pumpWidget(vista(const []));
+    expect(find.text(RicercheFatte.invito), findsOneWidget);
+    await t.pumpWidget(vista(const ['cena', 'treno']));
+    expect(find.text('RECENTI'), findsOneWidget);
+    await t.tap(find.text('treno'));
+    await t.tap(find.byTooltip('Togli «cena»'));
+    expect(scelte, ['treno']);
+    expect(tolte, ['cena']);
+  });
 }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/native.dart';
-import '../atomi.dart';
-import '../ds.dart';
+import 'conferma.dart';
+import 'dialogo.dart';
 
 /// «Rinomina» una cartella (6 nov, come nei dialoghi di Samsung): il titolo, il campo già pronto per scrivere (vuoto,
 /// col nome di adesso, [attuale], come suggerimento) e in fondo «Annulla» a sinistra e «Rinomina» a destra. «Rinomina»
@@ -42,39 +42,19 @@ class _RinominaState extends State<_Rinomina> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final c = context.col;
-    return Dialog(
-      backgroundColor: c.isola,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Raggio.foglio)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(Spazio.s6, Spazio.s6, Spazio.s6, Spazio.s3),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Rinomina', style: Testo.titoloSezione.copyWith(color: c.testo)),
-            const SizedBox(height: Spazio.s4),
-            TextField(
-              controller: _nome,
-              autofocus: true,
-              textCapitalization: TextCapitalization.sentences,
-              textInputAction: TextInputAction.done,
-              onChanged: (_) => setState(() {}),
-              onSubmitted: (_) => _rinomina(),
-              decoration: InputDecoration(hintText: widget.attuale),
-            ),
-            const SizedBox(height: Spazio.s3),
-            Row(
-              children: [
-                Expanded(child: Bottone('Annulla', tipo: TipoBottone.testo, alto: false, onPressed: () => Navigator.pop(context, false))),
-                Expanded(child: Bottone('Rinomina', tipo: TipoBottone.testo, alto: false, onPressed: _nuovo ? _rinomina : null)),
-              ],
-            ),
-          ],
-        ),
+  Widget build(BuildContext context) => Dialogo(
+    titolo: 'Rinomina',
+    conferma: Conferma(principale: 'Rinomina', onPrincipale: _nuovo ? _rinomina : null, onAnnulla: () => Navigator.pop(context, false)),
+    children: [
+      TextField(
+        controller: _nome,
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        textInputAction: TextInputAction.done,
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (_) => _rinomina(),
+        decoration: InputDecoration(hintText: widget.attuale),
       ),
-    );
-  }
+    ],
+  );
 }

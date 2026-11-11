@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:transcrify/core/native.dart';
+import 'package:transcrify/core/titoli.dart';
 import 'package:transcrify/ui/common.dart';
 import 'package:transcrify/ui/molecole/fila_colori.dart';
 import 'package:transcrify/ui/molecole/scheda_trascrizione.dart';
@@ -346,9 +347,9 @@ void main() {
         expect(storia.first['colore'], '13:4');
         final scelto = find.ancestor(of: find.byIcon(Icons.check_rounded), matching: find.byType(PuntoColore));
         expect(t.widget<PuntoColore>(scelto).etichetta, 'Orchidea');
-        expect(find.text('Nome di Orchidea'), findsOneWidget);
+        expect(find.text('Che nome ha questa etichetta?'), findsOneWidget);
         // «Annulla» nella rosa: torna tutto com'era, anche il nome scritto (non si salva).
-        await t.enterText(find.byType(TextField), 'Relazioni');
+        await t.enterText(find.byType(TextField).first, 'Relazioni');
         await t.tap(find.descendant(of: find.byType(Tavolozza), matching: find.text('Annulla')));
         await t.pumpAndSettle();
         expect(find.byType(Tavolozza), findsNothing);
@@ -360,7 +361,7 @@ void main() {
         await t.pumpAndSettle();
         await t.tap(find.byTooltip('Orchidea'));
         await t.pump();
-        await t.enterText(find.byType(TextField), 'Relazioni');
+        await t.enterText(find.byType(TextField).first, 'Relazioni');
         await t.tap(find.text('Fatto'));
         await chiusa(t);
         expect(find.byType(Tavolozza), findsNothing);
@@ -463,8 +464,8 @@ void main() {
           final cestino = t.getRect(find.descendant(of: schede.at(i), matching: find.byType(DeleteButton)));
           final ora = t.getRect(find.descendant(of: schede.at(i), matching: find.text(hm(entry.at))));
           misure.add(((scheda.bottom - cestino.center.dy).roundToDouble(), (scheda.bottom - ora.center.dy).roundToDouble()));
-          // Dove comincia la fascia: la riga del cestino.
-          if (entry.privata) fasciaPrivata = cestino.top;
+          // Dove comincia la fascia: la riga del titolo (7 nov: il cestino sta sotto, con l'ora).
+          if (entry.privata) fasciaPrivata = t.getRect(find.descendant(of: schede.at(i), matching: find.text(Titoli.di(entry)))).top;
         }
         expect(misure, hasLength(1));
         // La privata: le macchie col lucchetto coprono solo la parte del testo, fino alla fascia (che resta).
@@ -486,10 +487,10 @@ void main() {
         await t.pumpWidget(app(const TrascriviPage(bottom: 76)));
         await t.pump(const Duration(milliseconds: 100));
 
-        // La seconda tenuta premuta, poi la prima (privata: si tocca il lucchetto) e la terza: l'ordine dei tocchi.
+        // La seconda tenuta premuta, poi la prima (privata: si tocca l'occhio) e la terza: l'ordine dei tocchi.
         await t.longPress(find.text('Seconda.'));
         await t.pump();
-        await t.tap(find.byIcon(Icons.lock_rounded).first);
+        await t.tap(find.byIcon(Offusca.icona).first);
         await t.pump();
         await t.tap(find.text('Terza, la più nuova.'));
         await t.pump();
@@ -552,12 +553,23 @@ void main() {
                   'colore': m['colore'],
                   'privata': m['privata'] ?? false,
                   'titolo': m['titolo'],
+                  'titoloChiesto': m['titoloChiesto'] ?? false,
+                  'coloreAuto': m['coloreAuto'] ?? false,
+                  'titoloUtente': m['titoloUtente'] ?? false,
                 },
               )
               .toList(),
           [
             for (final m in prima)
-              {...m, 'colore': m['colore'], 'privata': m['privata'] ?? false, 'titolo': m['titolo']},
+              {
+                ...m,
+                'colore': m['colore'],
+                'privata': m['privata'] ?? false,
+                'titolo': m['titolo'],
+                'titoloChiesto': m['titoloChiesto'] ?? false,
+                'coloreAuto': m['coloreAuto'] ?? false,
+                'titoloUtente': m['titoloUtente'] ?? false,
+              },
           ],
         );
         final vere = t
@@ -580,7 +592,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 100));
       await t.longPress(find.text('Terza, la più nuova.'));
       await t.pump();
-      await t.tap(find.byIcon(Icons.lock_rounded).first);
+      await t.tap(find.byIcon(Offusca.icona).first);
       // La barra sale al posto del Dock: si tocca quando è arrivata.
       await t.pump(Durata.scelta);
       await t.tap(find.text('Unisci'));

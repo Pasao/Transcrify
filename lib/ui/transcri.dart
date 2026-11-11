@@ -6,47 +6,65 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../core/native.dart';
 import 'common.dart';
+import 'molecole/conferma.dart';
 import 'theme.dart';
+
+/// Il microfono (e le notifiche): basta questo per dettare dentro l'app, nel Dock o nella prova dell'introduzione.
+Future<bool> microfonoPronto() async {
+  if (await Core.micGranted()) return true;
+  if (Core.preview.value) {
+    Core.previewGrant('mic');
+    return true;
+  }
+  final s = await Permission.microphone.request();
+  await Permission.notification.request();
+  if (s.isPermanentlyDenied) await openAppSettings();
+  return s.isGranted;
+}
 
 /// I permessi per dettare: si chiedono qui, la prima volta che serve Transcri.
 Future<bool> transcriReady(BuildContext context) async {
-  if (!await Core.micGranted()) {
-    if (Core.preview.value) {
-      Core.previewGrant('mic');
-    } else {
-      final s = await Permission.microphone.request();
-      await Permission.notification.request();
-      if (!s.isGranted) {
-        if (s.isPermanentlyDenied) await openAppSettings();
-        return false;
-      }
-    }
-  }
+  if (!await microfonoPronto()) return false;
   if (!await Core.canDrawOverlays()) {
-    if (!context.mounted) return false;
-    final go = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Un ultimo permesso'),
-        content: const Text(
-          'Per stare sul bordo dello schermo, Transcrify deve poter “mostrare sopra altre app”. '
-          'Nella prossima schermata attivalo e torna qui.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Non ora')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Apri')),
-        ],
-      ),
-    );
-    if (go == true) await Core.openOverlaySettings();
+    if (context.mounted) await chiediSopraLeApp(context);
     return false;
   }
   return true;
 }
 
+/// Il permesso di «mostrare sopra altre app», per la pillola sul bordo: lo spiega in un dialogo e, se vuoi, apre la
+/// schermata di Android dove si accende. True se l'hai aperta (torni qui e riprovi), false con «Non ora».
+Future<bool> chiediSopraLeApp(BuildContext context) async {
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Un ultimo permesso'),
+      content: const Text(
+        'Per stare sul bordo dello schermo, Transcrify deve poter “mostrare sopra altre app”. '
+        'Nella prossima schermata attivalo e torna qui.',
+      ),
+      actions: [
+        Conferma(principale: 'Apri', annulla: 'Non ora', onPrincipale: () => Navigator.pop(ctx, true), onAnnulla: () => Navigator.pop(ctx, false)),
+      ],
+    ),
+  );
+  if (go == true) await Core.openOverlaySettings();
+  return go == true;
+}
+
+/// Dove sta un pezzo sullo schermo in pixel veri, come li vuole il nativo: il centro, e il rettangolo (l, t, r, b).
+/// Da lì parte la pillola ([Core.startPill]) e lì rientra.
+(Offset, List<double>) inPixel(BuildContext pezzo) {
+  final box = pezzo.findRenderObject() as RenderBox;
+  final ratio = MediaQuery.devicePixelRatioOf(pezzo);
+  final tl = box.localToGlobal(Offset.zero) * ratio;
+  final br = box.localToGlobal(box.size.bottomRight(Offset.zero)) * ratio;
+  return (Offset((tl.dx + br.dx) / 2, (tl.dy + br.dy) / 2), [tl.dx, tl.dy, br.dx, br.dy]);
+}
+
 /// Il nido di Transcri: la sua casa tonda dentro l'isola di destra del Dock. Lì sta seduto, respira,
 /// sbatte gli occhi e si guarda intorno. Toccando il nido esce e vola al bordo; toccandolo di
-/// nuovo torna, atterra con un sobbalzo e il nido si illumina. Quando è fuori resta l'incavo ([Ombra.incavo]).
+/// nuovo torna, atterra con un sobbalzo e il nido si illumina. Quando è fuori resta il nido vuoto, tratteggiato ([Ombra.nidoVuoto]).
 /// Tenendolo premuto ascolta restando qui: il suo cerchio diventa rosso e si allarga con la voce, come
 /// la pillola. Se lo trascini fuori, o esci dall'app, continua dal bordo; se torna qui, continua da qui.
 class TranscriNest extends StatefulWidget {
@@ -74,7 +92,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
   static const slot = Misura.tondo;
 
   /// Quanto è grande Transcri dentro la casa: abbastanza margine perché l'anello colorato si legga.
-  static const _inNest = 0.76;
+  static const inNest = 0.76;
 
   // 0 = a riposo, 1 = schiacciato fino in fondo; al rilascio torna con una molla che rimbalza.
   late final _press = AnimationController(vsync: this, duration: const Duration(milliseconds: 160));
@@ -137,14 +155,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
   }
 
   /// Centro e rettangolo di Transcri nel nido, in pixel fisici dello schermo.
-  (Offset, List<double>) _home() {
-    final box = _transcriKey.currentContext!.findRenderObject() as RenderBox;
-    final ratio = MediaQuery.devicePixelRatioOf(context);
-    final tl = box.localToGlobal(Offset.zero) * ratio;
-    final br = box.localToGlobal(box.size.bottomRight(Offset.zero)) * ratio;
-    final c = Offset((tl.dx + br.dx) / 2, (tl.dy + br.dy) / 2);
-    return (c, [tl.dx, tl.dy, br.dx, br.dy]);
-  }
+  (Offset, List<double>) _home() => inPixel(_transcriKey.currentContext!);
 
   /// Spento solo se i minuti sono finiti e Transcri è a casa: richiamarlo si può sempre.
   bool get _blocked => widget.limitedUntil != null && !(_wantOut ?? widget.on);
@@ -208,13 +219,13 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
   void didUpdateWidget(covariant TranscriNest oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Rientrato da solo (trascinato nel nido): atterra come quando lo richiami tu.
-    if (oldWidget.on && !widget.on && !busy && shownOn == null) _landed();
+    if (oldWidget.on && !widget.on && !busy && shownOn == null) atterra();
     if (!busy && shownOn != null && shownOn == widget.on) shownOn = null;
   }
 
   /// L'arrivo nel nido: la bolla nativa ci si è tuffata dentro, qui lui rispunta.
   /// Il nido ne sente il peso: si schiaccia all'impatto e torna su con una molla, come quando lo premi tu.
-  void _landed() {
+  void atterra() {
     HapticFeedback.mediumImpact();
     _hot = false;
     _land.forward(from: 0);
@@ -258,7 +269,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
     if (g != _gen || !mounted) return;
     setState(() {
       shownOn = false;
-      _landed();
+      atterra();
     });
     await Future.delayed(const Duration(milliseconds: 400));
   }
@@ -383,7 +394,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
     // Una pagina sopra (impostazioni, una nota aperta): il nido non si vede, non si rientra lì.
     final visible = ModalRoute.of(context)?.isCurrent ?? true;
     WidgetsBinding.instance.addPostFrameCallback((_) => _reportNest(visible));
-    // Il nido è neutro: il colore lo porta Transcri. Quando è fuori il nido resta vuoto: un incavo.
+    // Il nido è neutro: il colore lo porta Transcri. Quando è fuori il nido resta vuoto: scuro dentro, tratteggiato.
     final home = (!on && !sleeping) || _hot;
     final away = on || _carried != null;
     // Il posto di Transcri. Toccandolo si gonfia un attimo (prende la rincorsa) e da lì parte.
@@ -394,7 +405,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
         child: AnimatedBuilder(
           animation: _swell,
           // Un po' più piccolo della sua casa: intorno resta un anello del suo colore, che si vede.
-          builder: (context, child) => Transform.scale(scale: _inNest * (1 + 0.3 * _swell.value), child: child),
+          builder: (context, child) => Transform.scale(scale: inNest * (1 + 0.3 * _swell.value), child: child),
           child: KeyedSubtree(
             key: _transcriKey,
             child: TranscriCorpo(away: away, sleeping: sleeping, land: _land),
@@ -407,8 +418,22 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
       curve: Curves.easeOutCubic,
       width: slot,
       height: slot,
-      decoration: BoxDecoration(gradient: _fill(context.col.isola, home, away), shape: BoxShape.circle),
-      child: face,
+      decoration: BoxDecoration(gradient: _fill(context.col.isola, home), shape: BoxShape.circle),
+      // Vuoto (7 nov, suo: «il tratteggio quadrato come lui»): il buio e il tratteggio hanno la sua forma, grandi
+      // quanto lui nel nido ([TranscriCorpo.forma]).
+      child: _vuoto(home, away)
+          ? Stack(
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  key: const ValueKey('nido vuoto'),
+                  size: const Size(TranscriCorpo.w * inNest, TranscriCorpo.h * inNest),
+                  painter: TrattiNido(fondo: Ombra.nidoVuoto(Theme.of(context).brightness), tratto: context.col.testoSecondario.withValues(alpha: 0.5)),
+                ),
+                face,
+              ],
+            )
+          : face,
     );
     return GestureDetector(
       onTapDown: (_) => _down(),
@@ -447,9 +472,12 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
     );
   }
 
-  /// Il fondo del nido: con lui a casa prende i suoi colori, tutto; quando esce resta l'incavo, il posto vuoto
-  /// (6 nov: prima un contorno tratteggiato). Niente alone. Mentre lavora il fondo è il suo cerchio, sotto: il nido si fa da parte.
-  Gradient _fill(Color base, bool home, bool away) => _working == null && away && !home ? Ombra.incavo(Theme.of(context).brightness) : LinearGradient(
+  /// Fuori, e non sta lavorando: il nido è vuoto ([Ombra.nidoVuoto] col tratteggio).
+  bool _vuoto(bool home, bool away) => _working == null && away && !home;
+
+  /// Il fondo del nido: con lui a casa prende i suoi colori, tutto. Niente alone. Mentre lavora il fondo è il suo
+  /// cerchio, sotto: il nido si fa da parte.
+  Gradient _fill(Color base, bool home) => LinearGradient(
     colors: [
       for (final c in [Colori.adesso.transcriA, Colori.adesso.transcriB])
         _working != null ? base.withValues(alpha: 0) : (home ? Color.alphaBlend(c.withValues(alpha: 0.24), base) : base),
@@ -458,7 +486,7 @@ class TranscriNestState extends State<TranscriNest> with TickerProviderStateMixi
 }
 
 /// Transcri a casa: una capsula bianca con due occhi. Respira, ogni tanto sbatte gli occhi,
-/// si guarda intorno e fa un piccolo saltello. Quando è fuori non c'è (resta l'incavo del nido);
+/// si guarda intorno e fa un piccolo saltello. Quando è fuori non c'è (resta il nido vuoto);
 /// quando dorme (minuti finiti) ha gli occhi chiusi e sta fermo.
 class TranscriCorpo extends StatefulWidget {
   /// Lui, col suo ciclo di vita (respiro, occhi). [land]: il saltello quando atterra (di base niente).
@@ -466,6 +494,10 @@ class TranscriCorpo extends StatefulWidget {
 
   static const w = 46.0, h = 40.0;
   static const radius = 17.0;
+
+  /// La sua sagoma (un quadrato dagli angoli tondi) dentro [r]: la stessa per lui e per il nido vuoto. [scala]: quanto
+  /// è più piccolo di com'è (nel nido, [TranscriNestState.inNest]).
+  static RRect forma(Rect r, {double scala = 1}) => RRect.fromRectAndRadius(r, Radius.circular(radius * scala));
 
   final bool away, sleeping;
   final Animation<double> land;
@@ -519,7 +551,7 @@ class _TranscriPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
-    // Fuori: il posto vuoto è l'incavo del nido, lui qui non si disegna.
+    // Fuori: il posto vuoto è il nido tratteggiato, lui qui non si disegna.
     if (away) return;
     final alive = !sleeping;
     // Respiro: due respiri per ciclo. Saltello verso la fine. Atterraggio: schiacciato e poi su.
@@ -537,7 +569,7 @@ class _TranscriPainter extends CustomPainter {
     canvas.translate(w / 2, h);
     canvas.scale(sx, sy);
     canvas.translate(-w / 2, -h - hop * 6);
-    final body = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(TranscriCorpo.radius));
+    final body = TranscriCorpo.forma(Offset.zero & size);
     canvas.drawRRect(
       body.shift(const Offset(0, 2)),
       Paint()
@@ -582,4 +614,33 @@ class _TranscriPainter extends CustomPainter {
   @override
   bool shouldRepaint(_TranscriPainter old) =>
       old.t != t || old.land != land || old.away != away || old.sleeping != sleeping;
+}
+
+/// Il nido vuoto: il buio dentro e il bordo tratteggiato, con la sagoma di Transcri ([TranscriCorpo.forma]) grande
+/// quanto lui nel nido. Tratti e vuoti di [Misura.nidoTratto] lungo il bordo, spessi un [Misura.anello].
+class TrattiNido extends CustomPainter {
+  TrattiNido({required this.fondo, required this.tratto});
+
+  final Color fondo, tratto;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scala = size.width / TranscriCorpo.w;
+    canvas.drawRRect(TranscriCorpo.forma(Offset.zero & size, scala: scala), Paint()..color = fondo);
+    final bordo = TranscriCorpo.forma((Offset.zero & size).deflate(Misura.anello / 2), scala: scala);
+    final pennello = Paint()
+      ..color = tratto
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = Misura.anello;
+    for (final giro in (Path()..addRRect(bordo)).computeMetrics()) {
+      // Quanti tratti ci stanno, interi: il giro si chiude senza un tratto a metà.
+      final passo = giro.length / (giro.length / (2 * Misura.nidoTratto)).floor();
+      for (var d = 0.0; d + passo / 2 <= giro.length + 0.01; d += passo) {
+        canvas.drawPath(giro.extractPath(d, d + passo / 2), pennello);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(TrattiNido prima) => prima.fondo != fondo || prima.tratto != tratto;
 }

@@ -5,6 +5,9 @@ object Durate {
     /** durata/veloce: aprire e chiudere i pannelli. */
     const val VELOCE = 150
 
+    /** durata/normale: il Floater che si richiude nella pillola (in [VELOCE] tornava al punto senza che si vedesse). */
+    const val NORMALE = 250
+
     /** Quanto resta la conferma di un gesto (la ✓ di «Copiata»). */
     const val CONFERMA = 1400L
 
@@ -39,4 +42,13 @@ object Durate {
      * (le ultime parole, trascritte una volta sola per pausa). Lo usano [Session] e [Cassettiera].
      */
     const val PAUSA_SI_APRE = 3000L
+
+    /** Il primo respiro di [Pronto]: tra un tentativo e l'altro si aspetta questo, poi il doppio, il triplo… */
+    const val PRONTO_PAUSA = 150L
+
+    /**
+     * Le etichette cambiate (11 nov): le proposte di «Colora da sola» si rifanno su tutte le trascrizioni dopo questa
+     * pausa, una volta sola anche se cambi nome e regola di fila.
+     */
+    const val ATTESA_PROPOSTE = 1500L
 }

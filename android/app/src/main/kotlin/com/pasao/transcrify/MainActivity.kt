@@ -89,32 +89,94 @@ class MainActivity : FlutterActivity() {
                     store.editEntry(call.argument<Number>("at")!!.toLong(), call.argument<String>("text")!!)
                     result.success(null)
                 }
-                // Colore, privata e titolo, su una o più trascrizioni: c'è solo quello che cambia. Un titolo vuoto lo toglie.
+                // Colore, privata e titolo, su una o più trascrizioni: c'è solo quello che cambia (RegoleColori.segna).
                 "segnaHistory" -> {
                     val ats = call.argument<List<Number>>("ats")!!.map { it.toLong() }.toSet()
-                    val colore = call.hasArgument("colore")
-                    val privata = call.argument<Boolean>("privata")
-                    val titolo = call.hasArgument("titolo")
-                    store.cambia(ats) { t ->
-                        t.copy(
-                            colore = if (colore) call.argument<String>("colore") else t.colore,
-                            privata = privata ?: t.privata,
-                            titolo = if (titolo) call.argument<String>("titolo")?.trim()?.ifEmpty { null } else t.titolo,
-                        )
-                    }
+                    val segno = Segno(
+                        colore = call.hasArgument("colore"), nuovoColore = call.argument<String>("colore"),
+                        privata = call.argument<Boolean>("privata"),
+                        titolo = call.hasArgument("titolo"), nuovoTitolo = call.argument<String>("titolo"),
+                    )
+                    val regole = store.regoleColori
+                    store.cambia(ats) { RegoleColori.segna(it, segno, regole) }
+                    // Una diventata privata ha il titolo per prima (la sua scheda mostra solo quello).
+                    Titolatore.get(this).avvia()
                     result.success(null)
                 }
-                "unisciHistory" -> result.success(store.unisci(call.argument<List<Number>>("ats")!!.map { it.toLong() })?.toMap())
+                // Unite: il titolo di macchina se ne va, Groq ne fa uno per il testo intero.
+                "unisciHistory" -> {
+                    result.success(store.unisci(call.argument<List<Number>>("ats")!!.map { it.toLong() })?.toMap())
+                    Titolatore.get(this).avvia()
+                }
+                // Le regole dei colori (7 nov): colore → {regola, offuscaSempre, daNome}. Senza una regola scritta vale il
+                // nome del colore (10 nov, RegoleColori.effettive): allora daNome è true.
+                "regoleColori" -> {
+                    val scritte = store.regoleColori
+                    result.success(RegoleColori.effettive(scritte, store.nomiColori).mapValues { (c, r) -> r.toMap() + ("daNome" to scritte[c]?.regola.isNullOrBlank()) })
+                }
+                // «Offusca sempre» vale per tutte quelle che hanno quel colore (10 nov): acceso le rende private (anche se
+                // era già acceso: così si rimettono in pari quelle rimaste indietro), spento le rimette tutte in vista.
+                // Quante ne ha offuscate, in «offuscate».
+                "salvaRegola" -> {
+                    val colore = call.argument<String>("colore")!!
+                    val regola = RegolaColore(call.argument<String>("regola").orEmpty(), call.argument<Boolean>("offuscaSempre") ?: false)
+                    val prima = store.regoleColori
+                    store.regoleColori = RegoleColori.salva(prima, colore, regola)
+                    val offuscate = when {
+                        regola.offuscaSempre -> offusca(colore, true)
+                        prima[colore]?.offuscaSempre == true -> { offusca(colore, false); 0 }
+                        else -> 0
+                    }
+                    // Le regole cambiate: «Colora da sola» rifà le sue proposte (non colora niente da sola).
+                    topics.proponiColori()
+                    result.success(mapOf("offuscate" to offuscate))
+                }
+                // «Colora le sue di prima»: quali ha colorato (i loro «at»), per «Ho colorato N come «nome» · Annulla».
+                "coloraRetro" -> coloraRetro(call.argument<String>("colore")!!) { ats -> runOnUiThread { result.success(mapOf("ids" to ats)) } }
+                // L'«Annulla»: tornano com'erano (se nel frattempo non le hai toccate tu).
+                "annullaColoraRetro" -> {
+                    val ats = call.argument<List<Number>>("ids")!!.map { it.toLong() }.toSet()
+                    val regole = RegoleColori.effettive(store.regoleColori, store.nomiColori)
+                    store.cambia(ats) { RegoleColori.annullaColorata(it, regole[it.colore]?.offuscaSempre == true) }
+                    result.success(null)
+                }
                 "rimettiHistory" -> {
                     store.rimetti(call.argument<List<Map<*, *>>>("voci")!!.map(Transcription::fromMap))
                     result.success(null)
                 }
                 "nomiColori" -> result.success(store.nomiColori)
+                // Le ultime ricerche (7 nov): restano sul telefono; quali e quante lo decide Flutter (RicercheRecenti).
+                "ricercheRecenti" -> {
+                    val p = getSharedPreferences("ricerca", MODE_PRIVATE)
+                    call.argument<List<String>>("ricerche")?.let { p.edit().putString("recenti", it.joinToString("\n")).apply() }
+                    result.success(p.getString("recenti", "")!!.split('\n').filter { it.isNotEmpty() })
+                }
                 "nomeColore" -> {
                     val colore = call.argument<String>("colore")!!
                     val nome = call.argument<String>("nome")?.trim().orEmpty()
                     store.nomiColori = store.nomiColori.toMutableMap().apply { if (nome.isEmpty()) remove(colore) else put(colore, nome) }
+                    topics.proponiColori()
+                    if (nome.isNotEmpty()) proponiRegola(colore, nome)
                     result.success(null)
+                }
+                // «Proponi etichette» (10 nov): a Groq solo i titoli; torna [{nome, regola}], senza i nomi che hai già.
+                "proponiEtichette" -> background(result) {
+                    val key = store.apiKey ?: throw GroqError("Manca la chiave di Groq")
+                    Groq(key).etichette(store.history().mapNotNull { it.titolo }, store.nomiColori.values, store.cleanupModel)
+                        .also { store.countUse(store.cleanupModel) }
+                        .map { it.toMap() }
+                }
+                // «Proponi regole» (10 nov): a Groq solo i titoli e le etichette con la regola di adesso; torna
+                // [{colore, nome, regola}] per quelle che cambiano. Le applica Flutter, una per una, con «salvaRegola».
+                "proponiRegole" -> background(result) {
+                    val key = store.apiKey ?: throw GroqError("Manca la chiave di Groq")
+                    val nomi = store.nomiColori.filterValues { it.isNotBlank() }
+                    val adesso = RegoleColori.effettive(store.regoleColori, nomi)
+                    val perNome = nomi.entries.associate { (colore, nome) -> nome.trim() to (adesso[colore]?.regola ?: nome.trim()) }
+                    val nuove = Groq(key).regole(store.history().mapNotNull { it.titolo }, perNome, store.cleanupModel).also { store.countUse(store.cleanupModel) }
+                    nomi.mapNotNull { (colore, nome) ->
+                        nuove[nome.trim()]?.takeIf { it != perNome[nome.trim()] }?.let { mapOf("colore" to colore, "nome" to nome, "regola" to it) }
+                    }
                 }
                 "listen" -> {
                     // Parte con l'app davanti: Android poi lascia il microfono acceso anche fuori.
@@ -149,7 +211,7 @@ class MainActivity : FlutterActivity() {
                 "summarize" -> {
                     val key = store.apiKey ?: return@setMethodCallHandler result.error("nokey", "Manca la chiave", null)
                     background(result) {
-                        Groq(key).cleanLong(call.argument<String>("text")!!, store.cleanupModel, store.promptFor("riassunto"), store.words)
+                        Groq(key).cleanLong(call.argument<String>("text")!!, store.cleanupModel, store.promptFor("riassunto"), store.words, riserva = store.riservaPulizia)
                             .also { store.countUse(store.cleanupModel) }
                     }
                 }
@@ -157,6 +219,10 @@ class MainActivity : FlutterActivity() {
                     store.introSeen = true
                     result.success(null)
                 }
+                // La riga dei titoli nelle Prove: quanti fatti e cosa sta facendo il Titolatore.
+                "titoli" -> background(result) { Titolatore.get(this).riepilogo() }
+                // «Rifai i titoli» (Prove): via quelli di Groq (i tuoi restano), e si richiedono. Risponde quanti.
+                "rifaiTitoli" -> background(result) { Titolatore.get(this).rifai() }
                 "topicModels" -> result.success(TopicModel.entries.map { m ->
                     val st = topicModels.status(m)
                     mapOf(
@@ -212,6 +278,7 @@ class MainActivity : FlutterActivity() {
                             id, call.argument<String>("title") ?: "", call.argument<String>("text") ?: "",
                             call.argument<Number>("created")!!.toLong(), call.argument<Number>("updated")!!.toLong(),
                             call.argument<String>("source"), call.argument<String>("summary"),
+                            call.argument<Boolean>("privata") ?: false,
                         )
                     )
                     // Il «commit»: salvata la nota, i suoi argomenti si rifanno in fondo (solo le frasi nuove).
@@ -253,6 +320,38 @@ class MainActivity : FlutterActivity() {
                 }
                 "simulate" -> {
                     Simulated.set(call.argument<String>("what")!!, call.argument<Boolean>("on")!!)
+                    result.success(null)
+                }
+                // Acceso, propone per tutte quelle senza colore; spento, le proposte se ne vanno.
+                "coloraDaSola" -> {
+                    store.coloraDaSola = call.argument<Boolean>("on")!!
+                    if (store.coloraDaSola) topics.proponiColori() else store.proposteColore = emptyMap()
+                    result.success(null)
+                }
+                // «Colora da sola» propone (10 nov): [{at, colore}], solo quelle ancora senza colore.
+                "proposteColore" -> background(result, letture) {
+                    val proposte = ProposteColore.valide(store.proposteColore, store.history())
+                    if (proposte != store.proposteColore) store.proposteColore = proposte
+                    proposte.map { (at, colore) -> mapOf("at" to at, "colore" to colore) }
+                }
+                "accettaProposta" -> {
+                    accettaProposte(setOf(call.argument<Number>("at")!!.toLong()))
+                    result.success(null)
+                }
+                "accettaTutte" -> {
+                    accettaProposte(null)
+                    result.success(null)
+                }
+                "rifiutaTutte" -> {
+                    val (proposte, rifiutate) = ProposteColore.rifiutaTutte(store.proposteColore, store.rifiutateColore)
+                    store.proposteColore = proposte
+                    store.rifiutateColore = rifiutate
+                    result.success(null)
+                }
+                "rifiutaProposta" -> {
+                    val (proposte, rifiutate) = ProposteColore.rifiuta(store.proposteColore, store.rifiutateColore, call.argument<Number>("at")!!.toLong())
+                    store.proposteColore = proposte
+                    store.rifiutateColore = rifiutate
                     result.success(null)
                 }
                 "simulateLimit" -> {
@@ -307,6 +406,10 @@ class MainActivity : FlutterActivity() {
                     PillService.start(
                         this, call.argument<Double>("x")!!.toFloat(), call.argument<Double>("y")!!.toFloat(),
                         call.argument<List<Double>>("home")?.map { it.toFloat() }?.toFloatArray(),
+                        // La prova dell'introduzione: esce già in ascolto, come dal tasto che detta del widget.
+                        record = call.argument<Boolean>("record") == true,
+                        // ...e guidata: ferma sul bordo destro a quell'altezza (frazione dello schermo), senza salvarla.
+                        guida = call.argument<Double>("guida")?.toFloat(),
                     )
                     result.success(null)
                 }
@@ -344,9 +447,20 @@ class MainActivity : FlutterActivity() {
         PillService.liveListener = { live -> main.post { channel.invokeMethod("live", live) } }
         // Una nota ha i suoi argomenti: Flutter rilegge (l'indicatore nella lista, la nota aperta).
         topics.listener = { main.post { channel.invokeMethod("changed", null) } }
+        // Un titolo arrivato da Groq: Flutter rilegge. Un colore messo da sola: la pillola «Annulla».
+        Titolatore.get(this).listener = { main.post { channel.invokeMethod("changed", null) } }
+        topics.proposteCambiate = { main.post { channel.invokeMethod("proposteColore", null) } }
+        // I titoli delle trascrizioni di prima, piano piano.
+        Titolatore.get(this).avvia()
+        // Il widget col disegno e i colori di adesso (un aggiornamento dell'app non lo ridisegna da solo).
+        TranscriWidget.refresh(this)
+        // «Trascrivi» in cima al Condividi (la scorciatoia, accanto alla voce tra le app).
         ShareShortcuts.publish(this)
         // Le note scritte prima di scegliere il modello, o cambiate mentre l'app era chiusa.
         topics.requestAll()
+        // «Colora da sola»: le proposte per quelle senza colore (anche di prima), se l'hai acceso; solo se le etichette
+        // o il modello sono cambiati da quando sono state fatte.
+        topics.proponiColori(seCambiate = true)
     }
 
     private var resumed = false
@@ -354,6 +468,8 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        // Si riapre l'app: i titoli ripartono se si erano fermati (senza rete, un errore); una pausa in corso si aspetta.
+        Titolatore.get(this).avvia()
     }
 
     // Fuori dall'app il nido non si vede: si rientra nella casa che compare in basso.
@@ -389,6 +505,8 @@ class MainActivity : FlutterActivity() {
         PillService.hotListener = null
         PillService.liveListener = null
         PillService.appNest = null
+        Titolatore.get(this).listener = null
+        topics.proposteCambiate = null
         letture.shutdown()
         super.onDestroy()
     }
@@ -420,6 +538,7 @@ class MainActivity : FlutterActivity() {
             },
             "resetAt" to store.resetAt(),
             "simulateLimit" to store.simulateLimit,
+            "coloraDaSola" to store.coloraDaSola,
             "simOffline" to Simulated.offline,
             "simBadKey" to Simulated.badKey,
             "simNoMic" to Simulated.noMic,
@@ -440,6 +559,50 @@ class MainActivity : FlutterActivity() {
             "hourLimit" to Store.HOUR_LIMIT,
             "dayLimit" to Store.DAY_LIMIT,
         )
+    }
+
+    /**
+     * Le trascrizioni di [colore] diventano private ([privata] true, e hanno il titolo per prime) o tornano in vista, in
+     * una scrittura sola. Quante sono cambiate.
+     */
+    private fun offusca(colore: String, privata: Boolean): Int {
+        val ats = RegoleColori.daCambiare(store.history(), colore, privata)
+        if (ats.isEmpty()) return 0
+        store.cambia(ats) { if (it.colore == colore) it.copy(privata = privata) else it }
+        if (privata) Titolatore.get(this).avvia()
+        return ats.size
+    }
+
+    /**
+     * Un'etichetta appena nominata (10 nov): in fondo si chiede a Groq, una volta, una regola per lei; si scrive solo se
+     * intanto non ne hai scritta una tu e il nome è ancora quello ([Proposte.daSalvare]). Senza chiave o rete, niente.
+     */
+    private fun proponiRegola(colore: String, nome: String) {
+        if (!store.regoleColori[colore]?.regola.isNullOrBlank()) return
+        val key = store.apiKey ?: return
+        thread {
+            val proposta = runCatching { Groq(key).regolaPer(nome, store.cleanupModel).also { store.countUse(store.cleanupModel) } }.getOrNull()
+                ?: return@thread
+            val regole = store.regoleColori
+            Proposte.daSalvare(proposta, regole[colore], nome, store.nomiColori[colore])?.let { store.regoleColori = RegoleColori.salva(regole, colore, it) }
+        }
+    }
+
+    /** [RegoleColori.daColorare] in fondo; [fatto] riceve i loro «at» dal thread del lavoro. */
+    private fun coloraRetro(colore: String, fatto: (List<Long>) -> Unit) = topics.coloraRetro(colore) { ats ->
+        if (ats.isNotEmpty()) Titolatore.get(this).avvia()
+        fatto(ats)
+    }
+
+    /** Le proposte accettate ([ats], null: tutte) prendono il loro colore, in una scrittura sola ([ProposteColore.accetta]). */
+    private fun accettaProposte(ats: Set<Long>?) {
+        val proposte = store.proposteColore
+        val scelte = if (ats == null) proposte else proposte.filterKeys { it in ats }
+        val regole = RegoleColori.effettive(store.regoleColori, store.nomiColori)
+        store.cambia(scelte.keys) { t -> scelte[t.at]?.let { ProposteColore.accetta(t, it, regole) } ?: t }
+        store.proposteColore = proposte - scelte.keys
+        // Una diventata privata ha il titolo per prima (la sua scheda mostra solo quello).
+        Titolatore.get(this).avvia()
     }
 
     private fun modelsFrom(json: String): List<Map<String, Any>> {

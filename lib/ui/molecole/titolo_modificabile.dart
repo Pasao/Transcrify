@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../atomi.dart';
 import '../ds.dart';
+import 'conferma.dart';
 
 /// Un titolo che si cambia lì dov'è (6 nov, giro 6): il titolo di una trascrizione aperta, il nome di una cartella
 /// aperta. Toccato diventa un campo, già pronto, col titolo di adesso tutto scelto (si scrive sopra); sotto
@@ -102,13 +103,7 @@ class _TitoloModificabileState extends State<TitoloModificabile> {
                     focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: c.azione, width: Misura.anello)),
                   ),
                 ),
-                Wrap(
-                  alignment: WrapAlignment.end,
-                  children: [
-                    Bottone('Annulla', tipo: TipoBottone.testo, alto: false, onPressed: _chiudi),
-                    Bottone('Fatto', tipo: TipoBottone.testo, alto: false, onPressed: _fatto),
-                  ],
-                ),
+                Conferma(principale: 'Fatto', onPrincipale: _fatto, onAnnulla: _chiudi),
               ],
             ),
     );

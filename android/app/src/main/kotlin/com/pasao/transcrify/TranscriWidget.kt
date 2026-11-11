@@ -59,6 +59,12 @@ class TranscriWidget : AppWidgetProvider() {
 
     override fun onDeleted(context: Context, ids: IntArray) = ids.forEach { WidgetLook.forget(context, it) }
 
+    /** L'app aggiornata: il launcher tiene il disegno vecchio finché qualcuno non lo ridisegna. */
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) refresh(context)
+    }
+
     companion object {
         /** Da questa larghezza (dp) il widget è 2 × 1: il cerchio con lui e, accanto, cosa fa. */
         const val WIDE_FROM_DP = 140f
@@ -103,9 +109,10 @@ class TranscriWidget : AppWidgetProvider() {
                     setColorStateList(R.id.widget_line, "setTextColor", text)
                     setTextViewText(R.id.widget_title, if (away) "Richiama" else "Detta")
                     setTextViewText(R.id.widget_line, if (away) "Tocca per richiamarlo" else "Tocca e parla, poi incolla dove vuoi")
-                    // Nel 2 × 1 le parole o il tondo che apre l'app (a destra: le parole restano invisibili a fargli posto).
+                    // Nel 2 × 1 le parole o il tondo che apre l'app: col tondo le parole non ci sono, e lui e il tondo
+                    // stanno insieme al centro (la riga è centrata); senza scritta, nel 4 × 1, il loro posto resta vuoto.
                     val tondo = !open && look.apri
-                    setViewVisibility(R.id.widget_words, if (look.text && !tondo) View.VISIBLE else View.INVISIBLE)
+                    setViewVisibility(R.id.widget_words, if (tondo) View.GONE else if (look.text) View.VISIBLE else View.INVISIBLE)
                     setViewVisibility(R.id.widget_open, if (open) View.VISIBLE else View.GONE)
                     // Il tasto che detta c'è solo con lui a casa: è da lì che esce.
                     setViewVisibility(R.id.widget_record, if (open && !away) View.VISIBLE else View.GONE)
@@ -182,9 +189,11 @@ class WidgetTrampoline : Activity() {
             val h = b.height() * ratio
             val look = if (id == AppWidgetManager.INVALID_APPWIDGET_ID) WidgetLook() else WidgetLook.of(this, id)
             val wide = !record && (w / d >= TranscriWidget.LONG_FROM_DP || (look.dueXUno && w / d >= TranscriWidget.WIDE_FROM_DP))
-            // Dov'è Transcri nel disegno: nel 2 × 1 a sinistra, grande (10 dp + metà del suo posto da 56),
+            // Dov'è Transcri nel disegno: nel 2 × 1 a sinistra, grande (10 dp + metà del suo posto da 56); col tondo
+            // che apre l'app, lui e il tondo (56 + 12 + 52 dp) al centro della riga (margini 10 e 12 dp);
             // nel 1 × 1 al centro, un po' più su per lasciare posto alla parola sotto.
-            val cx = if (wide) b.left + 38f * d * ratio else b.left + w / 2f
+            val tondo = wide && look.apri && w / d < TranscriWidget.LONG_FROM_DP
+            val cx = if (tondo) b.left + b.width() / 2f - 33f * d * ratio else if (wide) b.left + 38f * d * ratio else b.left + w / 2f
             val cy = b.top + h / 2f - if (!wide && !record && look.text) 9f * d * ratio else 0f
             val hw = (if (wide) 26f else 17f) * d * ratio
             val hh = (if (wide) 23f else 15f) * d * ratio

@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../core/native.dart';
 import '../core/ricerca.dart';
+import '../core/ricerche_recenti.dart';
 import 'common.dart';
 import 'molecole/campo_ricerca.dart';
+import 'molecole/ricerche_fatte.dart';
 import 'molecole/riga_trovata.dart';
 import 'pensieri.dart';
 import 'theme.dart';
@@ -23,7 +25,7 @@ Future<void> apriRicerca(BuildContext context) => Navigator.of(context).push(
 
 /// La ricerca (6 nov, come One UI 8.5): il campo in fondo, sopra la tastiera che si apre da sola; sopra quello che ha
 /// trovato il motore (prima le frasi con tutte le parole, poi quelle vicine per senso), note e
-/// trascrizioni insieme, una riga per frase. Le private non si mostrano: la loro frase resterebbe scritta qui.
+/// trascrizioni insieme, una riga per frase. Le offuscate (trascrizioni e note) non si mostrano: la loro frase resterebbe scritta qui.
 /// I filtri (6 nov, giro 6) non stanno più qui: sono sotto il titolo di Trascrivi e filtrano la lista che guardi.
 class CercaPage extends StatefulWidget {
   const CercaPage({super.key});
@@ -40,7 +42,7 @@ class _CercaPageState extends State<CercaPage> {
   String _cercato = '';
   List<Trovato>? _perParola, _perSenso;
 
-  /// Le note e le trascrizioni (non private), per mostrare le frasi trovate. Si leggono all'inizio e quando cambiano.
+  /// Le note e le trascrizioni (non offuscate), per mostrare le frasi trovate. Si leggono all'inizio e quando cambiano.
   Map<String, Note> _note = {};
   Map<String, Entry> _voci = {};
 
@@ -60,6 +62,7 @@ class _CercaPageState extends State<CercaPage> {
     Core.addListener(_cambiato);
     // Il modello per senso si carica adesso, mentre scrivi, e resta pronto finché la ricerca è aperta.
     Ricerca.aperta(true);
+    RicercheRecenti.leggi();
     _leggi();
   }
 
@@ -82,7 +85,10 @@ class _CercaPageState extends State<CercaPage> {
     final voci = await Core.history();
     if (!mounted) return;
     setState(() {
-      _note = {for (final n in note) n.id: n};
+      _note = {
+        for (final n in note)
+          if (!n.privata) n.id: n,
+      };
       _voci = {
         for (final e in voci)
           if (!e.privata) '${e.at.millisecondsSinceEpoch}': e,
@@ -141,7 +147,11 @@ class _CercaPageState extends State<CercaPage> {
         cercato: _cercato,
         nota: nota != null,
         daDove: nota != null ? (nota.title.trim().isEmpty ? shortStamp(nota.updated) : nota.title.trim()) : 'Trascrizione · ${shortStamp(voce!.at)}',
-        onApri: () => nota != null ? openNote(context, nota) : openEntry(context, voce!),
+        onApri: () {
+          // Hai trovato quello che cercavi: la ricerca resta tra le recenti.
+          RicercheRecenti.aggiungi(_cercato);
+          nota != null ? openNote(context, nota) : openEntry(context, voce!);
+        },
       ),
     );
   }
@@ -158,7 +168,16 @@ class _CercaPageState extends State<CercaPage> {
           child: Column(
             children: [
               Expanded(
-                child: righe == null
+                child: _cercato.trim().isEmpty
+                    ? ValueListenableBuilder(
+                        valueListenable: RicercheRecenti.lista,
+                        builder: (context, recenti, _) => RicercheFatte(
+                          ricerche: recenti,
+                          onScegli: (r) => _testo.value = TextEditingValue(text: r, selection: TextSelection.collapsed(offset: r.length)),
+                          onTogli: RicercheRecenti.togli,
+                        ),
+                      )
+                    : righe == null
                     ? const SizedBox.shrink()
                     : righe.isEmpty
                     ? Padding(
@@ -174,7 +193,7 @@ class _CercaPageState extends State<CercaPage> {
                         children: righe,
                       ),
               ),
-              CampoRicerca(controller: _testo, onAnnulla: () => Navigator.of(context).maybePop()),
+              CampoRicerca(controller: _testo, onCerca: RicercheRecenti.aggiungi, onAnnulla: () => Navigator.of(context).maybePop()),
             ],
           ),
         ),

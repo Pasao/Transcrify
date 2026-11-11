@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/cambio_colore.dart';
 import '../../core/native.dart';
+import '../../core/regole_colori.dart';
 import '../atomi.dart';
 import '../ds.dart';
 import 'fila_colori.dart';
@@ -16,6 +17,8 @@ import 'tavolozza.dart';
 /// «Annulla» rimette tutto com'era; chiusa tenendo («Fatto», «indietro», un tocco fuori), se qualcosa è cambiato
 /// arriva la pillola «Colore cambiato · Annulla», che rimette ognuna col suo colore di prima (e i nomi).
 /// [nomeSegue]: una cartella che cambia colore si porta dietro il nome (`CambioColore.nomeSegue`).
+/// Un'etichetta che prende il nome per la prima volta (10 nov) colora da sola, in fondo, quelle di prima che ne
+/// parlano ([RegoleColori.coloraRetro]); se ne ha trovate, la pillola «Ho colorato N come «nome» · Annulla».
 Future<void> apriSceltaColore(
   BuildContext context, {
   required Rect sopra,
@@ -24,7 +27,9 @@ Future<void> apriSceltaColore(
   bool nomeSegue = false,
 }) async {
   // I nomi di adesso, prima di ricordarli: «Annulla» deve rimettere quelli veri.
-  await Segni.leggiNomi();
+  await Future.wait([Segni.leggiNomi(), RegoleColori.leggi()]);
+  // I colori già in uso, contati una volta all'apertura: sulla rosa hanno il puntino.
+  final usi = Segni.usi(await Core.history());
   if (!context.mounted) return;
   final cambio = CambioColore(prima, nomeSegue: nomeSegue);
   void avvisa() => onCambiati(Map.unmodifiable(cambio.ora));
@@ -35,7 +40,7 @@ Future<void> apriSceltaColore(
       raggio: Raggio.gruppo,
       padding: const EdgeInsets.all(Spazio.s2),
       child: SingleChildScrollView(
-        child: Tavolozza(cambio: cambio, onCambiati: avvisa, onChiusa: (tieni) => Navigator.pop(fumetto, tieni)),
+        child: Tavolozza(cambio: cambio, usi: usi, onCambiati: avvisa, onChiusa: (tieni) => Navigator.pop(fumetto, tieni)),
       ),
     ),
   );
@@ -45,11 +50,40 @@ Future<void> apriSceltaColore(
   }
   await cambio.tieni();
   if (!cambio.cambiato || !context.mounted) return;
+  final colorate = [
+    for (final MapEntry(:key, :value) in Segni.nomi.value.entries)
+      // Il nome è nuovo, non quello di una cartella che ha solo cambiato colore.
+      if (!cambio.nomiPrima.containsKey(key) && !cambio.nomiPrima.containsValue(value)) _coloraIndietro(context, Colore.da(key), value),
+  ];
   avvisa();
   if (await undoable(context, 'Colore cambiato')) {
     await cambio.rimetti();
+    // Senza il nome, nemmeno quelle colorate col nome.
+    for (final ids in await Future.wait(colorate)) {
+      if (ids.isNotEmpty) await RegoleColori.annullaColoraRetro(ids);
+    }
+    Core.refresh();
     avvisa();
   }
+}
+
+/// [colore] ha appena preso il [nome]: colora quelle di prima che ne parlano e propone «Annulla». Torna quelle
+/// colorate e non riprese (per l'«Annulla» del colore).
+Future<List<Object?>> _coloraIndietro(BuildContext context, Colore? colore, String nome) async {
+  if (colore == null) return const [];
+  final ids = await RegoleColori.coloraRetro(colore);
+  if (ids.isEmpty || !context.mounted) return ids;
+  Core.refresh();
+  return await annullaColorati(context, nome, ids) ? const [] : ids;
+}
+
+/// «Ho colorato N come «nome» · Annulla» (10 nov): dopo che un'etichetta ha colorato quelle di prima ([ids]). Ripresa,
+/// tornano com'erano; true se l'hai ripresa.
+Future<bool> annullaColorati(BuildContext context, String nome, List<Object?> ids) async {
+  if (!await undoable(context, 'Ho colorato ${ids.length} come «$nome»')) return false;
+  await RegoleColori.annullaColoraRetro(ids);
+  Core.refresh();
+  return true;
 }
 
 /// Unendo schede di colori diversi (anche senza colore): la fila coi soli colori in gioco. Un tocco sceglie il colore

@@ -17,18 +17,31 @@ import javax.crypto.spec.GCMParameterSpec
 /**
  * Una trascrizione salvata. [colore]: il suo colore («tinta:luce», lo legge solo l'app; null = nessuno).
  * [privata]: sulla scheda il testo non si vede. [titolo]: il suo titolo (6 nov), scritto da te o proposto dall'app col
- * riassunto estrattivo; null = non ne ha ancora uno (quelle di prima dei titoli).
+ * riassunto estrattivo; null = non ne ha ancora uno (quelle di prima dei titoli). Dal 7 nov il titolo lo scrive Groq, una
+ * volta sola ([Titolatore]). [titoloChiesto]: il titolo è già stato chiesto (o l'hai toccato tu): non si richiede più,
+ * anche se è vuoto. [titoloUtente]: il titolo l'hai scritto (o tolto) tu: «Rifai i titoli» non lo tocca.
+ * [coloreAuto]: il colore l'ha messo l'app da sola («Colora da sola»); lo tocchi tu e torna tuo.
  */
 data class Transcription(
     val text: String, val at: Long, val purified: Boolean, val mode: String? = null, val source: String? = null, val noteId: String? = null,
     val colore: String? = null, val privata: Boolean = false, val titolo: String? = null,
+    val titoloChiesto: Boolean = false, val coloreAuto: Boolean = false, val titoloUtente: Boolean = false,
 ) {
     fun toJson(): JSONObject = JSONObject().put("text", text).put("at", at).put("purified", purified).put("mode", mode).put("source", source)
-        .put("colore", colore).put("privata", privata).put("titolo", titolo)
+        .put("colore", colore).put("privata", privata).put("titolo", titolo).put("titoloChiesto", titoloChiesto).put("coloreAuto", coloreAuto)
+        .put("titoloUtente", titoloUtente)
+
+    /**
+     * Col [c] messo da sola, se può prenderlo: mai una privata, mai sopra un colore che c'è già. Null se no. [offusca]:
+     * il colore ha «offusca sempre» (RegoleColori): diventa privata anche lei.
+     */
+    fun colorataDaSola(c: String, offusca: Boolean = false): Transcription? =
+        if (colore == null && !privata) copy(colore = c, coloreAuto = true, privata = offusca) else null
 
     /** Quello che arriva all'app (e che l'app rimanda indietro per rimettere com'era). */
     fun toMap(): Map<String, Any?> =
-        mapOf("text" to text, "at" to at, "purified" to purified, "mode" to mode, "source" to source, "colore" to colore, "privata" to privata, "titolo" to titolo)
+        mapOf("text" to text, "at" to at, "purified" to purified, "mode" to mode, "source" to source, "colore" to colore, "privata" to privata, "titolo" to titolo,
+            "titoloChiesto" to titoloChiesto, "coloreAuto" to coloreAuto, "titoloUtente" to titoloUtente)
 
     companion object {
         fun fromJson(j: JSONObject) = Transcription(
@@ -41,26 +54,31 @@ data class Transcription(
             privata = j.optBoolean("privata"),
             // Quelle di prima dei titoli: nessun titolo.
             titolo = if (j.isNull("titolo")) null else j.getString("titolo"),
+            titoloChiesto = j.optBoolean("titoloChiesto"), coloreAuto = j.optBoolean("coloreAuto"), titoloUtente = j.optBoolean("titoloUtente"),
         )
 
         /** Da quello che rimanda l'app (vedi [toMap]). */
         fun fromMap(m: Map<*, *>) = Transcription(
             m["text"] as String, (m["at"] as Number).toLong(), m["purified"] as? Boolean ?: false, m["mode"] as String?, m["source"] as String?,
             colore = m["colore"] as String?, privata = m["privata"] as? Boolean ?: false, titolo = m["titolo"] as String?,
+            titoloChiesto = m["titoloChiesto"] as? Boolean ?: false, coloreAuto = m["coloreAuto"] as? Boolean ?: false,
+            titoloUtente = m["titoloUtente"] as? Boolean ?: false,
         )
     }
 }
 
 /** Una nota: tua, da rileggere. Il titolo può restare vuoto. */
-data class Note(val id: String, val title: String, val text: String, val created: Long, val updated: Long, val source: String? = null, val summary: String? = null) {
-    fun toJson(): JSONObject = JSONObject().put("id", id).put("title", title).put("text", text).put("created", created).put("updated", updated).put("source", source).put("summary", summary)
-    fun toMap(): Map<String, Any?> = mapOf("id" to id, "title" to title, "text" to text, "created" to created, "updated" to updated, "source" to source, "summary" to summary)
+/** [privata]: offuscata (la copertina sulla scheda), come le trascrizioni. Le note di prima non ce l'hanno: false. */
+data class Note(val id: String, val title: String, val text: String, val created: Long, val updated: Long, val source: String? = null, val summary: String? = null, val privata: Boolean = false) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("title", title).put("text", text).put("created", created).put("updated", updated).put("source", source).put("summary", summary).put("privata", privata)
+    fun toMap(): Map<String, Any?> = mapOf("id" to id, "title" to title, "text" to text, "created" to created, "updated" to updated, "source" to source, "summary" to summary, "privata" to privata)
 
     companion object {
         fun fromJson(j: JSONObject) = Note(
             j.getString("id"), j.optString("title"), j.optString("text"), j.getLong("created"), j.getLong("updated"),
             if (j.isNull("source")) null else j.getString("source"),
             if (j.isNull("summary")) null else j.getString("summary"),
+            j.optBoolean("privata"),
         )
     }
 }
@@ -113,6 +131,12 @@ class Store(context: Context) {
             val data = cipher.doFinal(value.trim().toByteArray())
             prefs.edit().putString(K_KEY_IV, cipher.iv.b64()).putString(K_KEY_DATA, data.b64()).apply()
         }
+
+    /**
+     * La chiave, aspettandola se è salvata (vedi [Pronto]): appena svegliata dal Condividi il Keystore può non
+     * rispondere al primo colpo. Se non c'è proprio, null subito.
+     */
+    fun chiavePronta(): String? = if (prefs.contains(K_KEY_DATA)) Pronto.attendi { apiKey } else null
 
     val maskedKey: String?
         get() = apiKey?.let { if (it.length < 12) "••••" else "${it.take(4)}••••••••${it.takeLast(4)}" }
@@ -189,6 +213,17 @@ class Store(context: Context) {
             ?.takeIf { System.currentTimeMillis() - prefs.getLong("models_cache_at", 0) < DAY_MS }
         set(v) = prefs.edit().putString("models_cache", v).putLong("models_cache_at", System.currentTimeMillis()).apply()
 
+    /**
+     * Il modello che non ragiona con cui riprovare una pulizia tagliata ([Pulitura.riserva]), dall'ultima lista di Groq
+     * anche se vecchia (serve solo sapere che c'è). Null se quello scelto non ragiona o la lista non si è mai letta.
+     */
+    val riservaPulizia: String?
+        get() {
+            val lista = prefs.getString("models_cache", null) ?: return null
+            val ids = runCatching { JSONArray(lista).let { a -> (0 until a.length()).map { a.getJSONObject(it).getString("id") } } }.getOrDefault(emptyList())
+            return Pulitura.riserva(cleanupModel, ids)
+        }
+
     /** Solo per provare: fa finta che i minuti del giorno siano finiti. */
     init {
         Simulated.load(prefs)
@@ -231,6 +266,34 @@ class Store(context: Context) {
         get() = prefs.getString("nomi_colori", null)?.let { JSONObject(it).let { j -> j.keys().asSequence().associateWith(j::getString) } } ?: emptyMap()
         set(v) = prefs.edit().putString("nomi_colori", JSONObject(v).toString()).apply()
 
+    /** Le regole dei colori, scritte da te («tinta:luce» → [RegolaColore]): cosa ci va, e se offuscare sempre. */
+    var regoleColori: Map<String, RegolaColore>
+        get() = RegoleColori.daJson(prefs.getString("regole_colori", null))
+        set(v) = prefs.edit().putString("regole_colori", RegoleColori.inJson(v)).apply()
+
+    /** «Colora da sola» (Impostazioni, 7 nov; dal 10 nov propone soltanto, [proposteColore]). */
+    var coloraDaSola: Boolean
+        get() = prefs.getBoolean("colora_da_sola", false)
+        set(v) = prefs.edit().putBoolean("colora_da_sola", v).apply()
+
+    /** I colori proposti da «Colora da sola», non ancora messi (quando → «tinta:luce»): li decidi tu ([ProposteColore]). */
+    var proposteColore: Map<Long, String>
+        get() = ProposteColore.daJson(prefs.getString("proposte_colore", null))
+        set(v) = prefs.edit().putString("proposte_colore", ProposteColore.inJson(v)).apply()
+
+    /**
+     * Con quali etichette e quale modello le proposte sono già state fatte su tutte (11 nov): uguale, all'avvio non si
+     * rifanno ([NoteTopicsWorker.proponiColori]).
+     */
+    var proposteImpronta: String?
+        get() = prefs.getString("proposte_impronta", null)
+        set(v) = prefs.edit().putString("proposte_impronta", v).apply()
+
+    /** Le proposte che hai rifiutato ([ProposteColore.chiave]): non tornano. */
+    var rifiutateColore: Set<String>
+        get() = prefs.getStringSet("rifiutate_colore", null).orEmpty().toSet()
+        set(v) = prefs.edit().putStringSet("rifiutate_colore", v).apply()
+
     // --- Dove stava la pillola ---
 
     var pillRight: Boolean
@@ -250,47 +313,45 @@ class Store(context: Context) {
 
     // --- Trascrizioni ---
 
-    @Synchronized
-    fun history(): List<Transcription> = try {
-        val arr = JSONArray(historyFile.readText())
-        (0 until arr.length()).map { Transcription.fromJson(arr.getJSONObject(it)) }
-    } catch (e: Exception) {
-        emptyList()
+    fun history(): List<Transcription> = synchronized(BLOCCO) {
+        try {
+            val arr = JSONArray(historyFile.readText())
+            (0 until arr.length()).map { Transcription.fromJson(arr.getJSONObject(it)) }
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
-    @Synchronized
-    fun addToHistory(t: Transcription) = writeHistory((listOf(t) + history()).take(HISTORY_SIZE))
+    fun addToHistory(t: Transcription) = synchronized(BLOCCO) { writeHistory((listOf(t) + history()).take(HISTORY_SIZE)) }
 
-    @Synchronized
-    fun removeFromHistory(at: Long) = writeHistory(history().filter { it.at != at })
+    fun removeFromHistory(at: Long) = synchronized(BLOCCO) { writeHistory(history().filter { it.at != at }) }
 
     /** Il testo l'hai cambiato tu: tutto il resto resta com'è. */
-    @Synchronized
-    fun editEntry(at: Long, text: String) = writeHistory(segna(history(), setOf(at)) { it.copy(text = text) })
+    fun editEntry(at: Long, text: String) = synchronized(BLOCCO) { writeHistory(segna(history(), setOf(at)) { it.copy(text = text) }) }
 
     /** Colore, privata o titolo, a una o più trascrizioni insieme: una scrittura sola. */
-    @Synchronized
-    fun cambia(ats: Set<Long>, come: (Transcription) -> Transcription) = writeHistory(segna(history(), ats, come))
+    fun cambia(ats: Set<Long>, come: (Transcription) -> Transcription) = synchronized(BLOCCO) { writeHistory(segna(history(), ats, come)) }
 
     /** Unisce le trascrizioni nell'ordine scelto (vedi [unisci]). Null se non ce ne sono almeno due. */
-    @Synchronized
     fun unisci(ordine: List<Long>): Transcription? {
-        val (resto, fusa) = com.pasao.transcrify.unisci(history(), ordine) ?: return null
-        writeHistory(resto)
-        return fusa
+        return synchronized(BLOCCO) {
+            val (resto, fusa) = com.pasao.transcrify.unisci(history(), ordine) ?: return null
+            writeHistory(resto)
+            fusa
+        }
     }
 
     /** «Annulla»: le trascrizioni tornano com'erano (vedi [rimetti]). */
-    @Synchronized
-    fun rimetti(voci: List<Transcription>) = writeHistory(com.pasao.transcrify.rimetti(history(), voci))
+    fun rimetti(voci: List<Transcription>) = synchronized(BLOCCO) { writeHistory(com.pasao.transcrify.rimetti(history(), voci)) }
 
     /** Nuove parole in una trascrizione, dove c'era il cursore. Null se nel frattempo è stata eliminata. */
-    @Synchronized
     fun addToEntry(at: Long, text: String, cursor: Int): Transcription? {
-        val entry = history().firstOrNull { it.at == at } ?: return null
-        val longer = entry.copy(text = insertPiece(entry.text, text, cursor))
-        writeHistory(history().map { if (it.at == at) longer else it })
-        return longer
+        return synchronized(BLOCCO) {
+            val entry = history().firstOrNull { it.at == at } ?: return null
+            val longer = entry.copy(text = insertPiece(entry.text, text, cursor))
+            writeHistory(history().map { if (it.at == at) longer else it })
+            longer
+        }
     }
 
     private fun writeHistory(list: List<Transcription>) {
@@ -302,20 +363,19 @@ class Store(context: Context) {
     // --- Note ---
 
     /** Dalla più recente: quella che hai toccato per ultima sta in cima. */
-    @Synchronized
-    fun notes(): List<Note> = try {
-        val arr = JSONArray(notesFile.readText())
-        (0 until arr.length()).map { Note.fromJson(arr.getJSONObject(it)) }.sortedByDescending { it.updated }
-    } catch (e: Exception) {
-        emptyList()
+    fun notes(): List<Note> = synchronized(BLOCCO) {
+        try {
+            val arr = JSONArray(notesFile.readText())
+            (0 until arr.length()).map { Note.fromJson(arr.getJSONObject(it)) }.sortedByDescending { it.updated }
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     /** Nuova, o al posto di quella con lo stesso id. */
-    @Synchronized
-    fun saveNote(n: Note) = writeNotes(listOf(n) + notes().filter { it.id != n.id })
+    fun saveNote(n: Note) = synchronized(BLOCCO) { writeNotes(listOf(n) + notes().filter { it.id != n.id }) }
 
-    @Synchronized
-    fun deleteNote(id: String) = writeNotes(notes().filter { it.id != id })
+    fun deleteNote(id: String) = synchronized(BLOCCO) { writeNotes(notes().filter { it.id != id }) }
 
     private fun writeNotes(list: List<Note>) {
         val tmp = File(notesFile.parentFile, "notes.tmp")
@@ -373,6 +433,13 @@ class Store(context: Context) {
     }
 
     companion object {
+        /**
+         * Il lucchetto dei file delle trascrizioni e delle note: uno per tutto il processo. Ognuno ha il suo Store (l'app,
+         * la pillola, la coda, i titoli…): con un lucchetto per Store due scritture insieme si perdevano a vicenda, o si
+         * mescolavano nello stesso file .tmp (e una storia illeggibile diventava vuota alla scrittura dopo).
+         */
+        private val BLOCCO = Any()
+
         const val HOUR_LIMIT = 7200L
 
         /** Fedele corregge e tiene tutte le parole; Pulita toglie intercalari e ripetizioni, quindi può cambiare di più. */

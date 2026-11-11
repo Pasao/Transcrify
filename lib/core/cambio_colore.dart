@@ -11,7 +11,7 @@ class CambioColore {
   CambioColore(Map<DateTime, Colore?> prima, {this.nomeSegue = false})
     : prima = Map.unmodifiable(prima),
       ora = Map.of(prima),
-      _nomiPrima = Segni.nomi.value;
+      nomiPrima = Segni.nomi.value;
 
   /// Il colore di ogni trascrizione prima del giro.
   final Map<DateTime, Colore?> prima;
@@ -23,7 +23,8 @@ class CambioColore {
   /// nome. Succede quando il giro finisce tenendo ([tieni]).
   final bool nomeSegue;
 
-  final Map<String, String> _nomiPrima;
+  /// I nomi dei colori prima del giro (chi l'ha aperta vede quali etichette hanno preso il nome adesso).
+  final Map<String, String> nomiPrima;
 
   /// Il colore che hanno tutte adesso; null se non ne hanno o se sono diversi (vedi [misti]).
   Colore? get comune => ora.values.toSet().length == 1 ? ora.values.first : null;
@@ -32,7 +33,7 @@ class CambioColore {
   bool get misti => ora.values.toSet().length > 1;
 
   /// Qualcosa è cambiato (un colore o un nome): solo allora serve l'«Annulla» dopo.
-  bool get cambiato => !mapEquals(ora, prima) || !mapEquals(Segni.nomi.value, _nomiPrima);
+  bool get cambiato => !mapEquals(ora, prima) || !mapEquals(Segni.nomi.value, nomiPrima);
 
   /// Il colore [c] (null: nessuno) a tutte, salvato subito: si vede sulle schede.
   Future<void> prova(Colore? c) async {
@@ -61,9 +62,9 @@ class CambioColore {
     }
     ora.addAll(prima);
     final adesso = Segni.nomi.value;
-    for (final chiave in {...adesso.keys, ..._nomiPrima.keys}) {
+    for (final chiave in {...adesso.keys, ...nomiPrima.keys}) {
       final colore = Colore.da(chiave);
-      if (colore != null && adesso[chiave] != _nomiPrima[chiave]) await Segni.nomina(colore, _nomiPrima[chiave] ?? '');
+      if (colore != null && adesso[chiave] != nomiPrima[chiave]) await Segni.nomina(colore, nomiPrima[chiave] ?? '');
     }
   }
 }

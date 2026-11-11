@@ -61,6 +61,16 @@ object Provenienza {
         return base + if (origin.toNote) " · nelle Note" else ""
     }
 
+    /**
+     * La testata della carta dei vocali (10 nov, suo): uno solo, il suo titolo [uno]; più d'uno, «Vocali di WhatsApp (2)»
+     * se arrivano tutti da [app], altrimenti «Vocali (2)».
+     */
+    fun testata(n: Int, app: String?, uno: String): String = when {
+        n <= 1 -> uno
+        app != null -> "Vocali di $app ($n)"
+        else -> "Vocali ($n)"
+    }
+
     private fun ricorda(ctx: Context, p: String) = runCatching {
         val pm = ctx.packageManager
         val dir = cartella(ctx)

@@ -6,9 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../core/native.dart';
+import '../core/orario.dart';
+import '../core/proposte_colore.dart';
 import '../core/ricerca.dart';
-import '../core/titoli.dart';
 import 'cartelle.dart';
+import 'etichette.dart';
+import 'molecole/conferma.dart';
 import 'mode_icon.dart';
 import 'onboarding.dart';
 import 'prova_estratto.dart';
@@ -94,6 +97,12 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _setColoraDaSola(bool on) async {
+    HapticFeedback.selectionClick();
+    await Core.coloraDaSola(on);
+    _load();
+  }
+
   Future<void> _setPurify(bool on) async {
     HapticFeedback.selectionClick();
     await Core.setPurify(on);
@@ -126,9 +135,11 @@ class _SettingsPageState extends State<SettingsPage> {
     _load();
   }
 
+  /// «Da sistemare» di prova (11 nov): registrazioni in attesa e proposte di colore finte, solo coi dati finti.
   void _setFakeWaiting(bool on) {
     HapticFeedback.selectionClick();
     Core.setFakeWaiting(on);
+    ProposteColore.mostraFinte(on);
     setState(() {});
   }
 
@@ -268,25 +279,36 @@ class _SettingsPageState extends State<SettingsPage> {
                   SettingsGroup(
                     label: 'Argomenti nelle note',
                     children: [
+                      // Si accendono dalla nota, col tasto delle barre: qui solo il modello, o spenti.
                       SettingsRow(
                         icon: Icons.bubble_chart_rounded,
                         color: context.col.successo,
-                        title: 'Dividi per argomento',
-                        subtitle: 'Sul telefono, senza rete',
-                        trailing: Switch(value: topicsOn, onChanged: _setTopics),
-                        onTap: () => _setTopics(!topicsOn),
+                        title: 'Modello',
+                        subtitle: 'Si accendono dalla nota, col tasto delle barre',
+                        value: topics ?? 'Spenti',
+                        onTap: () => _open(const TopicsSettings()),
                       ),
-                      _Unfold(
-                        open: topicsOn,
-                        children: [
-                          SettingsRow(
-                            icon: Icons.memory_rounded,
-                            color: context.col.successo,
-                            title: 'Modello',
-                            value: topics,
-                            onTap: () => _open(const TopicsSettings()),
-                          ),
-                        ],
+                      // 7 nov: col modello sul telefono, il colore di quelle simili. Si annulla dalla pillola, o si cambia.
+                      SettingsRow(
+                        icon: Icons.auto_awesome_rounded,
+                        color: context.col.successo,
+                        title: 'Colora da sola',
+                        // 7 nov, sua richiesta: niente colori a caso, solo le tue etichette (10 nov: le regole stanno in Etichette;
+                        // «non capisco "puoi sempre annullare"»: detto cosa fare se sbaglia).
+                        // 11 nov: senza il modello qui sopra non propone niente, e non si capiva perché.
+                        subtitle: topics == null
+                            ? 'Serve il modello qui sopra: senza, non può proporre niente.'
+                            : "Ti propone un colore per le trascrizioni che corrispondono a un'etichetta: decidi tu.",
+                        trailing: Switch(value: st.coloraDaSola, onChanged: _setColoraDaSola),
+                        onTap: () => _setColoraDaSola(!st.coloraDaSola),
+                      ),
+                      // 10 nov: ogni etichetta con la sua regola e «Offusca sempre» (nella rosa solo colore e nome).
+                      SettingsRow(
+                        icon: Icons.label_rounded,
+                        color: context.col.successo,
+                        title: 'Etichette',
+                        subtitle: 'Di cosa parlano, e quali offuscare sempre',
+                        onTap: () => _open(const EtichettePage()),
                       ),
                     ],
                   ),
@@ -327,6 +349,27 @@ class _SettingsPageState extends State<SettingsPage> {
                           trailing: Switch(value: st.sandbox, onChanged: Core.setSandbox),
                           onTap: () => Core.setSandbox(!st.sandbox),
                         ),
+                        // Si vede se i titoli arrivano (7 nov): quanti fatti e cosa sta facendo, solo da leggere.
+                        FutureBuilder<String?>(
+                          future: Core.titoli(),
+                          builder: (context, s) => SettingsRow(
+                            icon: Icons.title_rounded,
+                            color: context.col.azione,
+                            title: s.data ?? 'Titoli: …',
+                            subtitle: 'Un riassunto in poche parole di ogni trascrizione, da Groq',
+                          ),
+                        ),
+                        // Quelli di Groq se ne vanno e si richiedono; i titoli scritti da te restano.
+                        SettingsRow(
+                          icon: Icons.refresh_rounded,
+                          color: context.col.azione,
+                          title: 'Rifai i titoli',
+                          subtitle: 'Solo quelli di Groq: i titoli scritti da te restano',
+                          onTap: () async {
+                            await Core.rifaiTitoli();
+                            if (mounted) setState(() {});
+                          },
+                        ),
                         SettingsRow(
                           icon: Icons.science_outlined,
                           color: context.col.azione,
@@ -351,7 +394,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           onTap: () => _setLimit(!st.simulateLimit),
                         ),
                         _interruttore(Icons.folder_rounded, 'Mostra le cartelle', 'La pagina Cartelle nel Dock di Trascrivi', CartellePage.mostra),
-                        _interruttore(Icons.title_rounded, 'Titoli automatici', 'Sulle schede e nella trascrizione aperta, proposti dal riassunto', Titoli.automatici),
                         _interruttore(Icons.bubble_chart_rounded, 'Mostra gli argomenti', 'La pagina Argomenti accanto alle Note', Core.mostraArgomenti),
                         _interruttore(Icons.pinch_rounded, 'Pizzico al contrario', 'Stringere le dita = più argomenti', Core.pinchReversed),
                         _interruttore(Icons.category_rounded, 'Argomenti per categorie', 'Categorie fisse con le frasi chiave; spento: gli album del motore', Ricerca.perCategorie),
@@ -394,14 +436,15 @@ class _SettingsPageState extends State<SettingsPage> {
                           trailing: Switch(value: st.simNoMic, onChanged: (on) => _simulate('noMic', on)),
                           onTap: () => _simulate('noMic', !st.simNoMic),
                         ),
-                        SettingsRow(
-                          icon: Icons.cloud_off_rounded,
-                          color: context.col.azione,
-                          title: 'Registrazioni in attesa',
-                          subtitle: 'Due finte, come se fosse mancata la rete',
-                          trailing: Switch(value: Core.fakeWaiting.value, onChanged: _setFakeWaiting),
-                          onTap: () => _setFakeWaiting(!Core.fakeWaiting.value),
-                        ),
+                        if (st.sandbox)
+                          SettingsRow(
+                            icon: Icons.cloud_off_rounded,
+                            color: context.col.azione,
+                            title: 'Da sistemare, di prova',
+                            subtitle: 'Due registrazioni in attesa e tre proposte di colore, finte: la zona accanto al titolo di Trascrivi',
+                            trailing: Switch(value: Core.fakeWaiting.value, onChanged: _setFakeWaiting),
+                            onTap: () => _setFakeWaiting(!Core.fakeWaiting.value),
+                          ),
                       ],
                     ),
                   SettingsGroup(
@@ -446,25 +489,12 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// Il riassunto degli argomenti per la riga: il modello scelto, o quanto manca a scaricarlo.
   String? topics;
-  bool topicsOn = false;
-  List<TopicModelInfo> _topicModels = [];
-
-  /// L'interruttore della riga, come per la pulizia. Acceso: il modello già sul telefono, se c'è;
-  /// se no il più leggero, che si scarica.
-  Future<void> _setTopics(bool on) async {
-    HapticFeedback.selectionClick();
-    final ready = _topicModels.where((m) => m.state == 'ready').map((m) => m.id).firstOrNull;
-    await Core.chooseTopicModel(on ? ready ?? 'leggero' : null);
-    _loadTopics();
-  }
 
   Future<void> _loadTopics() async {
     final list = await Core.topicModels();
     final chosen = list.where((m) => m.chosen).firstOrNull;
     if (!mounted) return;
     setState(() {
-      _topicModels = list;
-      topicsOn = chosen != null;
       topics = chosen == null
           ? null
           : chosen.state == 'downloading'
@@ -495,13 +525,8 @@ class _SettingsPageState extends State<SettingsPage> {
             "Transcri si chiude e non potrà trascrivere finché non ne metti un'altra. Le trascrizioni e le note restano.",
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
             // Quello che vuoi fare, rosso e pieno; tornare indietro resta lì, senza peso.
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: context.col.errore, minimumSize: const Size(0, 40)),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Rimuovi'),
-            ),
+            Conferma(principale: 'Rimuovi', colore: context.col.errore, onPrincipale: () => Navigator.pop(ctx, true), onAnnulla: () => Navigator.pop(ctx, false)),
           ],
         ),
       );
@@ -1129,11 +1154,9 @@ class _PromptEditorState extends State<PromptEditor> {
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          FilledButton(onPressed: _save, child: const Text('Salva')),
-                          const SizedBox(width: 8),
-                          TextButton(onPressed: () => setState(() => editing = false), child: const Text('Annulla')),
-                          const Spacer(),
                           if (widget.custom) TextButton(onPressed: _reset, child: const Text('Predefinito')),
+                          const Spacer(),
+                          Conferma(principale: 'Salva', onPrincipale: _save, onAnnulla: () => setState(() => editing = false)),
                         ],
                       ),
                     ],
@@ -1152,14 +1175,12 @@ DateTime _midnight() {
   return DateTime(n.year, n.month, n.day + 1);
 }
 
-String _clock(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-
 /// Il momento in cui si azzera, come lo diresti: "alle 14:05", "domani alle 09:12", "a mezzanotte".
 String _when(DateTime d) {
   final now = DateTime.now();
   if (d.hour == 0 && d.minute == 0) return 'a mezzanotte';
   final tomorrow = DateTime(now.year, now.month, now.day + 1);
-  return d.isBefore(tomorrow) ? 'alle ${_clock(d)}' : 'domani alle ${_clock(d)}';
+  return d.isBefore(tomorrow) ? 'alle ${hm(d)}' : 'domani alle ${hm(d)}';
 }
 
 /// Una misura: etichetta, numero grande, "di N" e, se c'è un limite, una barretta.
@@ -1540,6 +1561,8 @@ class _TopicsSettingsState extends State<TopicsSettings> {
         ),
         const SizedBox(height: 24),
         if (list != null) ...[
+          // Spenti: l'unico modo di toglierli; si riaccendono dalla nota.
+          _Choice(title: 'Spenti', subtitle: 'Si riaccendono dalla nota, col tasto delle barre', selected: !list.any((m) => m.chosen), onTap: () => _choose(null)),
           // Prima il leggero: è la scelta più sobria.
           for (final m in [...list]..sort((a, b) => a.approxMb.compareTo(b.approxMb)))
             _Choice(

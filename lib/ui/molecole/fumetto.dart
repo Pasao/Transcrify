@@ -25,7 +25,11 @@ Future<T?> apriFumetto<T>(BuildContext context, {required Rect sopra, required W
     final sotto = sopra.center.dy < MediaQuery.sizeOf(fumetto).height / 2;
     return CustomSingleChildLayout(
       delegate: _Posto(sopra, MediaQuery.paddingOf(fumetto), MediaQuery.viewInsetsOf(fumetto).bottom),
-      child: Spunta(animazione: a, da: sotto ? Alignment.topCenter : Alignment.bottomCenter, child: builder(fumetto)),
+      // Come la pillola dell'«Annulla»: fuori da una pagina serve un Material per lo stile del testo (niente sottolineatura gialla).
+      child: Material(
+        type: MaterialType.transparency,
+        child: Spunta(animazione: a, da: sotto ? Alignment.topCenter : Alignment.bottomCenter, child: builder(fumetto)),
+      ),
     );
   },
 );

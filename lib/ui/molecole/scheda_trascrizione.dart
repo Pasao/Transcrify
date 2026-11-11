@@ -7,14 +7,15 @@ import '../../core/native.dart';
 import '../../core/titoli.dart';
 import '../common.dart';
 import '../theme.dart';
+import 'corpo_scheda.dart';
 
 /// Una trascrizione nel carosello del giorno (Trascrivi e le cartelle).
 /// Tenendola premuta si sceglie (5 nov: un gesto solo, come nella Galleria). Tenendo premuto il cestino la scheda
 /// si fa rossa, trema e sparisce. Col colore, il fondo è la sua tinta.
 /// Tutte hanno la stessa forma e la stessa altezza (6 nov, giro 6, sua idea): in alto il testo, in fondo una fascia di
-/// una riga: l'ora e le iconcine (da dove arriva, se l'ha ripassata l'AI), senza parole, col cestino a destra. Con
-/// «Titoli automatici» (prove, giro 7) sopra l'ora c'è il titolo (`Titoli.di`). Privata, la fascia resta: le macchie
-/// col lucchetto coprono solo il testo, e si fermano mentre la tieni premuta.
+/// due righe (7 nov): sopra il titolo (`Titoli.di`; senza, l'inizio del testo più tenue), sotto l'ora, le iconcine e
+/// il cestino a destra. Offuscata, il titolo resta e la fascia pure: le macchie coprono solo il testo, e si fermano
+/// mentre la tieni premuta.
 /// Mentre se ne scelgono: la scelta resta a colori, si stringe appena, col contorno, l'ombra e la spunta; le altre
 /// si spengono e perdono il colore, col tondo vuoto. Si vede su ogni tinta, nel chiaro e nello scuro.
 class SchedaTrascrizione extends StatefulWidget {
@@ -22,7 +23,7 @@ class SchedaTrascrizione extends StatefulWidget {
     super.key,
     required this.entry,
     required this.onOpen,
-    required this.onDelete,
+    this.onDelete,
     this.onTieni,
     this.selected = false,
     this.selecting = false,
@@ -36,7 +37,8 @@ class SchedaTrascrizione extends StatefulWidget {
   final Entry entry;
   final double width;
   final VoidCallback onOpen;
-  final VoidCallback onDelete;
+  /// Il cestino; null: non c'è (la prima trascrizione nella prova dell'introduzione: solo «Entra»).
+  final VoidCallback? onDelete;
 
   /// Tenuta premuta: la sceglie (e, se non si stava scegliendo, si comincia).
   final VoidCallback? onTieni;
@@ -53,11 +55,11 @@ class SchedaTrascrizione extends StatefulWidget {
     return c == null ? Scheda.fondo(context.col, scelta: scelta) : Tinte.fondo(c.tinta, Theme.of(context).brightness);
   }
 
-  /// La copertura della privata: una luce più scura della sua tinta e le sue macchie; senza colore, neutre.
+  /// La copertura dell'offuscata: una luce più scura della sua tinta e le sue macchie; senza colore, neutre.
   static CoperturaPrivata copertura(BuildContext context, Entry e, {bool ferma = false}) {
-    final c = e.colore, col = context.col, luce = Theme.of(context).brightness;
+    final c = e.colore, luce = Theme.of(context).brightness;
     return c == null
-        ? CoperturaPrivata(fondo: col.linea, macchie: [col.scheda, col.pagina, col.testoSecondario.withValues(alpha: 0.3)], ferma: ferma)
+        ? CoperturaPrivata.neutra(context, ferma: ferma)
         : CoperturaPrivata(fondo: Tinte.fondoGiu(c.tinta, luce), macchie: Tinte.macchie(c.tinta, luce), ferma: ferma);
   }
 
@@ -79,19 +81,6 @@ class _SchedaTrascrizioneState extends State<SchedaTrascrizione> with SingleTick
   bool _premuta = false;
 
   @override
-  void initState() {
-    super.initState();
-    // Senza titolo, se ne propone uno in fondo (solo per le schede che si vedono).
-    Titoli.proponi(widget.entry);
-  }
-
-  @override
-  void didUpdateWidget(covariant SchedaTrascrizione prima) {
-    super.didUpdateWidget(prima);
-    if (prima.entry != widget.entry) Titoli.proponi(widget.entry);
-  }
-
-  @override
   void dispose() {
     _gone.dispose();
     super.dispose();
@@ -109,7 +98,7 @@ class _SchedaTrascrizioneState extends State<SchedaTrascrizione> with SingleTick
       _committed = true;
       HapticFeedback.heavyImpact();
       _gone.animateTo(1, duration: Durata.lenta, curve: Curves.easeIn).then((_) {
-        if (mounted) widget.onDelete();
+        if (mounted) widget.onDelete?.call();
       });
     });
   }
@@ -196,25 +185,15 @@ class _SchedaTrascrizioneState extends State<SchedaTrascrizione> with SingleTick
                   onTap: widget.onOpen,
                   onLongPress: widget.onTieni == null ? null : _tieni,
                   onHighlightChanged: entry.privata ? (si) => setState(() => _premuta = si) : null,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Il testo, o la copertura col lucchetto: lo stesso posto su ogni scheda.
-                      Expanded(
-                        child: entry.privata
-                            ? SchedaTrascrizione.copertura(context, entry, ferma: _premuta)
-                            : Padding(
-                                padding: const EdgeInsets.fromLTRB(Spazio.s4, Spazio.s3, Spazio.s4, 0),
-                                child: _anteprima(entry),
-                              ),
-                      ),
-                      // La fascia in fondo, alta uguale su ogni scheda. Il cestino non sta attaccato all'angolo:
-                      // lo stesso respiro del testo a sinistra.
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(Spazio.s4, Spazio.s2, Spazio.s2, Spazio.s2),
-                        child: ValueListenableBuilder(valueListenable: Titoli.automatici, builder: (context, titoli, _) => _fascia(entry, titoli)),
-                      ),
-                    ],
+                  // Il testo, o la copertura col lucchetto: lo stesso posto su ogni scheda (`CorpoScheda`, come le note).
+                  // Quando cambia (resa privata dalla trascrizione aperta, che si chiude) la copertura arriva sul testo.
+                  child: CorpoScheda(
+                    riempie: true,
+                    coperta: entry.privata,
+                    copertura: SchedaTrascrizione.copertura(context, entry, ferma: _premuta),
+                    testo: _anteprima(entry),
+                    titolo: Padding(padding: const EdgeInsets.only(right: Spazio.s2), child: _titolo(entry)),
+                    info: _fascia(entry),
                   ),
                 ),
               ),
@@ -245,39 +224,42 @@ class _SchedaTrascrizioneState extends State<SchedaTrascrizione> with SingleTick
     );
   }
 
-  /// La fascia: l'ora con le iconcine (si stringono loro se la scheda è stretta) e, con [titoli], sopra il titolo; a
-  /// destra il cestino. Tutto centrato in altezza.
-  Widget _fascia(Entry entry, bool titoli) {
-    final c = context.col;
+  /// La fascia (7 nov, sua richiesta: il cestino sotto il titolo): sopra solo il titolo, sotto l'ora con le iconcine
+  /// (da dove arriva, se l'ha ripassata l'AI, se il colore l'ha messo l'app) e il cestino a destra. L'ora e le
+  /// iconcine si stringono loro se la scheda è stretta.
+  /// Il titolo (`Titoli.di`; senza, l'inizio del testo più tenue).
+  Widget _titolo(Entry entry) => Text(
+    Titoli.di(entry),
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: Testo.etichetta.copyWith(color: Titoli.provvisorio(entry) ? context.col.testoSecondario : context.col.testo),
+  );
+
+  /// Sotto il titolo: l'ora, le iconcine e il cestino.
+  Widget _fascia(Entry entry) {
     final modo = entry.mode;
-    final ora = Row(
-      spacing: Spazio.s2,
-      children: [
-        Flexible(
-          child: Text(hm(entry.at), style: orarioStyle(context), maxLines: 1, overflow: TextOverflow.clip),
-        ),
-        if (entry.source != null) SourceIcon(entry.source),
-        if (SchedaTrascrizione.ripassata.contains(modo)) EtichettaModo(modo!),
-      ],
-    );
+    // 10 nov, «il cestino è tutto spostato»: l'ora (Flexible) e uno Spacer si dividevano lo spazio a metà, e quello
+    // che l'ora non usava restava in fondo: il cestino non stava a destra, e si spostava con l'ora. Ora l'ora e le
+    // iconcine stanno nel loro spazio a sinistra, il cestino sempre a destra, tutti centrati in altezza.
     return Row(
       children: [
         Expanded(
-          child: !titoli
-              ? ora
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(Titoli.di(entry), maxLines: 1, overflow: TextOverflow.ellipsis, style: Testo.etichetta.copyWith(color: c.testo)),
-                    ora,
-                  ],
-                ),
+          child: Row(
+            spacing: Spazio.s2,
+            children: [
+              Flexible(
+                child: Text(hm(entry.at), style: orarioStyle(context), maxLines: 1, overflow: TextOverflow.clip),
+              ),
+              if (entry.source != null) SourceIcon(entry.source),
+              if (SchedaTrascrizione.ripassata.contains(modo)) EtichettaModo(modo!),
+              if (entry.coloreAuto && entry.colore != null) const SegnoAuto(),
+            ],
+          ),
         ),
-        if (widget.selecting)
-          const SizedBox(height: Misura.bottoneBasso)
+        if (widget.onDelete case final via? when !widget.selecting)
+          DeleteButton(onDelete: via, onHoldStart: _holdStart, onHoldEnd: _holdEnd)
         else
-          DeleteButton(onDelete: widget.onDelete, onHoldStart: _holdStart, onHoldEnd: _holdEnd),
+          const SizedBox(height: Misura.bottoneBasso),
       ],
     );
   }

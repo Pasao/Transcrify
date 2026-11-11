@@ -1,8 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- La chiedeva solo ONNX Runtime, per i suoi dati d'uso (tolti sotto). -->
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <!-- Per sapere se c'è la rete prima di chiedere i titoli a Groq (normale: nessuna domanda). Senza, Android
+         rispondeva con un errore di sicurezza e i titoli si fermavano. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -30,7 +31,7 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
-            <!-- Le due scorciatoie nel «Condividi»: un tocco solo, senza scegliere dopo. -->
+            <!-- La scorciatoia «Trascrivi» in cima al «Condividi» (vedi ShareShortcuts). -->
             <meta-data
               android:name="android.app.shortcuts"
               android:resource="@xml/share_shortcuts"
@@ -56,6 +57,8 @@
             android:label="@string/widget_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- L'app aggiornata: si ridisegna col disegno nuovo. -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -88,7 +91,7 @@
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
         <!-- Un audio condiviso da un'altra app, per esempio un vocale di WhatsApp. Non si vede: mette
-             l'audio in coda e si chiude. Tra le app compare una volta sola (Samsung ne mostrerebbe una e poi chiederebbe): il pensiero è una scorciatoia. -->
+             l'audio in coda e si chiude. Nel «Condividi» c'è solo «Trascrivi»: tra le app e come scorciatoia in cima. -->
         <activity
             android:name=".ShareAudio"
             android:exported="false"
@@ -98,7 +101,7 @@
         <activity-alias
             android:name=".ShareAsTranscription"
             android:exported="true"
-            android:label="Transcrify trascrizione"
+            android:label="Trascrivi"
             android:icon="@drawable/ic_share_transcription"
             android:targetActivity=".ShareAudio">
             <intent-filter>

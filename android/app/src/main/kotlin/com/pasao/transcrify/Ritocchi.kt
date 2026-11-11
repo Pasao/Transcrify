@@ -10,7 +10,8 @@ fun segna(storia: List<Transcription>, ats: Set<Long>, come: (Transcription) -> 
 /**
  * Unisce le trascrizioni in [ordine] (la prima è quella da cui sei partito): i testi nell'ordine scelto,
  * separati da una riga vuota. La nuova tiene il giorno della più vecchia (il suo «at») e, della prima,
- * colore, privata, modo e provenienza. Le altre se ne vanno. Null se non ce ne sono almeno due.
+ * colore, privata, modo e provenienza. Le altre se ne vanno. Null se non ce ne sono almeno due. Il titolo, se non è
+ * tuo, se ne va: era di un pezzo solo, Groq ne fa uno per il testo intero (un titolo tuo resta).
  */
 fun unisci(storia: List<Transcription>, ordine: List<Long>): Pair<List<Transcription>, Transcription>? {
     val perAt = storia.associateBy { it.at }
@@ -19,7 +20,7 @@ fun unisci(storia: List<Transcription>, ordine: List<Long>): Pair<List<Transcrip
     val fusa = scelte.first().copy(
         text = scelte.joinToString("\n\n") { it.text.trim() },
         at = scelte.minOf { it.at },
-    )
+    ).let { if (it.titoloUtente) it else it.copy(titolo = null, titoloChiesto = false) }
     val via = scelte.map { it.at }.toSet()
     return ordina(storia.filter { it.at !in via } + fusa) to fusa
 }

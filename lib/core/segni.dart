@@ -45,6 +45,15 @@ abstract final class Segni {
     if (!Core.preview.value) await _ch.invokeMethod('segnaHistory', {'ats': _ms(ats), 'colore': colore?.chiave});
   }
 
+  /// Quante trascrizioni ha ogni colore (7 nov: la rosa segna quelli già in uso, così sai quali sono liberi).
+  static Map<Colore, int> usi(Iterable<Entry> voci) {
+    final usi = <Colore, int>{};
+    for (final c in voci.map((e) => e.colore).nonNulls) {
+      usi[c] = (usi[c] ?? 0) + 1;
+    }
+    return usi;
+  }
+
   /// Private (il testo non si vede sulla scheda) o di nuovo visibili.
   static Future<void> rendiPrivate(Iterable<DateTime> ats, bool privata) async {
     if (!Core.preview.value) await _ch.invokeMethod('segnaHistory', {'ats': _ms(ats), 'privata': privata});

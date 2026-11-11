@@ -110,6 +110,13 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     var stage by mutableStateOf<Stage?>(null); private set
     var pillRight by mutableStateOf(true); private set
 
+    /**
+     * La prova guidata dell'introduzione (11 nov, suo): la pillola sta ferma sul bordo destro, all'altezza [guidata]
+     * (in frazioni dello schermo), non si trascina e nel pannello c'è solo da fermare (niente butta, pausa, cassetti,
+     * modi). Il posto salvato ([Store.pillRight]/[Store.pillY]) non si tocca: finita la prova torna quello.
+     */
+    var guidata by mutableStateOf<Float?>(null); private set
+
     /** La pillola è dentro il raggio della X: rilasciandola si chiude. */
     var dismissHot by mutableStateOf(false); private set
 
@@ -161,6 +168,8 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         wm = getSystemService(WindowManager::class.java)
         store = Store(this)
+        // Senza, lo stato della voce non arriva all'app finché una finestra di Compose non si è vista (vedi [Istantanee]).
+        Istantanee.avvia(main::post)
         session = Session(this, store, scope).also {
             it.onHistoryChanged = { listener?.invoke() }
             it.onShared = { t, origin -> if (out) showMessage(t, origin) else it.notifyShared(t, origin) }
@@ -171,8 +180,9 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         instance = this
 
         // La pausa apre e chiude da sola il suo cassetto (Cassettiera.pausa): lunga si apre, ripreso si chiude.
+        // 11 nov, suo: si apre solo quando la sua trascrizione è arrivata (prima il cassetto cambiava e restava il tempo).
         scope.launch {
-            snapshotFlow { session.pausaLunga to (session.phase == Phase.RECORDING && session.paused) }.collect { (lunga, inPausa) ->
+            snapshotFlow { (session.pausaLunga && session.bozza != null) to (session.phase == Phase.RECORDING && session.paused) }.collect { (lunga, inPausa) ->
                 carta = Cassettiera.pausa(carta, lunga, inPausa)
             }
         }
@@ -231,7 +241,11 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
         }
         homecoming = false
-        if (pillView == null) addPill()
+        // La prova guidata: il posto è il suo (prima di mettere la pillola, così nasce già lì). Ogni uscita normale la
+        // spegne e torna al posto salvato: anche se l'app è stata chiusa a metà prova, la pillola non resta bloccata.
+        guidata = if (intent?.hasExtra(EXTRA_GUIDA) == true) intent.getFloatExtra(EXTRA_GUIDA, 0f) else null
+        pillRight = if (guidata != null) true else store.pillRight
+        if (pillView == null) addPill() else placePill()
         // Il widget si svuota quando la bolla lo copre già.
         main.postDelayed({ TranscriWidget.refresh(this) }, 120)
         val x = intent?.getFloatExtra(EXTRA_X, -1f) ?: -1f
@@ -331,9 +345,6 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     /** Quale carta è fuori (i cassetti la aprono, la scambiano, la chiudono); null: nessuna. */
     var carta by mutableStateOf<Carta?>(null)
 
-    /** Un cassetto si sta fondendo con la sua carta: il pannello la segue passo passo, senza la sua molla. */
-    var morfa by mutableStateOf(false)
-
     /** Tutti i vocali sulla carta, dal primo all'ultimo. */
     val vocali: List<Pair<Transcription, Origin>> get() = listOfNotNull(vocale) + messages
 
@@ -346,17 +357,17 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (vocale == null && carta == Carta.VOCALI) carta = null
     }
 
+    /** La X della testata: tutti i vocali escono dalla carta (restano salvati dov'erano), e la carta si richiude. */
+    fun togliVocali() {
+        vocale = null
+        messages.clear()
+        if (carta == Carta.VOCALI) carta = null
+    }
+
     /** «Salva come nota»: i vocali sulla carta passano tra le note. Il titolo arriva appena è pronto. */
     fun vocaliInNote() {
         vocale = vocale?.let(::inNota)
         for (i in messages.indices) messages[i] = inNota(messages[i])
-        listener?.invoke()
-    }
-
-    /** «Salva come nota» sulla carta dell'ultima trascrizione. */
-    fun ultimaInNota() {
-        val t = store.history().firstOrNull() ?: return
-        inNota(t to Origin(t.source, toNote = false))
         listener?.invoke()
     }
 
@@ -483,7 +494,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val view = pillView ?: return
         val b = screen
         pillParams.x = if (pillRight) b.width() - touchW else 0
-        pillParams.y = (store.pillY * b.height() - touchH / 2f).roundToInt().coerceIn(0, b.height() - touchH)
+        pillParams.y = ((guidata ?: store.pillY) * b.height() - touchH / 2f).roundToInt().coerceIn(0, b.height() - touchH)
         wm.updateViewLayout(view, pillParams)
     }
 
@@ -512,6 +523,9 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         view.setOnTouchListener { v, e ->
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    // Toccato: non è più fuori solo per un audio condiviso, non torna a casa da solo (11 nov, suo: buttata
+                    // la registrazione la pillola spariva, perché [goHomeIfDone] lo credeva ancora uscito per un vocale).
+                    outForShared = false
                     downX = e.rawX; downY = e.rawY
                     startX = pillParams.x; startY = pillParams.y
                     dragging = false
@@ -522,7 +536,8 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                 MotionEvent.ACTION_MOVE -> {
                     val dx = e.rawX - downX
                     val dy = e.rawY - downY
-                    if (!dragging && !held && (abs(dx) > slop || abs(dy) > slop)) {
+                    // Nella prova guidata non si trascina: resta dove la guida la indica.
+                    if (guidata == null && !dragging && !held && (abs(dx) > slop || abs(dy) > slop)) {
                         dragging = true
                         carried = true
                         holding = false
@@ -729,6 +744,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     }
 
     fun expand() {
+        outForShared = false
         if (stage == null) showStage(Stage.Menu)
     }
 
@@ -798,6 +814,7 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         private const val EXTRA_X = "x"
         private const val EXTRA_Y = "y"
         private const val EXTRA_HOME = "home"
+        private const val EXTRA_GUIDA = "guida"
         /** Esce già in ascolto: lo passa anche il tasto che detta del widget al suo trampolino. */
         const val EXTRA_RECORD = "record"
 
@@ -840,10 +857,11 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
          * [x], [y]: punto dello schermo (px) da cui esce la bolla; [home]: la capsula di casa nel bottone (l, t, r, b).
          * [record]: esce già in ascolto (il tasto che detta del widget 4 × 1).
          */
-        fun start(context: Context, x: Float, y: Float, home: FloatArray?, record: Boolean = false) {
+        fun start(context: Context, x: Float, y: Float, home: FloatArray?, record: Boolean = false, guida: Float? = null) {
             context.startForegroundService(
                 Intent(context, PillService::class.java).putExtra(EXTRA_X, x).putExtra(EXTRA_Y, y)
                     .putExtra(EXTRA_HOME, home).putExtra(EXTRA_RECORD, record)
+                    .apply { guida?.let { putExtra(EXTRA_GUIDA, it) } }
             )
         }
 

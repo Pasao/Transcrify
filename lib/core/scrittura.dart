@@ -9,19 +9,68 @@ abstract final class Scrittura {
   static const pallino = '• ';
 
   /// `**` (grassetto) o `*` (corsivo) attorno alla selezione. Il cursore dentro un pezzo così, o la selezione che lo
-  /// copre: i segni vanno via. Il cursore fermo: i due segni, e lui in mezzo per scriverci dentro.
+  /// copre (anche coi segni, che non si vedono): i segni vanno via. Il cursore dentro una parola: tutta la parola
+  /// (7 nov: prima la spezzava, «ci****ao»). Il cursore fermo altrove: i due segni, e lui in mezzo per scriverci
+  /// dentro; toccato di nuovo prima di scrivere, vanno via. Su più righe: ogni riga per conto suo (un pezzo non va a capo).
   static TextEditingValue segna(TextEditingValue v, TipoPezzo tipo) {
     final segno = tipo == TipoPezzo.grassetto ? '**' : '*';
-    final sel = _sel(v);
-    for (final p in Formato.leggi(v.text)) {
-      if (p.tipo == tipo && p.dentroInizio <= sel.start && sel.end <= p.dentroFine) return _togli(v, p, sel);
+    final t = v.text, sel = _sel(v);
+    for (final p in Formato.leggi(t)) {
+      if (p.tipo == tipo && p.inizio <= sel.start && sel.end <= p.fine) return _togli(v, p, sel);
     }
-    if (sel.isCollapsed) return _metti(v, sel, segno, segno, '');
-    // Gli spazi ai bordi restano fuori: «** ciao **» non è grassetto.
-    final dentro = sel.textInside(v.text);
-    final a = sel.start + (dentro.length - dentro.trimLeft().length), b = sel.end - (dentro.length - dentro.trimRight().length);
-    if (a >= b) return v;
-    return _metti(v, TextSelection(baseOffset: a, extentOffset: b), segno, segno, v.text.substring(a, b));
+    if (sel.isCollapsed) return _segnaQui(v, sel.start, segno);
+    final righe = <(int, int)>[];
+    for (var i = sel.start; i <= sel.end; i = t.indexOf('\n', i) + 1) {
+      final fine = t.indexOf('\n', i);
+      righe.add((i, fine < 0 || fine > sel.end ? sel.end : fine));
+      if (fine < 0) break;
+    }
+    if (righe.length == 1) {
+      final (a, b) = _senzaBordi(t, sel.start, sel.end);
+      if (a >= b) return v;
+      return _metti(v, TextSelection(baseOffset: a, extentOffset: b), segno, segno, t.substring(a, b));
+    }
+    var nuovo = t;
+    var fine = sel.end;
+    // Dal fondo, così le posizioni prima non si spostano.
+    for (final (da, a) in righe.reversed) {
+      final (x, y) = _senzaBordi(t, da, a);
+      if (x >= y) continue;
+      nuovo = nuovo.replaceRange(y, y, segno).replaceRange(x, x, segno);
+      fine += 2 * segno.length;
+    }
+    return TextEditingValue(text: nuovo, selection: TextSelection(baseOffset: sel.start, extentOffset: fine));
+  }
+
+  /// [da]–[a] senza gli spazi ai bordi («** ciao **» non è grassetto) e senza il pallino di un elenco.
+  static (int, int) _senzaBordi(String t, int da, int a) {
+    final r = t.substring(da, a);
+    var x = da + (r.length - r.trimLeft().length);
+    if (x == inizioRiga(t, x) && t.startsWith(pallino, x)) x += pallino.length;
+    return (x, a - (r.length - r.trimRight().length));
+  }
+
+  static final _lettera = RegExp(r'[\p{L}\p{N}_]', unicode: true);
+
+  /// Il cursore fermo in [c]: i segni vuoti appena messi vanno via; dentro una parola, la parola; se no i due segni.
+  static TextEditingValue _segnaQui(TextEditingValue v, int c, String segno) {
+    final t = v.text, n = segno.length;
+    bool lettera(int i) => i >= 0 && i < t.length && _lettera.hasMatch(t[i]);
+    bool stella(int i) => i >= 0 && i < t.length && t[i] == '*';
+    if (c >= n && t.startsWith('$segno$segno', c - n) && !stella(c - n - 1) && !stella(c + n)) {
+      return TextEditingValue(text: t.replaceRange(c - n, c + n, ''), selection: TextSelection.collapsed(offset: c - n));
+    }
+    if (!lettera(c - 1) || !lettera(c)) return _metti(v, TextSelection.collapsed(offset: c), segno, segno, '');
+    var a = c, b = c;
+    while (lettera(a - 1)) {
+      a--;
+    }
+    while (lettera(b)) {
+      b++;
+    }
+    final w = _metti(v, TextSelection(baseOffset: a, extentOffset: b), segno, segno, t.substring(a, b));
+    // Il cursore resta dov'era, nella parola.
+    return w.copyWith(selection: TextSelection.collapsed(offset: c + n));
   }
 
   /// Le parole scelte diventano un link a [url] (`[parole](url)`); senza parole scelte, l'indirizzo così com'è.

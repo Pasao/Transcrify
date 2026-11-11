@@ -24,7 +24,7 @@ class ChipFiltro extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               spacing: Spazio.s1,
               children: [
-                Flexible(child: Text(testo, overflow: TextOverflow.ellipsis)),
+                Text(testo), // intero: i filtri accesi stanno in una fila che scorre ([FilaScorre])
                 Icon(Icons.close_rounded, size: Misura.iconaPiccola, color: acceso ? c.suAzioneTenue : c.testo),
               ],
             )

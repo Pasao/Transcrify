@@ -27,6 +27,9 @@ class VoceInBarra extends StatefulWidget {
   /// Transcri sta dettando (o trascrivendo) per la trascrizione [at].
   static bool dettaIn(Live live, DateTime at) => live.appendTo == at.millisecondsSinceEpoch && (live.listening || live.phase == 'PROCESSING');
 
+  /// Da quanto ascolta, «01:05». Lo usa anche la prova dell'introduzione.
+  static String tempo(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
+
   @override
   State<VoceInBarra> createState() => _VoceInBarraState();
 }
@@ -47,8 +50,6 @@ class _VoceInBarraState extends State<VoceInBarra> {
     HapticFeedback.heavyImpact();
     Core.listen(appendTo: at, cursor: widget.punto());
   }
-
-  static String _tempo(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +79,7 @@ class _VoceInBarraState extends State<VoceInBarra> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     spacing: Spazio.s1,
                     children: [
-                      testo(fase == FaseVoce.pausa ? 'in pausa' : _tempo(live.seconds), Testo.orario),
+                      testo(fase == FaseVoce.pausa ? 'in pausa' : VoceInBarra.tempo(live.seconds), Testo.orario),
                       const OndaVoce(larga: Spazio.s8, alta: Spazio.s3),
                     ],
                   ),

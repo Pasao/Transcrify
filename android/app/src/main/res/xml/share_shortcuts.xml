@@ -1,13 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- La scorciatoia del «Condividi» (in cima, tra i contatti): solo «Trascrivi», la stessa voce che c'è tra le app
+     (10 nov, suo: tutte e due, ma niente «con la nota»). -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <share-target android:targetClass="com.pasao.transcrify.ShareAsTranscription">
         <data android:mimeType="audio/*" />
         <data android:mimeType="application/ogg" />
         <category android:name="com.pasao.transcrify.category.TRANSCRIPTION" />
-    </share-target>
-    <share-target android:targetClass="com.pasao.transcrify.ShareAsTranscription">
-        <data android:mimeType="audio/*" />
-        <data android:mimeType="application/ogg" />
-        <category android:name="com.pasao.transcrify.category.THOUGHT" />
     </share-target>
 </shortcuts>

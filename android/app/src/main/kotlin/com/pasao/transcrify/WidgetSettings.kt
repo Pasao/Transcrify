@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,24 +58,24 @@ class WidgetSettings : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
         if (id == AppWidgetManager.INVALID_APPWIDGET_ID) return finish()
-        // Se esci senza "Fatto" il widget resta com'era (o, appena aggiunto, con l'aspetto di partenza).
+        // Ogni scelta va subito sul widget (7 nov: «il widget non si aggiorna»): «Fatto» chiude e basta.
         setResult(Activity.RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id))
         setContent {
             val dark = isSystemInDarkTheme()
             MaterialTheme(if (dark) dynamicDarkColorScheme(this) else dynamicLightColorScheme(this)) {
-                Screen(WidgetLook.of(this, id)) { look ->
+                Screen(WidgetLook.of(this, id), onChange = { look ->
                     WidgetLook.save(this, id, look)
                     TranscriWidget.refresh(this)
-                    finish()
-                }
+                }) { finish() }
             }
         }
     }
 }
 
 @Composable
-private fun Screen(start: WidgetLook, onDone: (WidgetLook) -> Unit) {
+private fun Screen(start: WidgetLook, onChange: (WidgetLook) -> Unit, onDone: () -> Unit) {
     var look by remember { mutableStateOf(start) }
+    LaunchedEffect(look) { if (look != start) onChange(look) }
     val c = MaterialTheme.colorScheme
     Column(
         Modifier
@@ -102,7 +103,7 @@ private fun Screen(start: WidgetLook, onDone: (WidgetLook) -> Unit) {
         Choice("Nel 2 × 1", listOf(false to "Testo", true to "Apri l'app"), look.apri) { look = look.copy(apri = it) }
         Choice("Sfondo", listOf(true to "Pieno", false to "Trasparente"), look.filled) { look = look.copy(filled = it) }
         Spacer(Modifier.weight(1f))
-        Button(onClick = { onDone(look) }, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Fatto", style = Caratteri.testoGrande) }
+        Button(onClick = onDone, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Fatto", style = Caratteri.testoGrande) }
     }
 }
 

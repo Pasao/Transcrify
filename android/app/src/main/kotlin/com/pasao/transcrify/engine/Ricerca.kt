@@ -29,12 +29,15 @@ class Ricerca {
      * e non troppo sotto la migliore ([banda]): oltre, sono risultati che non c'entrano.
      */
     fun cerca(domanda: FloatArray, quante: Int, minimo: Float, banda: Float): List<Trovato> {
-        val migliori = frasi.mapNotNull { (fonte, sensi) ->
-            sensi.maxByOrNull { it.second.dot(domanda) }?.let { (span, v) -> Trovato(fonte, span, v.dot(domanda)) }
-        }.sortedByDescending { it.punteggio }
+        val migliori = punteggi(domanda)
         val primo = migliori.firstOrNull()?.punteggio ?: return emptyList()
         return migliori.filter { it.punteggio >= minimo && it.punteggio >= primo - banda }.take(quante)
     }
+
+    /** Ogni fonte con la sua frase più vicina alla [domanda], dalla migliore: senza soglie (chi le usa sceglie le sue). */
+    fun punteggi(domanda: FloatArray): List<Trovato> = frasi.mapNotNull { (fonte, sensi) ->
+        sensi.maxByOrNull { it.second.dot(domanda) }?.let { (span, v) -> Trovato(fonte, span, v.dot(domanda)) }
+    }.sortedByDescending { it.punteggio }
 }
 
 /** La ricerca per parola: tutte le parole cercate, senza badare a maiuscole e accenti. */

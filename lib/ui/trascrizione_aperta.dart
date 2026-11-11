@@ -15,8 +15,8 @@ import 'theme.dart';
 import 'transcri.dart';
 
 /// Il testo intero, aperto dal basso: si può cambiare e si salva da solo.
-/// In cima (con «Titoli automatici», prove) il titolo, toccato si cambia lì; a destra, sempre nello stesso posto, il cerchio del colore;
-/// sotto il giorno, il modo e da dove arriva. In fondo la voce, il cestino e copia: con i testi lunghi sono sempre lì.
+/// In cima il titolo (7 nov: da Groq, una volta sola; toccato si cambia lì); a destra, sempre nello stesso posto, il cerchio del colore;
+/// sotto il giorno, il modo e da dove arriva. In fondo la voce, copia, Offusca e il cestino: con i testi lunghi sono sempre lì.
 /// Apre una trascrizione nella sua scheda (da Trascrivi, da una cartella o da una ricerca). [onDelete] arriva a scheda
 /// chiusa; senza, la trascrizione si elimina subito.
 void openEntry(BuildContext context, Entry e, {Future<void> Function()? onDelete}) {
@@ -68,6 +68,17 @@ class _EntrySheetState extends State<_EntrySheet> {
       if (mounted) setState(() => _colore = ora[widget.entry.at]);
     },
   );
+
+  /// Offuscata (sulla scheda il testo è coperto) o in vista: l'occhio in fondo, salvato subito.
+  late bool _privata = widget.entry.privata;
+
+  /// «Offusca» chiude anche la trascrizione (7 nov, sua richiesta: così si vede che l'hai fatta): nella lista
+  /// la copertura arriva sopra il testo della sua scheda. «Mostra» la lascia aperta.
+  void _cambiaPrivata() {
+    setState(() => _privata = !_privata);
+    Segni.rendiPrivate([widget.entry.at], _privata).then((_) => Core.refresh());
+    if (_privata) Navigator.pop(context);
+  }
 
   /// Il titolo nuovo, salvato subito; vuoto lo toglie.
   void _intitola(String titolo) {
@@ -167,7 +178,6 @@ class _EntrySheetState extends State<_EntrySheet> {
   /// provenienza.
   Widget _testata(Entry entry) {
     final colore = _colore;
-    final titoli = Titoli.automatici.value;
     final dati = Row(
       children: [
         Flexible(
@@ -177,25 +187,22 @@ class _EntrySheetState extends State<_EntrySheet> {
         if (entry.source != null) ...[const SizedBox(width: Spazio.s3), SourceIcon(entry.source)],
       ],
     );
-    // Senza «Titoli automatici» (prove, giro 7) niente titolo: in cima il giorno, il modo e da dove, col cerchio.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment: titoli ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: !titoli
-                  ? dati
-                  : ListenableBuilder(
-                      listenable: _text,
-                      builder: (context, _) => TitoloModificabile(
-                        titolo: _titolo ?? Titoli.taglia(_text.text),
-                        suggerimento: Titoli.taglia(_text.text),
-                        stile: Testo.titoloSezione,
-                        onFatto: _intitola,
-                      ),
-                    ),
+              child: ListenableBuilder(
+                listenable: _text,
+                builder: (context, _) => TitoloModificabile(
+                  titolo: _titolo ?? Titoli.taglia(_text.text),
+                  suggerimento: Titoli.taglia(_text.text),
+                  stile: Testo.titoloSezione,
+                  onFatto: _intitola,
+                ),
+              ),
             ),
             const SizedBox(width: Spazio.s2),
             // Sempre qui, con o senza colore: la scelta del colore spunta da lui (sotto: sopra non c'è posto).
@@ -207,7 +214,7 @@ class _EntrySheetState extends State<_EntrySheet> {
             ),
           ],
         ),
-        if (titoli) dati,
+        dati,
       ],
     );
   }
@@ -271,11 +278,20 @@ class _EntrySheetState extends State<_EntrySheet> {
                         Expanded(
                           child: VoceInBarra(at: entry.at, prepara: _preparaVoce, punto: _puntoVoce),
                         ),
-                        DeleteButton(onDelete: widget.onDelete),
+                        // 7 nov: copia prima, il cestino in fondo (più vicino al pollice); in mezzo Offusca / Mostra.
                         ListenableBuilder(
                           listenable: _text,
                           builder: (context, _) => CopyButton(text: _text.text),
                         ),
+                        // Mentre detti qui l'occhio si fa da parte: i comandi della voce hanno bisogno di posto
+                        // (stretto e col cestino armato non ci starebbero), e il cestino resta dov'è, in fondo.
+                        ValueListenableBuilder<Live>(
+                          valueListenable: Core.live,
+                          builder: (context, live, _) => VoceInBarra.dettaIn(live, entry.at)
+                              ? const SizedBox.shrink()
+                              : BottoneOffusca(coperta: _privata, onTap: _cambiaPrivata),
+                        ),
+                        DeleteButton(onDelete: widget.onDelete),
                       ],
                     ),
                   ),

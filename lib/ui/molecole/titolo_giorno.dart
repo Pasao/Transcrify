@@ -47,7 +47,9 @@ class TitoloGiorno extends StatelessWidget {
             iconAlignment: IconAlignment.end,
             icon: AnimatedRotation(
               turns: aperto! ? 0.5 : 0,
+              // Lo stesso tempo e la stessa curva del giorno che si apre (trascrivi.dart): si muovono insieme.
               duration: Durata.normale,
+              curve: Curva.standard,
               child: const Icon(Icons.expand_more_rounded, size: Misura.iconaMedia),
             ),
             label: Text(aperto! ? 'Chiudi' : 'Tutte'),

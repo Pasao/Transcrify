@@ -31,7 +31,8 @@ class Bottone extends StatelessWidget {
   final bool alto;
   final IconData? icona;
 
-  /// Solo per i casi dichiarati (un bottone «Testo» rosso: Elimina). Di base: i colori del tipo.
+  /// Solo per i casi dichiarati (rosso: Elimina, Rimuovi): il testo di un «Testo», il fondo di un «Pieno». Di base: i
+  /// colori del tipo.
   final Color? colore;
 
   /// Lo stile di un tipo: lo usano il Bottone e i temi dei bottoni di Material (theme.dart).
@@ -42,7 +43,7 @@ class Bottone extends StatelessWidget {
     Color? colore,
   }) {
     final (fondo, su) = switch (tipo) {
-      TipoBottone.pieno => (c.azione, c.suAzione),
+      TipoBottone.pieno => (colore ?? c.azione, c.suAzione),
       TipoBottone.tenue => (c.azioneTenue, c.suAzioneTenue),
       TipoBottone.testo => (Colors.transparent, colore ?? c.azione),
     };

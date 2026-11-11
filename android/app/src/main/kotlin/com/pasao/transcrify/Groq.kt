@@ -9,8 +9,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 
-/** [offline]: non c'era rete. L'audio resta in coda e si riprova quando torna. */
-class GroqError(message: String, val offline: Boolean = false) : Exception(message)
+/** [offline]: non c'era rete. L'audio resta in coda e si riprova quando torna. [codice]: la risposta HTTP (0 = nessuna). */
+class GroqError(message: String, val offline: Boolean = false, val codice: Int = 0) : Exception(message)
 
 data class Model(val id: String, val owner: String, val context: Int, val speech: Boolean)
 
@@ -63,35 +63,49 @@ class Groq(private val key: String) {
     }
 
     /**
-     * Pulisce un testo di qualunque lunghezza: quelli lunghi a pezzi, tagliati tra una frase e l'altra.
-     * Una risposta sola ha un tetto di token, e oltre quello il testo finirebbe tagliato.
+     * Pulisce un testo di qualunque lunghezza, senza tagliarlo mai ([Pulitura]: a pezzi, col tetto giusto, e una
+     * risposta tagliata non si accetta). [riserva]: un modello che non ragiona, per riprovare ([Pulitura.riserva]).
      */
-    fun cleanLong(raw: String, model: String, prompt: String, words: List<String>, maxWer: Double? = null): String {
-        val chunks = mutableListOf(StringBuilder())
-        for (sentence in raw.split(Regex("""(?<=[.!?…])\s+"""))) {
-            if (chunks.last().isNotEmpty() && chunks.last().length + sentence.length > CLEAN_CHUNK) chunks += StringBuilder()
-            chunks.last().append(sentence).append(' ')
-        }
-        return chunks.joinToString("\n\n") { chunk ->
-            val before = chunk.toString().trim()
-            val after = clean(before, model, prompt, words)
-            // Il modello ha tagliato troppo: di questo pezzo si tiene quello che hai detto, parola per parola.
-            if (maxWer != null && WordGuard.wer(before, after) > maxWer) before else after
-        }
+    fun cleanLong(raw: String, model: String, prompt: String, words: List<String>, maxWer: Double? = null, riserva: String? = null): String =
+        Pulitura(model, riserva) { testo, modello, tetto -> chat(testo, modello, prompt, words, tetto, extra = ragionamentoCorto(modello)) }
+            .pulisci(raw, maxWer)
+
+    /**
+     * Un titolo di poche parole per una nota o una trascrizione: l'argomento, a temperatura bassa. I modelli che
+     * ragionano contano anche il ragionamento nel tetto: si chiede corto ([ragionamentoCorto]); tagliata, si riprova
+     * una volta col tetto più largo, e se no niente titolo (mai uno a metà: il Titolatore riprova più avanti).
+     */
+    fun title(text: String, model: String): String {
+        return pulisciTitolo(corta(text.take(3000), model, TITLE_PROMPT))
     }
 
-    /** Un titolo di poche parole per una nota. */
-    fun title(text: String, model: String): String =
-        clean(text.take(3000), model, TITLE_PROMPT, emptyList(), maxTokens = 600)
-            .lineSequence().first().trim().trim('"', '«', '»', '*', '#', '.', ' ').take(60)
+    /** «Proponi etichette» (10 nov): dai soli TITOLI delle trascrizioni, da 4 a 8 etichette col nome e la regola. */
+    fun etichette(titoli: List<String>, esistenti: Collection<String>, model: String): List<Proposta> =
+        Proposte.leggi(corta(Proposte.perGroq(titoli, esistenti), model, Proposte.PROMPT_ETICHETTE), esistenti)
 
-    fun clean(raw: String, model: String, prompt: String, words: List<String>, maxTokens: Int = 6000): String {
+    /** «Proponi regole» (10 nov): dai soli TITOLI, una regola migliore per ogni etichetta di [regole] (nome → regola). */
+    fun regole(titoli: List<String>, regole: Map<String, String>, model: String): Map<String, String> =
+        Proposte.leggiRegole(corta(Proposte.perRegole(titoli, regole), model, Proposte.PROMPT_REGOLE), regole.keys)
+
+    /** La regola per un'etichetta appena nominata: di cosa parlano, in poche parole. */
+    fun regolaPer(nome: String, model: String): String = Proposte.regola(corta(nome, model, Proposte.PROMPT_REGOLA))
+
+    /** Una risposta corta, a temperatura bassa, mai tagliata ([Risposta.primaIntera] coi [TITLE_TETTI]). */
+    private fun corta(testo: String, model: String, prompt: String): String =
+        Risposta.primaIntera(TITLE_TETTI) { chat(testo, model, prompt, emptyList(), it, temperatura = 0.1, extra = ragionamentoCorto(model)) }.testo
+
+    /** Una chiamata al modello: il testo (senza il ragionamento ad alta voce) e perché si è fermato. Mai rifiutata qui. */
+    private fun chat(
+        raw: String, model: String, prompt: String, words: List<String>, maxTokens: Int,
+        temperatura: Double = 0.2, extra: Map<String, Any> = emptyMap(),
+    ): Risposta {
         var system = prompt + "\n\n" + GUARD
         if (words.isNotEmpty()) system += "\nParole che uso spesso, da scrivere esattamente così: ${words.joinToString(", ")}."
         val payload = JSONObject()
             .put("model", model)
-            .put("temperature", 0.2)
+            .put("temperature", temperatura)
             .put("max_tokens", maxTokens)
+            .apply { extra.forEach { (k, v) -> put(k, v) } }
             .put(
                 "messages", JSONArray()
                     .put(JSONObject().put("role", "system").put("content", system))
@@ -104,13 +118,9 @@ class Groq(private val key: String) {
             c.outputStream.use { it.write(payload.toString().toByteArray()) }
         }
         val choice = JSONObject(body).getJSONArray("choices").getJSONObject(0)
-        // Tagliata dal tetto: meglio il testo grezzo intero di uno pulito a metà.
-        if (choice.optString("finish_reason") == "length") throw GroqError("Risposta tagliata")
-        val text = choice.getJSONObject("message").optString("content")
+        val text = choice.optJSONObject("message")?.optString("content").orEmpty()
         // Alcuni modelli ragionano ad alta voce dentro <think>: non fa parte del testo.
-        val clean = text.replace(Regex("(?s)<think>.*?</think>"), "").trim()
-        if (clean.isEmpty()) throw GroqError("Risposta vuota")
-        return clean
+        return Risposta(text.replace(Regex("(?s)<think>.*?</think>"), "").trim(), choice.optString("finish_reason"))
     }
 
     /**
@@ -185,7 +195,8 @@ class Groq(private val key: String) {
                     413 -> "Audio troppo lungo"
                     429 -> "Limite di Groq raggiunto, riprova tra poco"
                     else -> "Errore Groq ($code)" + (detail?.let { ": ${it.take(80)}" } ?: "")
-                }
+                },
+                codice = code,
             )
         } catch (e: IOException) {
             throw GroqError("Nessuna connessione", offline = true)
@@ -197,10 +208,53 @@ class Groq(private val key: String) {
     companion object {
         private const val BASE = "https://api.groq.com/openai/v1/"
 
-        /** Quanti caratteri si puliscono in una chiamata: stanno larghi sotto il tetto di token della risposta. */
-        private const val CLEAN_CHUNK = 8000
-        private const val TITLE_PROMPT = "Scrivi un titolo di al massimo 5 parole per questo testo, nella sua stessa lingua. " +
-            "Rispondi solo con il titolo, senza virgolette e senza punto finale."
+        /** I tetti delle risposte corte (titolo, etichette, regola): il primo, e quello più largo per l'unico nuovo tentativo. */
+        private val TITLE_TETTI = listOf(1200, 4000)
+
+        /**
+         * 7 nov, sua richiesta: il titolo è l'ARGOMENTO di quello che si dice dentro, non l'inizio del testo; la sera:
+         * «non riconosco i titoli»: parole concrete del contenuto, mai quelle che vanno bene per tutte.
+         */
+        private const val TITLE_PROMPT = "Scrivi il titolo di questa trascrizione: l'ARGOMENTO di cui parla, in massimo 5 parole, " +
+            "nella sua stessa lingua. Usa le parole concrete del contenuto (persone, cose, luoghi, attività, decisioni), " +
+            "quelle con cui chi l'ha detta la riconoscerebbe. Non usare parole generiche come «Messaggio», «Nota», " +
+            "«Trascrizione», «Vocale», «Audio», «Riflessione», «Pensieri», «Aggiornamento». Non ripetere l'inizio del testo. " +
+            "Rispondi solo con il titolo, senza virgolette né punto finale."
+
+        /**
+         * Per i modelli che ragionano prima di rispondere: un ragionamento corto (per un titolo e per pulire basta), così
+         * la risposta non arriva tagliata dal tetto. Gli altri non lo conoscono: niente.
+         */
+        fun ragionamentoCorto(model: String): Map<String, Any> = when {
+            model.contains("gpt-oss") -> mapOf("reasoning_effort" to "low")
+            model.contains("qwen3") -> mapOf("reasoning_effort" to "none")
+            else -> emptyMap()
+        }
+
+        /**
+         * La risposta del modello, ridotta al titolo: la prima riga, senza «Titolo:», virgolette, segni e punto in fondo,
+         * al massimo 8 parole e 60 caratteri. Vuota se non resta niente.
+         */
+        fun pulisciTitolo(risposta: String): String {
+            val riga = risposta.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
+            val senza = riga.replace(Regex("""^(?i)titolo\s*:\s*"""), "").trim().trim('"', '\'', '«', '»', '“', '”', '*', '#', '.', ' ')
+            return senza.split(Regex("""\s+""")).filter { it.isNotEmpty() }.take(8).joinToString(" ").take(60).trim()
+        }
+        /**
+         * Il testo di tutti i [pezzi] di un audio, in ordine, nessuno saltato: uno che non arriva per un errore
+         * passeggero ([passeggero]) si riprova una volta; se no l'errore fa fallire tutto, e si vede (l'audio resta in coda).
+         */
+        fun <T> tuttiIPezzi(pezzi: List<T>, trascrivi: (T) -> String): String = pezzi.joinToString(" ") { p ->
+            try {
+                trascrivi(p)
+            } catch (e: GroqError) {
+                if (passeggero(e)) trascrivi(p) else throw e
+            }
+        }.trim()
+
+        /** Groq ha avuto un problema suo (5xx) o la risposta non è arrivata: riprovare ha senso. Non senza rete. */
+        fun passeggero(e: GroqError) = !e.offline && (e.codice >= 500 || e.codice == 0)
+
         const val DEFAULT_STT = "whisper-large-v3"
         const val DEFAULT_LLM = "openai/gpt-oss-120b"
 

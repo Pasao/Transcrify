@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// colore/: la tavolozza delle trascrizioni (Figma D1–D2), 16 tinte × 7 luci, in HSL. Un colore = (tinta, luce).
@@ -20,6 +22,28 @@ abstract final class Tinte {
   /// più chiare. Al centro quello scelto.
   static List<(int, int)> get rosaFuori => [for (final t in giro) (t, luceViva(t))];
   static List<(int, int)> get rosaDentro => [for (var i = 0; i < giro.length; i += 2) (giro[i], luceDentro)];
+
+  /// Le [quante] tinte libere più lontane da quelle [occupate] e tra loro (10 nov, «Proponi etichette»: colori ben
+  /// distinti): ogni volta quella con più giro libero intorno. Meno, se non ce ne sono abbastanza.
+  static List<int> lontane(Set<int> occupate, int quante) {
+    final prese = {...occupate}, scelte = <int>[];
+    double distanza(int t) {
+      if (prese.isEmpty) return giroIntero;
+      return prese.map((p) => (tonalita[t] - tonalita[p]).abs()).map((d) => d > giroIntero / 2 ? giroIntero - d : d).reduce(math.min);
+    }
+
+    while (scelte.length < quante) {
+      final libere = giro.where((t) => !prese.contains(t)).toList();
+      if (libere.isEmpty) break;
+      final t = libere.reduce((a, b) => distanza(b) > distanza(a) ? b : a);
+      prese.add(t);
+      scelte.add(t);
+    }
+    return scelte;
+  }
+
+  /// Il giro dei colori, in gradi.
+  static const giroIntero = 360.0;
 
   /// La luce dell'anello di dentro: chiara, ma il puntino si vede ancora sulla carta.
   static const luceDentro = 2;

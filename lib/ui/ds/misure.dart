@@ -45,8 +45,28 @@ abstract final class Misura {
   /// ognuno col suo tocco ([bottoneBasso]) senza toccare il vicino.
   static const rosaDentro = 56.0, rosaFuori = 104.0;
 
+  /// Il tratteggio del nido vuoto (7 nov): tratti e vuoti lunghi uguali, lungo il bordo; spesso quanto un [anello].
+  static const nidoTratto = 4.0;
+
   /// Il puntino della rosa sotto il dito che scorre (7 nov): più grande, si vede quale prendi lasciando; fermo, com'è.
   static const rosaSotto = 1.4, rosaFerma = 1.0;
+
+  /// I colori della rosa ancora liberi (7 nov, sua richiesta: «quelli con un'etichetta più visibili, gli altri più
+  /// spenti»): un poco più piccoli ([rosaLibera], la scala) e più trasparenti ([rosaLiberaVelo], quanto si velano).
+  static const rosaLibera = 0.8, rosaLiberaVelo = 0.55;
+
+  /// Il colore già in uso (7 nov): un puntino pieno appena fuori dal suo, verso il bordo. Quanto è grande, e quanto sta
+  /// lontano dal centro del colore (oltre il suo bordo, dentro la rosa anche per l'anello di fuori).
+  static const rosaUso = 5.0, rosaUsoFuori = 17.0;
+
+  /// La pillola sul bordo (come quella del Floater, `PillGeometry.BAR_W`/`BAR_H`): la prova dell'introduzione la mostra
+  /// quando Transcri va di lato (10 nov: «diventa la pillola, non un Transcri piccolo»). Quanto è larga e alta, e di
+  /// quanto si allarga con la voce.
+  static const pillolaLarga = 12.0, pillolaAlta = 88.0, pillolaVoce = 6.0;
+
+  /// L'anello della voce attorno a Transcri nella prova (10 nov: «più grande, staccato dal corpo»): quanto sta lontano
+  /// dal suo bordo, e quanto è spesso il vuoto tra i due.
+  static const anelloVoce = 10.0, anelloVoceStacco = 4.0;
 }
 
 
@@ -67,6 +87,17 @@ abstract final class Velo {
   /// Le schede non scelte mentre se ne scelgono alcune: si spengono e perdono il colore ([spento]), così la scelta si
   /// stacca anche quando sono tutte dello stesso marrone (5 nov).
   static const nonScelta = 0.45;
+
+  /// La prova guidata dell'introduzione (11 nov): quello che non serve adesso si spegne fino a qui, e restano chiari
+  /// la pillola, il suggerimento e la frase.
+  static const guida = 0.3;
+
+  /// Quanto si sfoca il testo mentre arriva la copertura di un'offuscata (il raggio della sfocatura, a copertura piena).
+  static const sfocatura = 6.0;
+
+  /// Le macchie della copertura arrivano da così grandi (1 = la loro misura) e così trasparenti, e una dopo l'altra
+  /// di [macchieDopo] del movimento: si condensano al loro posto. Andandosene il contrario.
+  static const macchieDa = 1.35, macchieChiare = 0.35, macchieDopo = 0.15;
 
   /// I segni della formattazione (`**`, `*`) mentre scrivi: restano, perché sono testo, ma si vedono appena (6 nov).
   static const segni = 0.35;
@@ -95,6 +126,10 @@ abstract final class Durata {
   /// La rosa dei colori che si apre (e si chiude): i due anelli arrivano insieme (vedi [Curva.rosaFuoriApre]).
   static const rosa = lenta;
 
+  /// La rosa che si chiude dopo che hai dato un colore (7 nov, suo: «l'uscita può essere più veloce»): la stessa
+  /// coreografia dei due anelli, in sei decimi del tempo.
+  static const rosaVia = Duration(milliseconds: 240);
+
   /// Tutto quello che cambia scegliendo (6 nov: «si devono muovere uguali»): il velo e il grigio delle altre, la scelta
   /// che si stringe, il contorno, l'ombra, la spunta, la barra che prende il posto del Dock. Con `Curva.standard`.
   static const scelta = normale;
@@ -119,6 +154,19 @@ abstract final class Durata {
   /// «Annulla» lo stesso al contrario: la scheda unita torna al posto della prima e le altre ne escono.
   static const voloUnione = Duration(milliseconds: 520);
   static const battito = Duration(milliseconds: 360);
+
+  /// La prova dell'introduzione (10 nov, sua idea): parli, e dopo un secondo Transcri va di lato, sul bordo.
+  static const provaDiLato = Duration(milliseconds: 1000);
+
+
+  /// Entrando dopo la prova, la prima trascrizione vola dal centro al suo posto nella lista. Se la lista non la mostra
+  /// entro [attesaVoloPrima], la copia svanisce dov'è.
+  static const voloPrima = Duration(milliseconds: 560);
+  static const attesaVoloPrima = Duration(milliseconds: 3000);
+
+  /// La copertura di un'offuscata che arriva (e se ne va), sulle trascrizioni e sulle note (11 nov, suo: in [lenta]
+  /// «un po' troppo veloce» e «troppo semplice»): il testo si sfoca, le macchie si condensano.
+  static const copre = Duration(milliseconds: 700);
 
   /// Un giro del blob al lavoro: Transcri che ondeggia piano.
   static const giroBlob = Duration(milliseconds: 2400);
@@ -165,22 +213,9 @@ abstract final class Ombra {
     BoxShadow(color: Color(0x14000000 | _tinta), blurRadius: 1.5, spreadRadius: 0.5),
   ];
 
-  /// L'incavo: il nido vuoto quando Transcri è fuori (6 nov, giro 7: «lo spazio vuoto non si vede, anche coi colori
-  /// scuri»). Un pozzetto più scuro dell'isola su cui sta, più fondo in alto (dove la luce non arriva) che verso il
-  /// basso; di notte, in fondo, un filo di luce sul bordo di sotto, come lo spigolo che la prende. Niente contorno. Nero,
-  /// non la tinta: è un vuoto, non un'ombra appoggiata. `lettura_grana_test` misura che stacchi dall'isola.
-  static LinearGradient incavo(Brightness luce) => luce == Brightness.dark ? _incavoScuro : _incavoChiaro;
-
-  static const _incavoChiaro = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [Color(0x29000000), Color(0x14000000), Color(0x0A000000)],
-    stops: [0, 0.6, 1],
-  );
-  static const _incavoScuro = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [Color(0x80000000), Color(0x59000000), Color(0x1FFFFFFF)],
-    stops: [0, 0.8, 1],
-  );
+  /// Il nido vuoto quando Transcri è fuori (7 nov: «torna al TRATTEGGIATO, ma col buio dentro e il tratteggio meno
+  /// acceso: non era male»; prima, il 6 nov, un incavo a gradiente che non si vedeva). Dentro un velo nero: leggero di
+  /// giorno, più fondo di notte (sul fondo scuro serve di più per staccare). Il tratteggio è nel nido
+  /// ([Misura.nidoTratto]), del testo secondario a metà. `lettura_grana_test` misura che si veda in tutti e due i temi.
+  static Color nidoVuoto(Brightness luce) => luce == Brightness.dark ? const Color(0x59000000) : const Color(0x14000000);
 }

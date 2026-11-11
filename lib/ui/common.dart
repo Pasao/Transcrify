@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/native.dart';
+import '../core/orario.dart';
 import 'theme.dart';
 
+export '../core/orario.dart';
 export 'molecole/barra_scelte.dart';
 export 'molecole/pillola_annulla.dart';
 
@@ -124,8 +126,6 @@ class _VoicePainter extends CustomPainter {
   @override
   bool shouldRepaint(_VoicePainter old) => old.tint != tint || old.voice != voice || old.work != work || old.flow != flow;
 }
-
-String hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
 String dayLabel(DateTime d) {
   final now = DateTime.now();

@@ -98,7 +98,7 @@ class Transcriber(private val context: Context, private val store: Store, privat
             queue.remove(item.id)
             return Outcome.Done(già)
         }
-        val key = store.apiKey ?: return Outcome.Failed("Manca la chiave Groq")
+        val key = store.chiavePronta() ?: return Outcome.Failed("Manca la chiave Groq")
         val work = File(context.cacheDir, "pezzi-${item.id}")
         return try {
             val groq = Groq(key)
@@ -108,13 +108,14 @@ class Transcriber(private val context: Context, private val store: Store, privat
             } catch (e: Exception) {
                 return Outcome.Failed("Questo audio non si apre")
             }
-            var text = collapseLoops(pieces.joinToString(" ") { groq.transcribe(it, store.transcriptionModel) }.trim())
+            // Tutti i pezzi, nessuno saltato: uno che non arriva si riprova, se no fallisce tutto (e resta in coda).
+            var text = collapseLoops(Groq.tuttiIPezzi(pieces) { groq.transcribe(it, store.transcriptionModel) })
             store.saveModelLimits(store.transcriptionModel, groq.lastLimits)
             store.countUse(store.transcriptionModel)
             var cleaned = false
             if (text.isNotEmpty() && item.mode != null) {
                 // Se la pulizia fallisce si tiene il testo grezzo: meglio di niente.
-                runCatching { groq.cleanLong(text, store.cleanupModel, conContesto(store.promptFor(item.mode), item.contesto), store.words, store.guardFor(item.mode)) }
+                runCatching { groq.cleanLong(text, store.cleanupModel, conContesto(store.promptFor(item.mode), item.contesto), store.words, store.guardFor(item.mode), store.riservaPulizia) }
                     .onSuccess { text = it; cleaned = true; store.countUse(store.cleanupModel) }
                 store.saveModelLimits(store.cleanupModel, groq.lastLimits)
             }
@@ -150,7 +151,12 @@ class Transcriber(private val context: Context, private val store: Store, privat
             NoteTopicsWorker.get(context).request(id)
             return Transcription(text, now, cleaned, mode, source, noteId = id)
         }
-        return Transcription(text, now, cleaned, mode, source).also { store.addToHistory(it) }
+        return Transcription(text, now, cleaned, mode, source).also {
+            store.addToHistory(it)
+            // In fondo, dopo: il titolo da Groq e, se l'hai acceso, la proposta di colore. Il testo intanto è già tuo.
+            Titolatore.get(context).avvia()
+            NoteTopicsWorker.get(context).proponiColori(setOf(it.at))
+        }
     }
 
     /** Whisper a volte s'incanta e ripete la stessa parola: più di tre volte di fila ne resta una. */

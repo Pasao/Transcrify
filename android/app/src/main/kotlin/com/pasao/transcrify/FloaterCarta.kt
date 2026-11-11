@@ -20,7 +20,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.NoteAdd
 import androidx.compose.material.icons.rounded.Reply
@@ -35,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -83,7 +83,7 @@ private fun CartaPausa(s: Session) {
 
 @Composable
 private fun CartaVocali(svc: PillService, vocali: List<Pair<Transcription, Origin>>, risponde: Boolean, maxAltezza: Dp) {
-    Testata(vocali, risponde)
+    Testata(vocali, risponde) { svc.togliVocali() }
     Column(
         Modifier
             .heightIn(max = maxAltezza)
@@ -104,27 +104,35 @@ private fun CartaVocali(svc: PillService, vocali: List<Pair<Transcription, Origi
 /**
  * La testata della carta, col suo colore: da dove arrivano i vocali («Vocale di WhatsApp», «3 vocali di WhatsApp»).
  * Quando registri con la carta fuori diventa «Stai rispondendo…», piena: è la stessa striscia che cambia.
+ * La sua X toglie tutti i vocali dalla carta; ognuno, nella lista, ha ancora la sua.
  */
 @Composable
-private fun Testata(vocali: List<Pair<Transcription, Origin>>, risponde: Boolean) {
+private fun Testata(vocali: List<Pair<Transcription, Origin>>, risponde: Boolean, togliTutti: () -> Unit) {
     val ctx = LocalContext.current
     val primo = vocali.first().second
     val app = Provenienza.nome(ctx, primo.source)
     val stessaApp = vocali.all { it.second.source == primo.source }
     val titolo = when {
         risponde -> if (vocali.size > 1) "Stai rispondendo a questi vocali" else "Stai rispondendo a questo vocale"
-        vocali.size == 1 -> Provenienza.titolo(ctx, primo)
-        app != null && stessaApp -> "${vocali.size} vocali di $app"
-        else -> "${vocali.size} vocali"
+        else -> Provenienza.testata(vocali.size, app.takeIf { stessaApp }, Provenienza.titolo(ctx, primo))
     }
     val testo = if (risponde) Palette.Ink else Palette.SuCarta
     Row(
-        Modifier.fillMaxWidth().background(if (risponde) Palette.Blue else Palette.TestataCarta).padding(horizontal = 12.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().background(if (risponde) Palette.Blue else Palette.TestataCarta).padding(start = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (risponde) Icon(Icons.Rounded.Reply, null, tint = testo, modifier = Modifier.size(16.dp)) else IconaProvenienza(primo.source)
         Spacer(Modifier.width(6.dp))
-        Text(titolo, style = Caratteri.etichetta.copy(color = testo), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(titolo, Modifier.weight(1f), style = Caratteri.etichetta.copy(color = testo), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Chiudi(if (vocali.size > 1) "Togli tutti i vocali" else "Togli il vocale", testo, togliTutti)
+    }
+}
+
+/** Una X tonda sulla carta, col suo nome per chi non vede. */
+@Composable
+private fun Chiudi(nome: String, tinta: Color, onClick: () -> Unit) {
+    Box(Modifier.size(32.dp).clip(CircleShape).clickable(onClickLabel = nome, onClick = onClick), contentAlignment = Alignment.Center) {
+        Icon(Icons.Rounded.Close, null, tint = tinta, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -134,10 +142,7 @@ private fun Vocale(svc: PillService, t: Transcription) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(ORA.format(Date(t.at)), Modifier.weight(1f), style = Caratteri.orario.copy(color = Palette.SuCartaTenue))
-            Box(
-                Modifier.size(32.dp).clip(CircleShape).clickable(onClickLabel = "Togli questo vocale") { svc.togliVocale(t) },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Rounded.Close, null, tint = Palette.SuCartaTenue, modifier = Modifier.size(16.dp)) }
+            Chiudi("Togli questo vocale", Palette.SuCartaTenue) { svc.togliVocale(t) }
         }
         Text(t.text, Modifier.padding(end = 8.dp), style = Caratteri.testo.copy(color = Palette.SuCarta))
     }
@@ -168,11 +173,6 @@ private fun CartaUltima(svc: PillService) {
         Text(if (copiata) "Copiata ✓" else "Ultima · tocca per copiare", style = Caratteri.orario.copy(color = if (copiata) Palette.Green else Palette.SuCartaTenue))
         Spacer(Modifier.height(2.dp))
         Text(testo, style = Caratteri.testo.copy(color = Palette.SuCarta), maxLines = 4, overflow = TextOverflow.Ellipsis)
-    }
-    Linea()
-    ComandiCarta {
-        Comando(Icons.Rounded.ContentCopy, "Copia", copia)
-        Comando(Icons.Rounded.NoteAdd, "Salva come nota") { svc.ultimaInNota() }
     }
 }
 

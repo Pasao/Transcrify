@@ -103,7 +103,9 @@ class _PillolaAnnullaState extends State<PillolaAnnulla> with SingleTickerProvid
         left: Spazio.s4,
         right: Spazio.s4,
         bottom: sopra + ConSelezione.spazio(scegli),
-        child: child!,
+        // Nell'Overlay non c'è una pagina sopra: senza un Material il testo prende lo stile di debug (la doppia
+        // sottolineatura gialla). Trasparente: dà solo lo stile del testo.
+        child: Material(type: MaterialType.transparency, child: child),
       ),
       child: Center(
         child: FadeTransition(

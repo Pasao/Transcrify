@@ -20,10 +20,31 @@ void main() {
       expect(via.selection.textInside(via.text), 'forte');
       final c = Scrittura.segna(v('piano', 0, 5), TipoPezzo.corsivo);
       expect(c.text, '*piano*');
-      // Il cursore fermo: i due segni e lui in mezzo.
-      final vuoto = Scrittura.segna(v('ab', 1), TipoPezzo.grassetto);
-      expect(vuoto.text, 'a****b');
-      expect(vuoto.selection.baseOffset, 3);
+      // Il cursore fermo fuori da una parola: i due segni e lui in mezzo; toccato di nuovo, vanno via.
+      final vuoto = Scrittura.segna(v('ab ', 3), TipoPezzo.grassetto);
+      expect(vuoto.text, 'ab ****');
+      expect(vuoto.selection.baseOffset, 5);
+      expect(Scrittura.segna(vuoto, TipoPezzo.grassetto).text, 'ab ');
+      expect(Scrittura.segna(Scrittura.segna(v('ab ', 3), TipoPezzo.corsivo), TipoPezzo.corsivo).text, 'ab ');
+    });
+
+    test('7 nov: il cursore dentro una parola la prende tutta (non la spezza), e resta dov\'era; di nuovo, via', () {
+      final g = Scrittura.segna(v('un forte qui', 5), TipoPezzo.grassetto);
+      expect(g.text, 'un **forte** qui');
+      expect(g.selection.baseOffset, 7);
+      expect(Scrittura.segna(g, TipoPezzo.grassetto).text, 'un forte qui');
+      expect(Scrittura.segna(v('città', 2), TipoPezzo.corsivo).text, '*città*');
+    });
+
+    test('7 nov: scelto anche coi segni (che non si vedono), si toglie e non se ne mette un altro attorno', () {
+      expect(Scrittura.segna(v('un **forte** qui', 3, 12), TipoPezzo.grassetto).text, 'un forte qui');
+      expect(Scrittura.segna(v('*piano*', 0, 7), TipoPezzo.corsivo).text, 'piano');
+    });
+
+    test('7 nov: su più righe ogni riga per conto suo, senza il pallino né le righe vuote', () {
+      final g = Scrittura.segna(v('• uno\n\ndue tre', 0, 14), TipoPezzo.grassetto);
+      expect(g.text, '• **uno**\n\n**due tre**');
+      expect(Formato.leggi(g.text).where((p) => p.tipo == TipoPezzo.grassetto).length, 2);
     });
 
     test('elenco: il pallino sulle righe scelte, e via da tutte se ce l\'hanno già', () {

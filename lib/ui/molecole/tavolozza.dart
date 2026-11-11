@@ -6,8 +6,10 @@ import 'package:flutter/services.dart';
 
 import '../../core/cambio_colore.dart';
 import '../../core/native.dart';
+import '../../core/regole_colori.dart';
 import '../atomi.dart';
 import '../ds.dart';
+import 'conferma.dart';
 
 /// La rosa dei colori: la sola scelta del colore (7 nov, sua: «la rosa la amo»; via la fila che scorreva di lato, «non
 /// ti ricordi che colore hai scelto»). La apre `apriSceltaColore` (`scelta_colore.dart`).
@@ -20,13 +22,21 @@ import '../ds.dart';
 /// - Ogni colore scelto si vede subito sulle schede ([CambioColore.prova]), ma è una prova: «Annulla» rimette tutto
 ///   com'era (anche i nomi), «Fatto» lo tiene; così anche «indietro» e un tocco fuori (si tiene, e dopo c'è la pillola
 ///   per annullare). Finito il movimento di chiusura, [onChiusa] dice se tenere.
-/// - Sotto, col colore scelto, il campo piccolo per il suo nome (si vede nelle cartelle).
+/// - Un colore già usato ha un puntino pieno appena fuori (verso il bordo); scorrendoci sopra, quante ne ha.
+/// - Sotto, col colore scelto, il campo piccolo per il suo nome (si vede nelle cartelle). Solo quello (10 nov: «troppa
+///   roba»): la regola e «Offusca sempre» stanno nelle Impostazioni → Etichette.
+/// - I colori che hai già scelto (con un nome, una regola o delle trascrizioni) sono pieni; gli altri, liberi, più
+///   piccoli e velati ([Misura.rosaLibera]): così sai subito quali hai.
 /// - Aprendosi i due anelli escono dal centro come due strati che si muovono insieme, e arrivano insieme; chiudendosi
 ///   rientrano al contrario.
 class Tavolozza extends StatefulWidget {
-  const Tavolozza({super.key, required this.cambio, required this.onCambiati, required this.onChiusa});
+  const Tavolozza({super.key, required this.cambio, required this.onCambiati, required this.onChiusa, this.usi = const {}});
 
   final CambioColore cambio;
+
+  /// Quante trascrizioni ha già ogni colore ([Segni.usi]): quelli in uso hanno un puntino appena fuori, e scorrendoci
+  /// sopra il nome dice quante sono («Relazioni · 12»). Gli altri sono liberi.
+  final Map<Colore, int> usi;
 
   /// Dopo ogni colore provato: chi l'ha aperta ridisegna le sue schede.
   final VoidCallback onCambiati;
@@ -57,6 +67,9 @@ class _TavolozzaState extends State<Tavolozza> with SingleTickerProviderStateMix
   (Colore?,)? _sotto;
   bool _chiudendo = false;
 
+  /// Hai dato un colore (o tolto con la ✕): chiudendo, la rosa se ne va più svelta ([Durata.rosaVia]).
+  bool _dato = false;
+
   CambioColore get _cambio => widget.cambio;
 
   @override
@@ -76,15 +89,20 @@ class _TavolozzaState extends State<Tavolozza> with SingleTickerProviderStateMix
 
   void _leggiNome() => _nome.text = Segni.nomi.value[_cambio.comune?.chiave] ?? '';
 
-  /// Il nome scritto si salva quando cambi colore o con «Fatto», solo se è cambiato («Annulla» lo rimette com'era).
+  /// Il nome scritto si salva quando cambi colore o con «Fatto», solo se è cambiato («Annulla» rimette i nomi com'erano).
   Future<void> _salvaNome() async {
     final c = _cambio.comune;
     if (c != null && _nome.text.trim() != (Segni.nomi.value[c.chiave] ?? '')) await Segni.nomina(c, _nome.text);
   }
 
+  /// Un colore già tuo: ha un nome, una regola o delle trascrizioni (o è quello scelto adesso).
+  bool _tuo(Colore c, bool scelto) =>
+      scelto || Segni.nomi.value.containsKey(c.chiave) || RegoleColori.di(c) != null || (widget.usi[c] ?? 0) > 0;
+
   Future<void> _scegli(Colore? c) async {
     if (_chiudendo || (!_cambio.misti && c == _cambio.comune)) return;
     await _salvaNome();
+    _dato = true;
     final prova = _cambio.prova(c);
     if (mounted) setState(_leggiNome);
     widget.onCambiati();
@@ -95,6 +113,7 @@ class _TavolozzaState extends State<Tavolozza> with SingleTickerProviderStateMix
     if (_chiudendo) return;
     _chiudendo = true;
     if (tieni) await _salvaNome();
+    if (_dato) _apri.reverseDuration = Durata.rosaVia;
     await _apri.reverse();
     widget.onChiusa(tieni);
   }
@@ -136,6 +155,7 @@ class _TavolozzaState extends State<Tavolozza> with SingleTickerProviderStateMix
 
   /// In alto: il colore sotto il dito, se scorre; se no quello scelto (o «Colori diversi»).
   String get _titolo => switch (_sotto) {
+    (final c?,) when (widget.usi[c] ?? 0) > 0 => '${Segni.nomi.value[c.chiave] ?? Tinte.nome(c.tinta, c.luce)} · ${widget.usi[c]}',
     (final c,) => _nomeDi(c),
     null when _cambio.misti => 'Colori diversi',
     null => _nomeDi(_cambio.comune),
@@ -144,26 +164,46 @@ class _TavolozzaState extends State<Tavolozza> with SingleTickerProviderStateMix
   /// Un anello: i [colori] in giro, a [raggio] dal centro quando [quanto] è 1.
   List<Widget> _anello(List<(int, int)> colori, double raggio, Animation<double> quanto) => [
     for (final (i, (tinta, luce)) in colori.indexed)
-      AnimatedBuilder(
-        animation: quanto,
-        builder: (context, punto) => Transform.translate(
-          offset: Tavolozza.posto(i, colori.length, raggio * quanto.value),
-          child: Opacity(opacity: quanto.value.clamp(0.0, 1.0), child: punto),
+      // Ogni puntino nel suo tocco: in uno Stack crescerebbe fino a prendersi tutta la rosa.
+      _esce(Tavolozza.posto(i, colori.length, raggio), quanto, SizedBox.square(dimension: Misura.bottoneBasso, child: _punto(Colore(tinta, luce)))),
+    // Già in uso: il puntino appena fuori, che esce insieme al suo colore.
+    for (final (i, (tinta, luce)) in colori.indexed)
+      if ((widget.usi[Colore(tinta, luce)] ?? 0) > 0)
+        _esce(
+          Tavolozza.posto(i, colori.length, raggio + Misura.rosaUsoFuori),
+          quanto,
+          IgnorePointer(
+            child: Container(
+              key: ValueKey('in uso $tinta:$luce'),
+              width: Misura.rosaUso,
+              height: Misura.rosaUso,
+              decoration: BoxDecoration(color: context.col.testo, shape: BoxShape.circle),
+            ),
+          ),
         ),
-        // Ogni puntino nel suo tocco: in uno Stack crescerebbe fino a prendersi tutta la rosa.
-        child: SizedBox.square(dimension: Misura.bottoneBasso, child: _punto(Colore(tinta, luce))),
-      ),
   ];
+
+  /// [figlio] che esce dal centro fino a [dove] quando [quanto] è 1 (e compare mentre esce).
+  static Widget _esce(Offset dove, Animation<double> quanto, Widget figlio) => AnimatedBuilder(
+    animation: quanto,
+    builder: (context, figlio) => Transform.translate(
+      offset: dove * quanto.value,
+      child: Opacity(opacity: quanto.value.clamp(0.0, 1.0), child: figlio),
+    ),
+    child: figlio,
+  );
 
   /// Un colore della rosa, o (null) la ✕ del centro. Acceso (più grande) mentre il dito ci passa sopra.
   Widget _punto(Colore? colore) {
     final scelto = colore == null ? _cambio.ora.values.every((c) => c == null) : !_cambio.misti && colore == _cambio.comune;
+    final tuo = colore == null || _tuo(colore, scelto);
+    final base = PuntoColore.di(context, colore);
     return AnimatedScale(
-      scale: _sotto != null && _sotto!.$1 == colore ? Misura.rosaSotto : Misura.rosaFerma,
+      scale: _sotto != null && _sotto!.$1 == colore ? Misura.rosaSotto : (tuo ? Misura.rosaFerma : Misura.rosaLibera),
       duration: Durata.veloce,
       curve: Curva.standard,
       child: PuntoColore(
-        PuntoColore.di(context, colore),
+        tuo ? base : base.withValues(alpha: 1 - Misura.rosaLiberaVelo),
         etichetta: _nomeDi(colore),
         scelto: scelto,
         icona: colore == null ? Icons.close_rounded : null,
@@ -235,18 +275,12 @@ class _TavolozzaState extends State<Tavolozza> with SingleTickerProviderStateMix
                   style: Testo.etichetta.copyWith(color: c.testo),
                   decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'Nome di ${Tinte.nome(scelto.tinta, scelto.luce)}',
+                    hintText: 'Che nome ha questa etichetta?',
                     prefixIcon: Icon(Icons.circle, size: Misura.iconaPiccola, color: PuntoColore.di(context, scelto)),
                   ),
                 ),
               ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Bottone('Annulla', tipo: TipoBottone.testo, alto: false, onPressed: () => _chiudi(false)),
-                Bottone('Fatto', tipo: TipoBottone.tenue, alto: false, onPressed: () => _chiudi(true)),
-              ],
-            ),
+            Conferma(principale: 'Fatto', onPrincipale: () => _chiudi(true), onAnnulla: () => _chiudi(false)),
           ],
         ),
       ),

@@ -17,4 +17,10 @@ object Scatto {
 
     /** Chiudere e sfumare: [Durate.VELOCE], parte svelto e arriva morbido. */
     fun <T> svelto(): TweenSpec<T> = tween(Durate.VELOCE, easing = FastOutSlowInEasing)
+
+    /**
+     * Il Floater intero che torna pillola (10 nov, suo: «quando lo chiudo torna subito al punto, senza morph»): la curva
+     * di [svelto] in [Durate.NORMALE]: rapido, ma si vede il pannello stringersi nella pillola.
+     */
+    fun <T> richiude(): TweenSpec<T> = tween(Durate.NORMALE, easing = FastOutSlowInEasing)
 }

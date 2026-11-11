@@ -7,26 +7,26 @@ import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
 
 /**
- * Le due scorciatoie del «Condividi», «Transcrify trascrizione» e «Transcrify pensiero»: Android le
- * mostra una accanto all'altra, così basta un tocco. Dal launcher aprono semplicemente l'app.
+ * Nel «Condividi» c'è solo «Trascrivi» (10 nov, suo): tra le app (`ShareAsTranscription`) e come scorciatoia in cima,
+ * tra i contatti (la condivisione diretta, `share_shortcuts.xml`). Niente più «Transcrify nota»: quella di prima si
+ * ritira, Android la terrebbe a lungo accanto all'app. Dal launcher la scorciatoia apre semplicemente l'app.
  */
 object ShareShortcuts {
-    const val THOUGHT = "pensiero"
+    private const val TRASCRIZIONE = "trascrizione"
+    private val VECCHIE = listOf("pensiero")
 
     fun publish(context: Context) {
-        val open = Intent(context, MainActivity::class.java).setAction(Intent.ACTION_MAIN)
-        fun shortcut(id: String, label: String, category: String, icon: Int, rank: Int) = ShortcutInfo.Builder(context, id)
-            .setShortLabel(label)
-            .setRank(rank)
+        val sm = context.getSystemService(ShortcutManager::class.java) ?: return
+        val trascrivi = ShortcutInfo.Builder(context, TRASCRIZIONE)
+            .setShortLabel("Trascrivi")
             .setLongLived(true)
-            .setCategories(setOf("com.pasao.transcrify.category.$category"))
-            .setIcon(Icon.createWithResource(context, icon))
-            .setIntent(open)
+            .setCategories(setOf("com.pasao.transcrify.category.TRANSCRIPTION"))
+            .setIcon(Icon.createWithResource(context, R.drawable.ic_share_transcription))
+            .setIntent(Intent(context, MainActivity::class.java).setAction(Intent.ACTION_MAIN))
             .build()
-        context.getSystemService(ShortcutManager::class.java)?.dynamicShortcuts = listOf(
-            // Sopra Samsung ne mostra una per app: il pensiero, perché la trascrizione sta già tra le app.
-            shortcut(THOUGHT, "Transcrify nota", "THOUGHT", R.drawable.ic_share_thought, 0),
-            shortcut("trascrizione", "Transcrify trascrizione", "TRANSCRIPTION", R.drawable.ic_share_transcription, 1),
-        )
+        runCatching {
+            sm.removeLongLivedShortcuts(VECCHIE)
+            sm.dynamicShortcuts = listOf(trascrivi)
+        }
     }
 }

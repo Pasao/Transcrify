@@ -104,7 +104,7 @@ void main() {
     builder: (context) => Intestazione(
       titolo: 'Trascrivi',
       segno: const ChipStato('Dati finti', tipo: TipoChip.azione),
-      sotto: RigaInAttesa(quante: 12, riprovando: false, onRiprova: () {}, onApri: () {}),
+      sotto: RigaInAttesa(quante: 12, riprovando: false, onRiprova: () {}, onApri: (_) {}),
       accanto: const InAttesaCorto(quante: 12),
       azioni: azioniPagina(context, onSeleziona: onSeleziona, onImpostazioni: onImpostazioni ?? () {}),
       child: ListView(children: [for (var i = 0; i < 60; i++) SizedBox(height: 60, child: Text('Riga $i'))]),
@@ -117,8 +117,8 @@ void main() {
         await telefono(t, largo: largo);
         await t.pumpWidget(app(pagina(), testo: 1.5));
         await t.pumpAndSettle();
-        // Ferma: il titolo grande, le azioni nude.
-        expect(t.widget<Text>(find.text('Trascrivi')).style!.fontSize, Testo.titoloPagina.fontSize);
+        // Ferma: il titolo (grande quanto nella pillola, 10 nov), le azioni nude.
+        expect(t.widget<Text>(find.text('Trascrivi')).style!.fontSize, Testo.titoloPillola.fontSize);
         expect(fondoAzioni(t), isFalse);
         expect(find.byType(RigaInAttesa), findsOneWidget);
 
@@ -138,7 +138,7 @@ void main() {
 
         await t.drag(find.text('Riga 12'), const Offset(0, 2000));
         await t.pumpAndSettle();
-        expect(t.widget<Text>(find.text('Trascrivi').hitTestable()).style!.fontSize, Testo.titoloPagina.fontSize);
+        expect(t.widget<Text>(find.text('Trascrivi').hitTestable()).style!.fontSize, Testo.titoloPillola.fontSize);
         expect(fondoAzioni(t), isFalse);
         await fine(t);
       });
@@ -370,7 +370,10 @@ void main() {
         expect(find.descendant(of: find.byType(PannelloFiltri), matching: find.text(nome)), findsOneWidget);
       }
       // WhatsApp o Dettate, e Pulita.
+      // 7 nov: ogni fila scorre di lato per conto suo, se non ci sta (stretto, testo grande): si porta in vista e si tocca.
       for (final nome in ['WhatsApp', 'Dettate', 'Pulita']) {
+        await t.ensureVisible(nelPannello(nome));
+        await t.pumpAndSettle();
         await t.tap(nelPannello(nome));
         await t.pumpAndSettle();
       }
@@ -387,7 +390,12 @@ void main() {
       expect(find.descendant(of: find.byType(FiltriAccesi), matching: find.byIcon(Icons.close_rounded)), findsNWidgets(3));
       expect(tasto(3), findsOneWidget);
       // Toccato uno acceso, si spegne.
-      await t.tap(find.descendant(of: find.byType(FiltriAccesi), matching: find.widgetWithText(ChipFiltro, 'Pulita')));
+      // 7 nov: una fila sola che scorre di lato (non va più a capo).
+      expect(t.getRect(accesi.at(2)).top, moreOrLessEquals(t.getRect(accesi.first).top, epsilon: 0.5));
+      final pulita = find.descendant(of: find.byType(FiltriAccesi), matching: find.widgetWithText(ChipFiltro, 'Pulita'));
+      await t.ensureVisible(pulita);
+      await t.pumpAndSettle();
+      await t.tap(pulita);
       await t.pumpAndSettle();
       expect(TrascriviPage.filtro.value.quanti, 2);
       // Scorrendo, il tasto resta allo stesso posto (ora in un'isola) e apre lo stesso pannello.

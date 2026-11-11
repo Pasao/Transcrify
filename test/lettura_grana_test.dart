@@ -10,7 +10,7 @@ import 'package:transcrify/ui/pensieri.dart';
 import 'package:transcrify/ui/theme.dart';
 import 'package:transcrify/ui/transcri.dart';
 
-/// Il carattere per leggere (Onest), l'incavo del nido quando Transcri è fuori, le tre grane degli argomenti.
+/// Il carattere per leggere (Onest), il nido vuoto quando Transcri è fuori, le tre grane degli argomenti.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('transcrify/core');
@@ -121,34 +121,38 @@ void main() {
     });
   });
 
-  group('L\'incavo del nido', () {
+  group('Il nido vuoto', () {
+    // 7 nov: «torna al tratteggiato, col buio dentro e il tratteggio meno acceso».
     for (final tema in Brightness.values) {
-      testWidgets('Transcri fuori: un pozzetto, niente contorno (${tema.name})', (t) async {
+      // 7 nov: «il tratteggio quadrato come lui»: il buio e il tratteggio hanno la sua sagoma, grandi quanto lui nel nido.
+      testWidgets('Transcri fuori: scuro dentro, tratteggiato con la sua forma, niente contorno pieno (${tema.name})', (t) async {
         await t.pumpWidget(app(Center(child: TranscriNest(on: true, limitedUntil: null, onChanged: () {})), tema: tema));
         await t.pump(const Duration(milliseconds: 500));
         final nido = t.widgetList<AnimatedContainer>(find.byType(AnimatedContainer)).map((a) => a.decoration).whereType<BoxDecoration>();
-        expect(nido.map((d) => d.gradient), contains(Ombra.incavo(tema)));
         expect(nido.every((d) => d.border == null), isTrue);
+        final vuoto = t.widget<CustomPaint>(find.byKey(const ValueKey('nido vuoto')));
+        final tratti = vuoto.painter! as TrattiNido;
+        expect(tratti.fondo, Ombra.nidoVuoto(tema));
+        expect(t.getSize(find.byKey(const ValueKey('nido vuoto'))), const Size(TranscriCorpo.w * TranscriNestState.inNest, TranscriCorpo.h * TranscriNestState.inNest));
         await t.pumpWidget(const SizedBox());
       });
     }
 
-    // Giro 7: «l'incavo non si vede, anche coi colori scuri». Il pozzetto sopra l'isola (chiara e scura) ne stacca
-    // almeno 1,3:1 in alto e 1,15:1 a metà; di notte il bordo di sotto è più chiaro del pozzetto (il filo di luce).
+    // Il buio dentro è più scuro dell'isola; il tratteggio (testo secondario a metà) si stacca dal buio, ma meno del testo.
     for (final tema in Brightness.values) {
       test('Si vede sull\'isola (${tema.name})', () {
-        final isola = (tema == Brightness.dark ? Colori.scuro : Colori.chiaro).isola;
+        final col = tema == Brightness.dark ? Colori.scuro : Colori.chiaro;
         double k(Color a, Color b) {
           final (x, y) = (a.computeLuminance(), b.computeLuminance());
           return (math.max(x, y) + 0.05) / (math.min(x, y) + 0.05);
         }
 
-        final g = Ombra.incavo(tema);
-        final sopra = [for (final c in g.colors) Color.alphaBlend(c, isola)];
-        expect(k(sopra.first, isola), greaterThanOrEqualTo(1.3));
-        expect(k(sopra[1], isola), greaterThanOrEqualTo(1.15));
-        expect(sopra.first.computeLuminance(), lessThan(isola.computeLuminance()));
-        if (tema == Brightness.dark) expect(sopra.last.computeLuminance(), greaterThan(sopra[1].computeLuminance()));
+        final dentro = Color.alphaBlend(Ombra.nidoVuoto(tema), col.isola);
+        final tratto = Color.alphaBlend(col.testoSecondario.withValues(alpha: 0.5), dentro);
+        expect(dentro.computeLuminance(), lessThan(col.isola.computeLuminance()));
+        expect(k(dentro, col.isola), greaterThanOrEqualTo(1.08));
+        expect(k(tratto, dentro), greaterThanOrEqualTo(1.5));
+        expect(k(tratto, dentro), lessThan(k(col.testoSecondario, dentro)));
       });
     }
   });

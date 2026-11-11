@@ -5,7 +5,7 @@ import '../ds.dart';
 import 'isola.dart';
 
 /// In cima alla pagina, come il Dock in fondo (6 nov, sua richiesta: «come WhatsApp e Samsung»).
-/// Ferma in cima è una barra: il titolo grande, accanto il [segno] («Dati finti»), sotto, se c'è, una riga
+/// Ferma in cima è una barra: il titolo (della stessa misura che ha nella pillola), accanto il [segno] («Dati finti»), sotto, se c'è, una riga
 /// ([sotto]: le registrazioni in attesa). Quando la pagina ([child]) scorre la barra si ritira e restano due pillole
 /// che galleggiano sopra di lei, le stesse isole del Dock: a sinistra il titolo (col segno e [accanto]), a destra le
 /// [azioni]. La pagina scorre sotto di loro; tornata in cima (o cambiata [pagina]) torna la barra.
@@ -99,16 +99,18 @@ class _IntestazioneState extends State<Intestazione> {
         Column(
           children: [
             // La barra si ritira verso l'alto (e sfuma): la pagina sale al suo posto.
+            // Altezza e velo da un movimento solo (7 nov, giro dei «pezzi»): prima andavano con tempi e curve loro,
+            // e la barra arrivava a scatti. Il velo finisce a metà strada, così non resta un'ombra della barra.
             ClipRect(
-              child: AnimatedAlign(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(end: ridotta ? 0 : 1),
                 duration: Durata.normale,
                 curve: Curva.standard,
-                alignment: Alignment.topCenter,
-                heightFactor: ridotta ? 0 : 1,
-                child: AnimatedOpacity(
-                  duration: Durata.veloce,
-                  opacity: ridotta ? 0 : 1,
-                  child: IgnorePointer(ignoring: ridotta, child: _barra(larghe)),
+                child: IgnorePointer(ignoring: ridotta, child: _barra(larghe)),
+                builder: (context, v, barra) => Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: v,
+                  child: Opacity(opacity: (2 * v - 1).clamp(0.0, 1.0), child: barra),
                 ),
               ),
             ),
@@ -165,7 +167,8 @@ class _IntestazioneState extends State<Intestazione> {
                     key: ValueKey(widget.titolo),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Testo.titoloPagina.copyWith(color: context.col.testo),
+                    // Grande quanto nella pillola (10 nov: «grande in cima sembrava strano»): il titolo non cambia misura.
+                    style: Testo.titoloPillola.copyWith(color: context.col.testo),
                   ),
                 ),
               ),

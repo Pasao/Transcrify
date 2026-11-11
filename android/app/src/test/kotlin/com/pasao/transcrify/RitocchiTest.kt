@@ -47,7 +47,8 @@ class RitocchiTest {
 
     @Test
     fun lUnitaTieneIlTitoloDellaPrima() {
-        val (_, fusa) = unisci(storia, listOf(30, 20))!!
+        // Un titolo scritto da te resta; uno di Groq se ne va (TitolatoreTest).
+        val (_, fusa) = unisci(storia.map { it.copy(titoloUtente = true) }, listOf(30, 20))!!
         assertEquals("Il treno", fusa.titolo)
         assertNull(unisci(storia, listOf(20, 30))!!.second.titolo)
     }

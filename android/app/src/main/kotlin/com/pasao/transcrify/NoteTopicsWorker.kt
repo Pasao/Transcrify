@@ -3,6 +3,7 @@ package com.pasao.transcrify
 import android.app.ActivityManager
 import android.content.Context
 import com.pasao.transcrify.engine.Categorie
+import com.pasao.transcrify.engine.ColoreRegole
 import com.pasao.transcrify.engine.Embedder
 import com.pasao.transcrify.engine.Engine
 import com.pasao.transcrify.engine.Estratto
@@ -10,6 +11,7 @@ import com.pasao.transcrify.engine.Keywords
 import com.pasao.transcrify.engine.OnnxEmbedder
 import com.pasao.transcrify.engine.Parole
 import com.pasao.transcrify.engine.SentenceStore
+import com.pasao.transcrify.engine.Vec
 import com.pasao.transcrify.engine.XxHash64
 import org.json.JSONArray
 import org.json.JSONObject
@@ -53,6 +55,9 @@ class NoteTopicsWorker private constructor(context: Context) {
 
     /** Chi vuole sapere quando una nota è pronta (l'app, per rileggere). */
     @Volatile var listener: (() -> Unit)? = null
+
+    /** Le proposte di «Colora da sola» sono cambiate ([ProposteColore]): l'app le rilegge. */
+    @Volatile var proposteCambiate: (() -> Unit)? = null
 
     /** Il risultato di una nota: per quale testo e con quale modello, dove sono le frasi, le grane, le parole chiave. */
     private class Result(
@@ -153,6 +158,100 @@ class NoteTopicsWorker private constructor(context: Context) {
     /** Le trascrizioni nuove o cambiate entrano nella ricerca, quelle eliminate escono. In fondo, come le note. */
     fun requestTrascrizioni() {
         exec.execute { indicizzaTrascrizioni(); liberaSeFermo() }
+    }
+
+    /**
+     * «Colora da sola» (se l'hai acceso) PROPONE (10 nov, suo: «suggerimenti, non cambi silenziosi»): per le trascrizioni
+     * [solo] (una appena salvata) o, null, per tutte quelle senza colore (acceso adesso, le regole cambiate), il colore
+     * la cui regola o le cui trascrizioni le somigliano chiaramente ([ColoreRegole]). Mai le private, mai una che ha già
+     * un colore; senza modello o senza un colore che vince netto, niente. Non si mette: va tra le proposte
+     * ([ProposteColore]), e l'app le mostra in Trascrivi.
+     */
+    fun proponiColori(solo: Set<Long>? = null, seCambiate: Boolean = false) {
+        if (!store.coloraDaSola) return
+        if (solo != null) return exec.execute {
+            runCatching { proponi(solo) }
+            liberaSeFermo()
+        }
+        // Su tutte (11 nov): anche quelle di prima, ma una volta per cambio delle etichette (o del modello), non a ogni
+        // avvio ([seCambiate]); e dopo una pausa, se le cambi di fila.
+        if (seCambiate && store.proposteImpronta == impronta()) return
+        principale.removeCallbacks(proponiTutte)
+        principale.postDelayed(proponiTutte, Durate.ATTESA_PROPOSTE)
+    }
+
+    private val principale = android.os.Handler(android.os.Looper.getMainLooper())
+    private val proponiTutte = Runnable {
+        exec.execute {
+            runCatching { proponi(null) }
+            liberaSeFermo()
+        }
+    }
+
+    /** Le etichette che valgono e il modello: se non cambiano, le proposte su tutte sono già fatte. */
+    private fun impronta() = RegoleColori.inJson(RegoleColori.effettive(store.regoleColori, store.nomiColori)) + "|" + models.chosen?.id
+
+    private fun proponi(solo: Set<Long>?) {
+        val storia = store.history()
+        val impronta = impronta()
+        val libere = storia.filter { (solo == null || it.at in solo) && it.colorataDaSola("") != null && it.text.isNotBlank() }
+        val decidi = if (libere.isEmpty()) null else decisore(storia)
+        // Fatte (anche se non c'era niente da proporre); senza modello no: si riprova quando c'è.
+        if (solo == null && (libere.isEmpty() || decidi != null)) store.proposteImpronta = impronta
+        decidi ?: return
+        val nuove = libere.mapNotNull { t -> decidi(t)?.let { t.at to it } }.toMap()
+        val prima = store.proposteColore
+        val dopo = ProposteColore.aggiorna(prima, nuove, store.rifiutateColore, tutte = solo == null)
+        if (dopo == prima) return
+        store.proposteColore = dopo
+        proposteCambiate?.invoke()
+    }
+
+    /**
+     * «Colora le sue di prima» (10 nov): le trascrizioni senza colore che la regola rigida ([ColoreRegole]) dà a
+     * [colore] lo prendono, segnate come messe da sola, in una scrittura sola. [risposta] (dal thread del lavoro) dice
+     * quali, per l'«Annulla»; vuota senza modello o senza nessuna che lo prenda netto.
+     */
+    fun coloraRetro(colore: String, risposta: (List<Long>) -> Unit) = suRichiesta {
+        val fatte = runCatching<List<Long>> {
+            val storia = store.history()
+            val decidi = decisore(storia) ?: return@runCatching emptyList()
+            val ats = RegoleColori.daColorare(storia, colore, decidi).toSet()
+            val offusca = RegoleColori.effettive(store.regoleColori, store.nomiColori)[colore]?.offuscaSempre == true
+            val messe = mutableListOf<Long>()
+            store.cambia(ats) { t -> t.colorataDaSola(colore, offusca)?.also { messe += t.at } ?: t }
+            messe
+        }.getOrDefault(emptyList())
+        risposta(fatte)
+    }
+
+    /**
+     * Chi decide il colore di una trascrizione senza colore, da cose che vedi: la regola di ogni colore (scritta o il suo
+     * nome, [RegoleColori.effettive]) e le trascrizioni già colorate di [storia]. Null senza modello o senza niente da cui
+     * decidere. Lo stesso per le proposte ([proponiColori]) e per quelle di prima ([coloraRetro]).
+     */
+    private fun decisore(storia: List<Transcription>): ((Transcription) -> String?)? {
+        val m = models.chosen?.takeIf { models.ready(it) } ?: return null
+        val colori = storia.filter { it.colore != null }.associate { Engine.FONTE_TRASCRIZIONE + it.at to it.colore!! }
+        val scritte = RegoleColori.effettive(store.regoleColori, store.nomiColori).filterValues { it.regola.isNotBlank() }
+        if (colori.isEmpty() && scritte.isEmpty()) return null
+        val e = engineFor(m)
+        indicizzaTrascrizioni()
+        return { t ->
+            val domanda = e.domanda(t.text.take(2000))
+            val vicine = e.ricerca.punteggi(domanda).mapNotNull { r -> colori[r.fonte]?.let { it to r.punteggio } }
+            val regole = scritte.mapValues { (_, r) -> Vec.dot(domanda, vettoreRegola(e, r.regola)) }
+            ColoreRegole.decidi(regole, vicine, m.profile.pair, m.profile.categoriaScarto, sogliaRegola = m.profile.cercaMinimo)
+        }
+    }
+
+    /** Il senso di una regola, calcolato una volta per testo e per modello (cambiando modello si ricalcola). */
+    private val regoleCalcolate = HashMap<String, FloatArray>()
+    private var regoleDi: Engine? = null
+
+    private fun vettoreRegola(e: Engine, regola: String): FloatArray {
+        if (regoleDi !== e) regoleCalcolate.clear().also { regoleDi = e }
+        return regoleCalcolate.getOrPut(regola) { e.domanda(regola) }
     }
 
     /**

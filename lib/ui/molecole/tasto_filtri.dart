@@ -14,7 +14,6 @@ class TastoFiltri extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.col;
     return Builder(
       builder: (tasto) => Semantics(
         button: true,
@@ -35,14 +34,7 @@ class TastoFiltri extends StatelessWidget {
               Positioned(
                 top: Spazio.s1,
                 right: Spazio.s1,
-                child: IgnorePointer(
-                  child: Container(
-                    constraints: const BoxConstraints(minWidth: Misura.iconaPiccola, minHeight: Misura.iconaPiccola),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(color: c.azione, borderRadius: BorderRadius.circular(Raggio.pillola)),
-                    child: Text('$quanti', style: Testo.orario.copyWith(color: c.suAzione), textScaler: TextScaler.noScaling),
-                  ),
-                ),
+                child: IgnorePointer(child: Contatore(quanti)),
               ),
           ],
         ),

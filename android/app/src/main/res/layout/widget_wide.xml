@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 2 × 1: una pillola. A sinistra Transcri, grande, senza niente intorno; a destra cosa fa.
-     Le misure (margine 10 dp, posto da 56 dp) le usa anche WidgetTrampoline per sapere dov'è lui. -->
+     Col tondo che apre l'app (senza le parole) Transcri e il tondo stanno insieme, al centro (7 nov: «sono ai due estremi»).
+     Le misure (margine 10 dp, posto da 56 dp, stacco 12 dp, tondo 52 dp) le usa anche WidgetTrampoline per sapere dov'è lui. -->
 <!-- La cornice: la pillola che ritaglia (clipToOutline). Dietro, il gradiente dai token (WidgetColori); sopra, il contenuto. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_frame"
@@ -20,7 +21,7 @@
         android:id="@+id/widget_root"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:gravity="center_vertical"
+        android:gravity="center"
         android:orientation="horizontal"
         android:paddingStart="10dp"
         android:paddingEnd="12dp"
@@ -105,12 +106,12 @@
         </FrameLayout>
 
         <!-- Solo nel 2 × 1: il tondo a destra apre l'app (6 nov: «tocco Detta ed esce Transcri, ma l'app non si apre»).
-             Lo stesso tondo del tasto che detta, con la freccia di «Apri»; il resto del widget fa uscire Transcri. -->
+             Lo stesso tondo del tasto che detta, con la freccina «›» di «Apri»; il resto del widget fa uscire Transcri. -->
         <FrameLayout
             android:id="@+id/widget_open_round"
             android:layout_width="52dp"
             android:layout_height="52dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="12dp"
             android:background="@drawable/widget_open_bg"
             android:contentDescription="Apri Transcrify"
             android:visibility="gone">
@@ -134,7 +135,7 @@
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="16dp"
-            android:paddingEnd="14dp"
+            android:paddingEnd="10dp"
             android:visibility="gone">
             <TextView
                 android:id="@+id/widget_open_text"
@@ -148,7 +149,7 @@
                 android:id="@+id/widget_open_icon"
                 android:layout_width="20dp"
                 android:layout_height="20dp"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="2dp"
                 android:importantForAccessibility="no"
                 android:src="@drawable/ic_widget_open" />
         </LinearLayout>

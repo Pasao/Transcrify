@@ -9,9 +9,11 @@ import '../core/formato.dart';
 import '../core/native.dart';
 import '../core/ricerca.dart';
 import '../core/scrittura.dart';
+import '../core/titoli.dart';
 import 'barra_nota.dart';
 import 'common.dart';
 import 'molecole/apri_collegamento.dart';
+import 'molecole/corpo_scheda.dart';
 import 'molecole/lista_categoria.dart';
 import 'molecole/pezzo_argomento.dart';
 import 'molecole/scheda_argomento.dart';
@@ -41,7 +43,7 @@ Future<void> openNote(BuildContext context, [Note? note]) async {
   if (result.isEmpty) {
     // Svuotata: una nota vuota non serve a niente.
     if (existed) await Core.deleteNote(start.id);
-  } else if (result.title != start.title || result.text != start.text || result.summary != start.summary) {
+  } else if (result.title != start.title || result.text != start.text || result.summary != start.summary || result.privata != start.privata) {
     await Core.saveNote(result);
   }
   Core.refresh();
@@ -97,6 +99,16 @@ class _PensieriPageState extends State<PensieriPage> {
   Future<void> _share() async {
     await Core.share(_textOf(_chosen));
     setState(selected.clear);
+  }
+
+  /// «Offusca» (o «Mostra») le note scelte: la copertura sul testo, il titolo resta. Si salvano così come sono.
+  Future<void> _offusca(bool coperte) async {
+    final scelte = _chosen;
+    setState(selected.clear);
+    for (final n in scelte) {
+      await Core.saveNote(n.offuscata(coperte));
+    }
+    Core.refresh();
   }
 
   /// Eliminare: le note spariscono subito, «Annulla» le rimette tutte.
@@ -178,6 +190,8 @@ class _PensieriPageState extends State<PensieriPage> {
               actions: [
                 (Icons.content_copy_rounded, 'Copia', (_) => _copy()),
                 (Icons.share_rounded, 'Condividi', (_) => _share()),
+                if (Offusca.azione(coperta: _chosen.every((n) => n.privata)) case (final icona, final nome))
+                  (icona, nome, (_) => _offusca(!_chosen.every((n) => n.privata))),
                 (Icons.delete_outline_rounded, 'Elimina', (_) => _delete()),
               ],
             ),
@@ -268,7 +282,7 @@ class _ArgomentiPageState extends State<ArgomentiPage> {
       final ready = notes.values.where((n) => n.topics == 'ready').length;
       return StatoVuoto(
         frase: ready == 0
-            ? 'Gli argomenti di cui parli più spesso stanno qui.\nAccendi «Dividi per argomento» nelle impostazioni.'
+            ? 'Gli argomenti di cui parli più spesso stanno qui.\nAccendili in una nota, col tasto delle barre.'
             : 'Gli argomenti di cui parli più spesso stanno qui.\nUno compare quando torna almeno tre volte.',
         bottom: widget.bottom,
       );
@@ -369,7 +383,7 @@ class Masonry extends StatelessWidget {
   }
 }
 
-/// Una nota nella lista: il titolo, se c'è, poi l'inizio del testo e quando l'hai toccata l'ultima volta.
+/// Una nota nella lista: in alto l'inizio del testo, in fondo il titolo (se c'è) e quando l'hai toccata l'ultima volta.
 /// Tenendola premuta la copi, come le trascrizioni.
 class NoteCard extends StatelessWidget {
   const NoteCard({super.key, required this.note, required this.onOpen, required this.onSelect, this.selected = false, this.selecting = false});
@@ -388,7 +402,7 @@ class NoteCard extends StatelessWidget {
 
   /// Più o meno quante righe occupa: serve solo a scegliere la colonna.
   double get estimatedLines =>
-      (note.title.isEmpty ? 0 : 1.4) + (note.text.length / 22).clamp(1, _maxLines.toDouble()) + '\n'.allMatches(note.text).length * 0.5;
+      (note.title.isEmpty && !note.privata ? 0 : 1.4) + (note.text.length / 22).clamp(1, _maxLines.toDouble()) + '\n'.allMatches(note.text).length * 0.5;
 
   @override
   Widget build(BuildContext context) {
@@ -397,6 +411,8 @@ class NoteCard extends StatelessWidget {
     return Material(
       color: Scheda.fondo(tk, scelta: selected),
       shape: Scheda.forma(tk, scelta: selected),
+      // La copertura arriva fino ai bordi: la forma della scheda la taglia.
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         borderRadius: BorderRadius.circular(Raggio.scheda),
         onTap: onOpen,
@@ -404,27 +420,38 @@ class NoteCard extends StatelessWidget {
           HapticFeedback.mediumImpact();
           onSelect();
         },
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(Spazio.s4, Spazio.s3, Spazio.s4, Spazio.s3),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (note.title.trim().isNotEmpty) ...[
-                Text(note.title.trim(), style: Testo.titoloScheda.copyWith(color: tk.testo), maxLines: 2, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: Spazio.s1),
-              ],
-              if (note.text.trim().isNotEmpty) Anteprima(note.text.trim(), righe: _maxLines, stile: TextStyle(color: tk.testoSecondario), collegamenti: !selecting),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(shortStamp(note.updated), style: orarioStyle(context), overflow: TextOverflow.ellipsis),
+        // Come le trascrizioni (11 nov, suo): in alto l'anteprima del testo, la parte che si offusca, larga quanto la
+        // scheda; in fondo il titolo e le informazioni, sempre in vista (`CorpoScheda`).
+        child: CorpoScheda(
+          coperta: note.privata,
+          copertura: CoperturaPrivata.neutra(context),
+          testo: note.text.trim().isEmpty
+              ? const SizedBox.shrink()
+              : Anteprima(note.text.trim(), righe: _maxLines, stile: TextStyle(color: tk.testoSecondario), collegamenti: !selecting && !note.privata),
+          // Offuscata senza titolo: l'ora, tenue.
+          titolo: note.title.trim().isEmpty && !note.privata
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.only(top: Spazio.s1, right: Spazio.s2),
+                  child: Text(
+                    note.title.trim().isEmpty ? Titoli.inAttesa('Nota', note.created) : note.title.trim(),
+                    style: Testo.titoloScheda.copyWith(color: note.title.trim().isEmpty ? tk.testoSecondario : tk.testo),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (note.source != null) ...[SourceIcon(note.source), const SizedBox(width: 6)],
-                  TopicsBadge(state: note.topics),
-                ],
-              ),
-            ],
+                ),
+          info: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Misura.bottoneBasso),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(shortStamp(note.updated), style: orarioStyle(context), overflow: TextOverflow.ellipsis),
+                ),
+                if (note.source != null) ...[SourceIcon(note.source), const SizedBox(width: Spazio.s2)],
+                TopicsBadge(state: note.topics),
+                const SizedBox(width: Spazio.s2),
+              ],
+            ),
           ),
         ),
       ),
@@ -553,6 +580,11 @@ class _NoteEditorState extends State<NoteEditor> {
     Core.refresh();
   }
 
+  Future<void> _accendiEDividi(int level) async {
+    if (widget.note.topics == 'off') await Core.accendiArgomenti();
+    if (mounted) await _salvaPerArgomenti(level);
+  }
+
   void _say(String s) {
     _labelTimer?.cancel();
     setState(() => _label = s);
@@ -563,11 +595,11 @@ class _NoteEditorState extends State<NoteEditor> {
 
   void _setLevel(int level) {
     if (!_text.usable) {
-      if (widget.note.topics == 'off' && !widget.note.isEmpty) return _say('Accendi «Dividi per argomento» nelle impostazioni');
       if (_text.text.trim().isEmpty) return _say('Scrivi qualcosa, poi lo divido per argomento');
       if (_livelloAtteso != null && _salvato == _text.text) return _say('Sto dividendo per argomento…');
-      // Gli argomenti si fanno sul testo salvato: si salva adesso, senza chiederti niente.
-      _salvaPerArgomenti(level.clamp(Grana.argomenti, Grana.ultima));
+      // Gli argomenti si fanno sul testo salvato: si salva adesso, senza chiederti niente. Se sono spenti,
+      // il tasto li accende (è il solo posto: le impostazioni scelgono il modello o li spengono).
+      _accendiEDividi(level.clamp(Grana.argomenti, Grana.ultima));
       return;
     }
     // Gli argomenti stanno sul testo intero: il riassunto si fa da parte.
@@ -632,7 +664,16 @@ class _NoteEditorState extends State<NoteEditor> {
     super.dispose();
   }
 
-  Note get _current => widget.note.edited(title: _title.text, text: _text.text, summary: _summaryOf == _text.text ? _summary : null);
+  Note get _current => widget.note.edited(title: _title.text, text: _text.text, summary: _summaryOf == _text.text ? _summary : null, privata: _privata);
+
+  /// Offuscata o in vista: l'occhio in alto. «Offusca» esce dalla nota (come la trascrizione aperta: così vedi la
+  /// copertura arrivare sulla sua scheda); «Mostra» resta qui. Si salva uscendo, come il resto.
+  late bool _privata = widget.note.privata;
+
+  void _cambiaOffusca() {
+    setState(() => _privata = !_privata);
+    if (_privata) Navigator.of(context).pop(_current);
+  }
 
   Future<void> _checkDictation() async {
     final h = await Core.history();
@@ -759,8 +800,9 @@ class _NoteEditorState extends State<NoteEditor> {
               onPressed: () => Navigator.of(context).pop(_current),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(_current), child: const Text('Fatto')),
-              const SizedBox(width: 8),
+              BottoneOffusca(coperta: _privata, onTap: _cambiaOffusca),
+              Bottone('Fatto', onPressed: () => Navigator.of(context).pop(_current)),
+              const SizedBox(width: Spazio.s2),
             ],
           ),
           body: Column(

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../core/estratto.dart';
 import '../core/native.dart';
+import '../core/titoli.dart';
 import 'atomi.dart';
 import 'common.dart';
 import 'ds.dart';
@@ -43,7 +44,7 @@ class _ProvaEstrattoPageState extends State<ProvaEstrattoPage> {
     setState(() {
       _trascrizioni = [
         for (final e in [...storia]..sort((a, b) => b.at.compareTo(a.at)))
-          if (e.text.trim().isNotEmpty) (titolo: shortStamp(e.at), sotto: e.privata ? 'Privata' : _inizio(e.text), testo: e.text),
+          if (e.text.trim().isNotEmpty) (titolo: shortStamp(e.at), sotto: e.privata ? Titoli.di(e) : _inizio(e.text), testo: e.text),
       ];
       _note = [
         for (final n in note)

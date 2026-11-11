@@ -113,7 +113,7 @@ void main() {
     await t.longPress(find.textContaining('Una trascrizione').first);
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
-    expect(find.text('Rendi privata'), findsNothing);
+    expect(find.text('Offusca'), findsOneWidget); // solo nella barra delle scelte, niente menu
     expect(find.byType(SelectionBar), findsOneWidget);
     expect(TrascriviPage.scegliendo.value, isTrue);
     expect(find.text('1 scelta'), findsOneWidget);
@@ -133,7 +133,7 @@ void main() {
       'Copia',
       'Condividi',
       'Unisci',
-      'Privata',
+      'Offusca',
       'Elimina',
     ]) {
       expect(find.text(nome), findsOneWidget, reason: nome);
@@ -156,7 +156,7 @@ void main() {
     expect(find.text('Colore cambiato'), findsNothing);
     // «Annulla» (la parola, non la X) chiude la scelta.
     expect(find.byIcon(Icons.close_rounded), findsNothing);
-    await t.tap(find.widgetWithText(SelectionBar, 'Annulla'));
+    await t.tap(find.widgetWithText(SelectionBar, 'Fine'));
     await t.pump();
     expect(TrascriviPage.scegliendo.value, isFalse);
     await t.pumpWidget(const SizedBox());
@@ -201,7 +201,7 @@ void main() {
       await t.longPress(find.textContaining('Una trascrizione').first);
       await t.pump();
       expect(TrascriviPage.scegliendo.value, isTrue);
-      await t.tap(find.widgetWithText(SelectionBar, 'Annulla'));
+      await t.tap(find.widgetWithText(SelectionBar, 'Fine'));
       await t.pump();
       await t.pump(const Duration(milliseconds: 400));
       expect(find.byType(SelectionBar), findsNothing);
@@ -226,7 +226,7 @@ void main() {
                 (Icons.content_copy_rounded, 'Copia', (_) {}),
                 (Icons.share_rounded, 'Condividi', (_) {}),
                 (Icons.call_merge_rounded, 'Unisci', (_) {}),
-                (Icons.lock_rounded, 'Privata', (_) {}),
+                (Offusca.icona, 'Offusca', (_) {}),
                 (Icons.delete_outline_rounded, 'Elimina', (_) {}),
               ],
             ),

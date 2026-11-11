@@ -119,13 +119,13 @@ class _ConSelezioneState extends State<ConSelezione> {
 typedef AzioneScelte = (IconData?, String, void Function(Rect dove));
 
 /// La barra delle cose scelte: quante sono, e cosa farne. Come in Samsung Note e nella Galleria, in fondo, al posto
-/// del Dock. Sopra quante sono («1 scelta», «3 scelte») e «Annulla» (6 nov: la parola, non la X); sotto le azioni,
-/// ognuna col suo nome (5 nov: si deve capire cosa puoi fare). Senza azioni (non ne hai ancora scelta nessuna) c'è
+/// del Dock. Sopra quante sono («1 scelta», «3 scelte») e «Fine» (6 nov: la parola, non la X; 7 nov: non
+/// «Annulla», perché le azioni valgono subito e qui si esce soltanto); sotto le azioni, ognuna col suo nome (5 nov: si deve capire cosa puoi fare). Senza azioni (non ne hai ancora scelta nessuna) c'è
 /// solo la riga di sopra.
 ///
 /// Come si usa (Trascrivi, Pensieri, le cartelle): la pagina la passa a [ConSelezione] solo mentre si sceglie.
 /// - [quante]: quante sono scelte (anche 0: si sta scegliendo, ma non ancora niente).
-/// - [onClose]: «Annulla» (e «indietro»), finito di scegliere.
+/// - [onClose]: «Fine» (e «indietro»), finito di scegliere.
 /// - [actions]: le azioni (icona, nome, cosa fa). Ognuna riceve dove sta il suo tasto sullo schermo: quello che
 ///   apre (la scelta del colore, i colori dell'unione) spunta lì sopra con `apriFumetto`. «Elimina» è rossa.
 ///
@@ -173,7 +173,7 @@ class SelectionBar extends StatelessWidget {
                     Expanded(
                       child: Text(etichetta(quante), maxLines: 1, overflow: TextOverflow.ellipsis, style: Testo.titoloScheda.copyWith(color: c.suFloater)),
                     ),
-                    Bottone('Annulla', tipo: TipoBottone.testo, alto: false, colore: c.suFloater, onPressed: onClose),
+                    Bottone('Fine', tipo: TipoBottone.testo, alto: false, colore: c.suFloater, onPressed: onClose),
                   ],
                 ),
               ),

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../core/filtro_voci.dart';
 import '../core/native.dart';
+import '../core/proposte_colore.dart';
 import 'cartelle.dart';
 import 'common.dart';
 import 'molecole/fila_schede.dart';
@@ -16,6 +17,7 @@ import 'molecole/scheda_trascrizione.dart';
 import 'molecole/scorri_giorni.dart';
 import 'molecole/stato_vuoto.dart';
 import 'molecole/titolo_giorno.dart';
+import 'molecole/volo_prima.dart';
 import 'molecole/volo_unione.dart';
 import 'theme.dart';
 import 'trascrizione_aperta.dart';
@@ -37,7 +39,7 @@ class TrascriviPage extends StatefulWidget {
   final double bottom;
 
   /// Si stanno scegliendo le trascrizioni: lo accende «Seleziona» nel menu dell'intestazione, e lo accende anche
-  /// tenere premuta una scheda (5 nov: un gesto solo, come nella Galleria); lo spegne «Annulla» nella barra (o
+  /// tenere premuta una scheda (5 nov: un gesto solo, come nella Galleria); lo spegne «Fine» nella barra (o
   /// «indietro»).
   static final scegliendo = ValueNotifier<bool>(false);
 
@@ -47,6 +49,10 @@ class TrascriviPage extends StatefulWidget {
 
   /// I filtri che servono, da tutte le trascrizioni (i colori nell'ordine delle cartelle).
   static final possibili = ValueNotifier<FiltriPossibili>(const FiltriPossibili());
+
+  /// Tutte le trascrizioni, anche quelle che i filtri lasciano fuori: le proposte di colore accanto al titolo
+  /// (nell'intestazione, `shell.dart`) ne mostrano i titoli.
+  static final tutte = ValueNotifier<List<Entry>>(const []);
 
   @override
   State<TrascriviPage> createState() => _TrascriviPageState();
@@ -63,6 +69,8 @@ class _TrascriviPageState extends State<TrascriviPage> {
     TrascriviPage.scegliendo.addListener(_modoScelta);
     TrascriviPage.filtro.addListener(_filtrata);
     _load();
+    // Le proposte di «Colora da sola», accanto al titolo (poi le rilegge quando il nativo ne ha di nuove).
+    unawaited(ProposteColore.leggi());
   }
 
   @override
@@ -81,17 +89,34 @@ class _TrascriviPageState extends State<TrascriviPage> {
     final n = ++_loads;
     final tutte = await Core.history();
     if (!mounted || n != _loads) return;
-    _tutte = tutte;
+    TrascriviPage.tutte.value = tutte;
     final filtro = TrascriviPage.filtro.value;
     TrascriviPage.possibili.value = FiltriPossibili.da(tutte, [for (final k in Cartelle.da(tutte, const {})) k.colore], filtro);
     final now = tutte.where((x) => !_deleting.contains(x.at) && filtro.ammette(x)).toList();
     // Il nativo avvisa spesso (la pillola, gli argomenti): se non è cambiato niente, non si ridisegna niente.
     if (listEquals(now, entries) && _giorniDel == _oggi) return;
     setState(() => entries = now);
+    if (VoloPrima.aspetta) _accogliPrima();
+  }
+
+  /// Si accoglie già la prima trascrizione dell'introduzione: una volta sola.
+  bool _accoglie = false;
+
+  /// Si entra dalla prova (10 nov): la prima trascrizione arriva in volo dal centro (`VoloPrima`) sulla più nuova;
+  /// la scheda vera resta nascosta finché la copia non è atterrata.
+  Future<void> _accogliPrima() async {
+    final e = entries?.fold<Entry?>(null, (a, b) => a == null || b.at.isAfter(a.at) ? b : a);
+    if (_accoglie || e == null) return;
+    _accoglie = true;
+    setState(() => _inVolo.add(e.at));
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    await VoloPrima.arriva(_inVista([e]).firstOrNull);
+    if (mounted) setState(() => _inVolo.remove(e.at));
   }
 
   /// Tutte, anche quelle appena cancellate e quelle che i filtri lasciano fuori: l'unione le cerca qui.
-  List<Entry> _tutte = const [];
+  List<Entry> get _tutte => TrascriviPage.tutte.value;
 
   /// Cambiati i filtri: la lista si rifà e torna in fondo, sulle più nuove (la lista cresce dal basso).
   void _filtrata() {
@@ -167,7 +192,7 @@ class _TrascriviPageState extends State<TrascriviPage> {
     _fineScelta();
   }
 
-  /// Private (o di nuovo visibili) tutte insieme, in una scrittura.
+  /// Offuscate (o di nuovo in vista) tutte insieme, in una scrittura.
   Future<void> _rendiPrivate(List<Entry> voci, bool privata) async {
     await Segni.rendiPrivate(voci.map((e) => e.at), privata);
     _load();
@@ -268,8 +293,8 @@ class _TrascriviPageState extends State<TrascriviPage> {
     _delete(gone);
   }
 
-  /// Le azioni sulle scelte, ognuna col suo nome. «Unisci» solo da due in su; «Privata» le rende private,
-  /// «Visibile» se lo sono già tutte.
+  /// Le azioni sulle scelte, ognuna col suo nome. «Unisci» solo da due in su; «Offusca» le copre, «Mostra» se lo
+  /// sono già tutte.
   List<AzioneScelte> get _azioniScelte {
     final voci = _chosen;
     if (voci.isEmpty) return const [];
@@ -279,9 +304,7 @@ class _TrascriviPageState extends State<TrascriviPage> {
       (Icons.content_copy_rounded, 'Copia', (_) => _copia(voci)),
       (Icons.share_rounded, 'Condividi', (_) => _condividi(voci)),
       if (voci.length >= 2) (Icons.call_merge_rounded, 'Unisci', _unisciScelte),
-      private
-          ? (Icons.lock_open_rounded, 'Visibile', (_) => _rendiPrivate(voci, false))
-          : (Icons.lock_rounded, 'Privata', (_) => _rendiPrivate(voci, true)),
+      if (Offusca.azione(coperta: private) case (final icona, final nome)) (icona, nome, (_) => _rendiPrivate(voci, !private)),
       (Icons.delete_outline_rounded, 'Elimina', (_) => _deleteChosen()),
     ];
   }
@@ -367,7 +390,7 @@ class _TrascriviPageState extends State<TrascriviPage> {
       ),
       AnimatedSize(
         duration: Durata.normale,
-        curve: Curves.easeOutCubic,
+        curve: Curva.standard,
         alignment: Alignment.topCenter,
         child: _aperto(label)
             // Il giorno aperto: due colonne, si legge tutto senza scorrere di lato.

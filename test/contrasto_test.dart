@@ -4,7 +4,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transcrify/core/titoli.dart';
 import 'package:transcrify/ui/cartelle.dart';
 import 'package:transcrify/ui/theme.dart';
 
@@ -23,8 +22,7 @@ void main() {
     });
   }
 
-  test('Le cartelle e i titoli automatici partono spenti (si accendono dalle prove)', () {
+  test('Le cartelle partono spenti (si accendono dalle prove)', () {
     expect(CartellePage.mostra.value, isFalse);
-    expect(Titoli.automatici.value, isFalse);
   });
 }

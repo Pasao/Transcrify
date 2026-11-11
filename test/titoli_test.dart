@@ -1,4 +1,4 @@
-// Giro 6 (6 nov): il titolo delle trascrizioni (salvato col nativo, proposto dal riassunto estrattivo, cambiato lì),
+// Giro 6 (6 nov): il titolo delle trascrizioni (salvato col nativo, da Groq dal 7 nov, cambiato lì),
 // la fascia della scheda, il cerchio del colore nella trascrizione aperta, le macchie della privata. Dati finti.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -38,9 +38,6 @@ void main() {
   setUp(() {
     Core.live.value = const Live();
     TrascriviPage.scegliendo.value = false;
-    Titoli.dimentica();
-    // Le prove di prima sono coi titoli accesi (Impostazioni → Prove → «Titoli automatici»); spenti: il gruppo in fondo.
-    Titoli.automatici.value = true;
     chiamate = [];
     estratto = {'stato': 'senzaModello'};
     storia = [
@@ -91,17 +88,21 @@ void main() {
   }
 
   group('Le regole del titolo', () {
-    test('Senza titolo: le prime cinque parole (senza segni né punteggiatura in fondo); privata: «Privata»', () {
+    test('Senza titolo: le prime cinque parole (senza segni né punteggiatura in fondo); offuscata: il titolo o l’ora, mai «Offuscata»', () {
       expect(Titoli.taglia('Domani alle **dieci** passo a prendere i documenti.'), 'Domani alle dieci passo a');
       expect(Titoli.taglia('Ciao, Marta!'), 'Ciao, Marta');
       expect(Titoli.di(Entry(voce('Una cosa breve.', 0))), 'Una cosa breve');
-      expect(Titoli.di(Entry(voce('Segreto.', 0, privata: true))), 'Privata');
+      // Offuscata senza titolo: l'ora (l'inizio del testo direbbe di cosa parla; 10 nov: mai «Offuscata»).
+      final segreta = Entry(voce('Segreto.', 0, privata: true));
+      expect(Titoli.di(segreta), Titoli.inAttesa('Trascrizione', segreta.at));
+      expect(Titoli.inAttesa('Trascrizione', DateTime(2026, 11, 10, 21, 40)), 'Trascrizione delle 21:40');
+      expect(Titoli.inAttesa('Nota', DateTime(2026, 11, 10, 1, 5)), "Nota dell'01:05");
+      // 7 nov: col suo titolo, il titolo resta (per orientarti).
       expect(Titoli.di(Entry(voce('Segreto.', 0, privata: true, titolo: 'Il mio'))), 'Il mio');
-    });
-
-    test('Dalle frasi del riassunto: la più corta, tagliata, con la maiuscola', () {
-      expect(Titoli.daFrasi(['Poi chiamo Marta per la cena di sabato sera tardi.', 'passo in comune per i documenti']), 'Passo in comune per i');
-      expect(Titoli.daFrasi(['', '  ']), isNull);
+      // Senza titolo (l'inizio del testo, o l'ora) è provvisorio, più tenue; col titolo no.
+      expect(Titoli.provvisorio(Entry(voce('Una cosa breve.', 0))), isTrue);
+      expect(Titoli.provvisorio(Entry(voce('Una cosa breve.', 0, titolo: 'Breve'))), isFalse);
+      expect(Titoli.provvisorio(Entry(voce('Segreto.', 0, privata: true))), isTrue); // l'ora, tenue
     });
 
     test('Il titolo va e viene dal nativo (e le trascrizioni di prima non ne hanno)', () async {
@@ -120,39 +121,8 @@ void main() {
     });
   });
 
-  group('Il titolo proposto', () {
-    test('Col modello: la frase più corta, salvata una volta sola; le private e quelle col titolo no', () async {
-      estratto = {
-        'stato': 'pronto',
-        'frasi': [
-          {'testo': 'passo a prendere i documenti in comune', 'start': 0, 'end': 10},
-          {'testo': 'poi chiamo Marta per la cena di sabato', 'start': 11, 'end': 20},
-        ],
-      };
-      final voci = [for (final m in storia) Entry(m)];
-      for (final e in voci) {
-        Titoli.proponi(e);
-        Titoli.proponi(e);
-      }
-      await pumpEventQueue();
-      expect(chiamate.where((c) => c.method == 'estratto'), hasLength(1));
-      final segno = chiamate.singleWhere((c) => c.method == 'segnaHistory');
-      expect((segno.arguments as Map)['titolo'], 'Passo a prendere i documenti');
-      expect(storia[0]['titolo'], 'Passo a prendere i documenti');
-    });
-
-    test('Senza modello: niente si salva, e non si chiede più', () async {
-      for (final m in storia) {
-        Titoli.proponi(Entry({...m, 'titolo': null, 'privata': false}));
-      }
-      await pumpEventQueue();
-      expect(chiamate.where((c) => c.method == 'estratto'), hasLength(1));
-      expect(chiamate.where((c) => c.method == 'segnaHistory'), isEmpty);
-    });
-  });
-
   for (final luce in Brightness.values) {
-    testWidgets('La scheda ($luce, stretta, testo grande): in fondo il titolo col cestino e l\'ora con le iconcine, alte uguali', (t) async {
+    testWidgets('La scheda ($luce, stretta, testo grande): in fondo due righe, sopra il titolo e sotto l\'ora con le iconcine', (t) async {
       await telefono(t);
       await t.pumpWidget(app(const TrascriviPage(bottom: 76), testo: 1.6, luce: luce));
       await t.pumpAndSettle();
@@ -166,6 +136,17 @@ void main() {
       final seconda = find.ancestor(of: find.text('Il preventivo'), matching: find.byType(SchedaTrascrizione));
       expect(find.descendant(of: seconda, matching: find.byType(EtichettaModo)), findsNothing);
       expect(t.getRect(prima).height, SchedaTrascrizione.alta);
+      // 7 nov: due righe, sopra solo il titolo, sotto l'ora con le iconcine e il cestino a destra (sulla stessa riga).
+      final titolo = t.getRect(find.text('Il preventivo'));
+      final cestino = t.getRect(find.descendant(of: prima, matching: find.byType(DeleteButton)));
+      final ora = t.getRect(find.descendant(of: prima, matching: find.byType(SourceIcon)));
+      expect(ora.center.dy, moreOrLessEquals(cestino.center.dy, epsilon: 1));
+      expect(cestino.left, greaterThan(ora.right));
+      expect(cestino.top, greaterThanOrEqualTo(titolo.bottom - 1));
+      // Senza titolo l'inizio del testo, più tenue; il titolo vero col colore del testo.
+      final c = luce == Brightness.dark ? Colori.scuro : Colori.chiaro;
+      expect(t.widget<Text>(find.text('Domani alle dieci passo a')).style?.color, c.testoSecondario);
+      expect(t.widget<Text>(find.text('Il preventivo')).style?.color, c.testo);
       await fine(t);
     });
   }
@@ -224,9 +205,9 @@ void main() {
     await t.pump(const Duration(milliseconds: 100));
     final copertura = find.byType(CoperturaPrivata);
     expect(copertura, findsOneWidget);
-    expect(find.descendant(of: copertura, matching: find.byIcon(Icons.lock_rounded)), findsOneWidget);
-    // La fascia resta: «Privata» col suo colore (il testo non si legge).
-    expect(find.text('Privata'), findsOneWidget);
+    expect(find.descendant(of: copertura, matching: find.byIcon(Offusca.icona)), findsOneWidget);
+    // La fascia resta: il titolo (o l'ora) col suo colore (il testo non si legge).
+    expect(find.text(Titoli.di(Entry(storia.single))), findsOneWidget);
     expect(find.textContaining('treno'), findsNothing);
     // Girano: c'è sempre un fotogramma da disegnare (anche a schede ferme).
     await t.pump(const Duration(seconds: 1));
@@ -238,55 +219,6 @@ void main() {
     // Ferme: niente fotogrammi da disegnare.
     expect(t.binding.hasScheduledFrame, isFalse);
     await fine(t);
-  });
-
-  // Giro 7: i titoli si vedono solo con «Titoli automatici» (prove); spenti, la fascia ha una riga e l'aperta niente titolo.
-  group('Titoli automatici spenti (di base)', () {
-    setUp(() => Titoli.automatici.value = false);
-    tearDown(() => Titoli.automatici.value = true);
-
-    test('Non se ne propone nessuno', () async {
-      estratto = {
-        'stato': 'pronto',
-        'frasi': [
-          {'testo': 'passo a prendere i documenti', 'start': 0, 'end': 10},
-        ],
-      };
-      for (final m in storia) {
-        Titoli.proponi(Entry(m));
-      }
-      await pumpEventQueue();
-      expect(chiamate.where((c) => c.method == 'estratto'), isEmpty);
-    });
-
-    for (final luce in Brightness.values) {
-      testWidgets('La scheda: una riga sola (l\'ora, le iconcine, il cestino), centrata; niente titolo ($luce, testo grande)', (t) async {
-        await telefono(t);
-        await t.pumpWidget(app(const TrascriviPage(bottom: 76), testo: 1.6, luce: luce));
-        await t.pumpAndSettle();
-        expect(find.text('Il preventivo'), findsNothing);
-        expect(find.text('Domani alle dieci passo a'), findsNothing);
-        final scheda = find.byType(SchedaTrascrizione).first;
-        final ora = t.getRect(find.descendant(of: scheda, matching: find.byType(SourceIcon)));
-        final cestino = t.getRect(find.descendant(of: scheda, matching: find.byType(DeleteButton)));
-        expect(ora.center.dy, moreOrLessEquals(cestino.center.dy, epsilon: 1));
-        expect(t.getRect(scheda).height, SchedaTrascrizione.alta);
-        await fine(t);
-      });
-    }
-
-    testWidgets('La trascrizione aperta: niente titolo; in cima il giorno col cerchio del colore', (t) async {
-      await telefono(t);
-      await t.pumpWidget(
-        app(Builder(builder: (context) => Center(child: TextButton(onPressed: () => openEntry(context, Entry(storia[1])), child: const Text('Apri'))))),
-      );
-      await t.tap(find.text('Apri'));
-      await t.pumpAndSettle();
-      expect(find.byType(TitoloModificabile), findsNothing);
-      expect(find.text('Il preventivo'), findsNothing);
-      expect(find.byType(CerchioColore), findsOneWidget);
-      await fine(t);
-    });
   });
 
   group('La privata (giro 7)', () {

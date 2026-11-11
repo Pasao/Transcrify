@@ -3,13 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/native.dart';
+import '../core/proposte_colore.dart';
 import 'cartelle.dart';
+import 'common.dart';
 import 'azioni_pagina.dart';
+import 'da_sistemare.dart';
 import 'dock.dart';
 import 'molecole/colonna_poteri.dart';
-import 'molecole/barra_scelte.dart';
 import 'filtri_trascrivi.dart';
-import 'molecole/foglio_in_attesa.dart';
 import 'molecole/intestazione.dart';
 import 'molecole/riga_in_attesa.dart';
 import 'onboarding.dart';
@@ -18,13 +19,17 @@ import 'settings.dart';
 import 'theme.dart';
 import 'transcri.dart';
 import 'trascrivi.dart';
+import 'trascrizione_aperta.dart';
 
 /// L'app: in cima il nome del potere in cui sei e le impostazioni, in mezzo la sua pagina,
 /// in fondo il Dock. Transcri ha la sua casa nel Dock, uguale in ogni potere.
 class Shell extends StatefulWidget {
-  const Shell({super.key, required this.onReplayIntro});
+  const Shell({super.key, required this.onReplayIntro, this.atterra = false});
 
   final VoidCallback onReplayIntro;
+
+  /// Si entra dalla prova dell'introduzione: Transcri torna nel nido col suo atterraggio (il sobbalzo e la luce).
+  final bool atterra;
 
   @override
   State<Shell> createState() => _ShellState();
@@ -72,6 +77,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     Core.live.addListener(_liveChanged);
     Core.mostraArgomenti.addListener(_argomentiCambiati);
     _load();
+    if (widget.atterra) WidgetsBinding.instance.addPostFrameCallback((_) => _nest.currentState?.atterra());
   }
 
 
@@ -200,6 +206,20 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     });
   }
 
+  /// La zona sotto il titolo: le registrazioni in attesa e (10 nov), in Trascrivi, le proposte di colore, in una riga
+  /// sola; ognuna apre la pagina «Da sistemare» sulla sua parte; scorrendo, accanto al titolo nella pillola, i loro
+  /// segni corti. Niente da dire: null.
+  (Widget?, Widget?) _sottoTitolo(bool listaTrascrizioni) {
+    final voci = TrascriviPage.tutte.value;
+    final proposte = listaTrascrizioni ? ProposteColore.con(voci) : const <(PropostaColore, Entry)>[];
+    if (waiting == 0 && proposte.isEmpty) return (null, null);
+    void apri(DaSistemare parte) => apriDaSistemare(context, parte: parte, onRiprova: _riprova, voci: listaTrascrizioni ? voci : const [], onApri: openEntry);
+    return (
+      RigaInAttesa(quante: waiting, proposte: proposte.length, riprovando: riprovando, onRiprova: _riprova, onApri: apri),
+      InAttesaCorto(quante: waiting, proposte: proposte.length, onApri: apri),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottom = Dock.height + MediaQuery.paddingOf(context).bottom;
@@ -237,24 +257,26 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
               // In cima la barra, che scorrendo diventa due pillole sopra la pagina (come il Dock in fondo).
               // In Trascrivi, sotto il titolo, i filtri della lista (si ridisegna solo l'intestazione: la pagina è la stessa).
               child: ListenableBuilder(
-                listenable: FiltriTrascrivi.cambia,
-                builder: (context, _) => Intestazione(
-                  titolo: cartelle ? 'Cartelle' : power.label,
-                  pagina: page.key,
-                  segno: sandbox ? const ChipStato('Dati finti', tipo: TipoChip.azione) : null,
-                  sotto: waiting > 0
-                      ? RigaInAttesa(quante: waiting, riprovando: riprovando, onRiprova: _riprova, onApri: () => apriInAttesa(context, onRiprova: _riprova))
-                      : null,
-                  accanto: waiting > 0 ? InAttesaCorto(quante: waiting) : null,
-                  // La lente e il ⋮ (sua scelta, 6 nov): «Seleziona» dove si può scegliere, e le impostazioni.
-                  // In Trascrivi, prima, il tasto «Filtri» (solo se c'è qualcosa da filtrare).
-                  azioni: [
-                    if (listaTrascrizioni) ?FiltriTrascrivi.tasto(),
-                    ...azioniPagina(context, onSeleziona: _seleziona, onImpostazioni: _openSettings),
-                  ],
-                  filtri: listaTrascrizioni ? FiltriTrascrivi.accesi() : null,
-                  child: pagina,
-                ),
+                // Anche le proposte di colore, sotto il titolo con le registrazioni in attesa.
+                listenable: Listenable.merge([FiltriTrascrivi.cambia, ProposteColore.tutte, TrascriviPage.tutte]),
+                builder: (context, _) {
+                  final sottoTitolo = _sottoTitolo(listaTrascrizioni);
+                  return Intestazione(
+                    titolo: cartelle ? 'Cartelle' : power.label,
+                    pagina: page.key,
+                    segno: sandbox ? const ChipStato('Dati finti', tipo: TipoChip.azione) : null,
+                    sotto: sottoTitolo.$1,
+                    accanto: sottoTitolo.$2,
+                    // La lente e il ⋮ (sua scelta, 6 nov): «Seleziona» dove si può scegliere, e le impostazioni.
+                    // In Trascrivi, prima, il tasto «Filtri» (solo se c'è qualcosa da filtrare).
+                    azioni: [
+                      if (listaTrascrizioni) ?FiltriTrascrivi.tasto(),
+                      ...azioniPagina(context, onSeleziona: _seleziona, onImpostazioni: _openSettings),
+                    ],
+                    filtri: listaTrascrizioni ? FiltriTrascrivi.accesi() : null,
+                    child: pagina,
+                  );
+                },
               ),
             ),
             // La colonna aperta: un velo leggero sopra la pagina, toccandolo si richiude.

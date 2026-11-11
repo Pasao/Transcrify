@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- «Apri» nel widget (11 nov, suo: la freccia nel riquadro sembrava un link del browser): la freccina «›»
+     (chevron_right, Material arrotondato), la stessa che nell'app vuol dire «si apre», come nelle righe da toccare. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -6,5 +8,5 @@
     android:viewportHeight="24">
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M6,5h6a1,1 0,0 1,0 2H6v11h11v-6a1,1 0,0 1,2 0v6a2,2 0,0 1,-2 2H6a2,2 0,0 1,-2 -2V7a2,2 0,0 1,2 -2zM15,3h5a1,1 0,0 1,1 1v5a1,1 0,0 1,-2 0V6.41l-7.3,7.3a1,1 0,0 1,-1.41 -1.42L17.59,5H15a1,1 0,0 1,0 -2z" />
+        android:pathData="M9.29,6.71c-0.39,0.39 -0.39,1.02 0,1.41L13.17,12l-3.88,3.88c-0.39,0.39 -0.39,1.02 0,1.41 0.39,0.39 1.02,0.39 1.41,0l4.59,-4.59c0.39,-0.39 0.39,-1.02 0,-1.41L10.7,6.7c-0.38,-0.38 -1.02,-0.38 -1.41,0.01z" />
 </vector>

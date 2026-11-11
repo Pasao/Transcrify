@@ -19,7 +19,8 @@ abstract final class Testo {
   /// 40 · l'introduzione e le pagine vuote importanti.
   static final grande = _titolo(40, 1.05, -0.04);
 
-  /// 24 · Trascrivi, Pensieri, Impostazioni… in cima, ferma (6 nov: «più piccolo anche in alto»; prima 28).
+  /// 24 · i titoli grandi dentro una pagina (un album, la prova dell'introduzione). Il titolo della pagina in cima ha
+  /// la misura di [titoloPillola], ferma e scorrendo (10 nov; prima 24 ferma, e prima ancora 28).
   static final titoloPagina = _titolo(24, 1.05, -0.04);
 
   /// 18 · lo stesso titolo dentro la sua pillola, scorrendo: in proporzione alle isole del Dock, alte uguali

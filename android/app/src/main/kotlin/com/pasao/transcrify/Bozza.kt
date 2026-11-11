@@ -29,9 +29,18 @@ class Bozza(private val trascrivi: (File) -> String?) {
     fun svuota() = testi.clear()
 
     companion object {
-        /** Quanto della bozza si vede: la fine, dove eri arrivato. */
-        const val CODA = 160
+        /**
+         * Quanto della bozza si vede: la fine, dove eri arrivato. 11 nov, suo: «…» e gli ultimi 5 secondi circa (si
+         * parla a due parole e mezzo al secondo, sei lettere l'una: un'ottantina di caratteri).
+         */
+        const val CODA = 80
 
-        fun coda(testo: String): String = if (testo.length <= CODA) testo else "…" + testo.takeLast(CODA).trimStart()
+        /** «…» e la fine di [testo], da una parola intera; sempre coi puntini, è un pezzo di quello che hai detto. */
+        fun coda(testo: String): String {
+            val t = testo.trim()
+            if (t.length <= CODA) return "…$t"
+            val fine = t.takeLast(CODA)
+            return "…" + fine.substringAfter(' ', fine).trimStart()
+        }
     }
 }

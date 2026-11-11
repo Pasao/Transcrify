@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- La pillola del widget: la forma. Il colore lo mette il codice dai token (WidgetColori → setBackgroundTintList). -->
+<!-- La pillola del widget: solo la forma, che ritaglia (clipToOutline) il gradiente disegnato sopra (WidgetColori).
+     Trasparente (11 nov, suo: «un bordino bianco di 1 px»): piena, il suo colore chiaro restava visibile per un pixel
+     lungo il bordo, dove il ritaglio del gradiente sfuma (antialias). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <corners android:radius="999dp" />
-    <solid android:color="@color/widget_phone_text" />
+    <solid android:color="@android:color/transparent" />
 </shape>

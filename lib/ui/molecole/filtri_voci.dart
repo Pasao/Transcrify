@@ -57,10 +57,8 @@ class PannelloFiltri extends StatelessWidget {
             spacing: Spazio.s1,
             children: [
               EtichettaGruppo(nome),
-              Wrap(
-                spacing: Spazio.s2,
-                children: [for (final v in voci) ChipFiltro(v.nome, punto: v.punto, acceso: v.acceso, onTap: v.onTap)],
-              ),
+              // Tanti colori: la fila scorre di lato da sola, e il bordo sfumato dice che continua.
+              FilaScorre(children: [for (final v in voci) ChipFiltro(v.nome, punto: v.punto, acceso: v.acceso, onTap: v.onTap)]),
             ],
           ),
       ],
@@ -70,8 +68,8 @@ class PannelloFiltri extends StatelessWidget {
 }
 
 /// Sotto il titolo di Trascrivi, solo i filtri accesi (6 nov, giro 7: «sempre a sinistra, così restano in vista»):
-/// allineati a sinistra, ognuno con la × per spegnerlo, nell'ordine delle file; se non ci stanno vanno a capo (si
-/// vedono tutti, sempre). Nessuno acceso: niente.
+/// allineati a sinistra, ognuno con la × per spegnerlo, nell'ordine delle file; se non ci stanno, una fila sola che
+/// scorre di lato (7 nov, [FilaScorre]). Nessuno acceso: niente.
 class FiltriAccesi extends StatelessWidget {
   const FiltriAccesi({super.key, required this.righe});
 
@@ -85,18 +83,15 @@ class FiltriAccesi extends StatelessWidget {
           if (v.acceso) (nome, v),
     ];
     if (accesi.isEmpty) return const SizedBox.shrink();
-    return Padding(
+    return FilaScorre(
       padding: const EdgeInsets.fromLTRB(Spazio.s5, 0, Spazio.s3, 0),
-      child: Wrap(
-        spacing: Spazio.s2,
-        children: [
-          for (final (riga, v) in accesi)
-            Semantics(
-              label: riga,
-              child: ChipFiltro(v.nome, punto: v.punto, acceso: true, togli: true, onTap: v.onTap),
-            ),
-        ],
-      ),
+      children: [
+        for (final (riga, v) in accesi)
+          Semantics(
+            label: riga,
+            child: ChipFiltro(v.nome, punto: v.punto, acceso: true, togli: true, onTap: v.onTap),
+          ),
+      ],
     );
   }
 }
