@@ -212,7 +212,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   (Widget?, Widget?) _sottoTitolo(bool listaTrascrizioni) {
     final voci = TrascriviPage.tutte.value;
     final proposte = listaTrascrizioni ? ProposteColore.con(voci) : const <(PropostaColore, Entry)>[];
-    if (waiting == 0 && proposte.isEmpty) return (null, null);
+    // Accanto al titolo nella pillola, in Trascrivi c'è sempre (anche vuoto): così i segni compaiono e se ne vanno piano.
+    if (waiting == 0 && proposte.isEmpty) return (null, listaTrascrizioni ? InAttesaCorto(quante: 0, onApri: (_) {}) : null);
     void apri(DaSistemare parte) => apriDaSistemare(context, parte: parte, onRiprova: _riprova, voci: listaTrascrizioni ? voci : const [], onApri: openEntry);
     return (
       RigaInAttesa(quante: waiting, proposte: proposte.length, riprovando: riprovando, onRiprova: _riprova, onApri: apri),

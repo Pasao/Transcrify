@@ -374,19 +374,25 @@ class _ProvaTranscriState extends State<ProvaTranscri> {
                             opacity: guidata ? Velo.guida : 1,
                             duration: Durata.lenta,
                             curve: Curva.standard,
-                              child: Padding(
+                            child: Padding(
                               padding: const EdgeInsets.fromLTRB(Spazio.s6, 0, Spazio.s6, Spazio.s4),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  // Il tempo e l'onda, come nella barra della trascrizione: si vede che sta registrando.
-                                  if (ascolta) ...[
-                                    Text(VoceInBarra.tempo(live.seconds), style: Testo.orario.copyWith(color: c.testoSecondario), textAlign: TextAlign.center),
-                                    const SizedBox(height: Spazio.s2),
-                                    const Center(child: OndaVoce(larga: Spazio.s10 * 2, alta: Spazio.s5)),
+                              // Il tempo, l'onda e l'avviso arrivano e se ne vanno piano (11 nov), non di colpo.
+                              child: AnimatedSize(
+                                duration: Durata.normale,
+                                curve: Curva.standard,
+                                alignment: Alignment.bottomCenter,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    // Il tempo e l'onda, come nella barra della trascrizione: si vede che sta registrando.
+                                    if (ascolta) ...[
+                                      Text(VoceInBarra.tempo(live.seconds), style: Testo.orario.copyWith(color: c.testoSecondario), textAlign: TextAlign.center),
+                                      const SizedBox(height: Spazio.s2),
+                                      const Center(child: OndaVoce(larga: Spazio.s10 * 2, alta: Spazio.s5)),
+                                    ],
+                                    if (avviso != null) Text(avviso, style: Testo.piccolo.copyWith(color: c.testoSecondario), textAlign: TextAlign.center),
                                   ],
-                                  if (avviso != null) Text(avviso, style: Testo.piccolo.copyWith(color: c.testoSecondario), textAlign: TextAlign.center),
-                                ],
+                                ),
                               ),
                             ),
                           ),

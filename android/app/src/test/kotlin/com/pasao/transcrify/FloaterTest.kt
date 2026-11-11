@@ -40,7 +40,7 @@ class FloaterTest {
         assertFalse(caretFuso.contains("remember { Animatable"))
         assertFalse(Regex("""animate\w*AsState|AnimatedVisibility|animateContentSize""").containsMatchIn(caretFuso))
         // Anche aprendo (lo scatto [t]) e cambiando cassetto: l'altezza segue passo passo, non rincorre la larghezza.
-        assertTrue(pannello.contains("if (alto.value == 0f || t.isRunning || carta.isRunning || cambio.isRunning || voce.isRunning) alto.snapTo(voluto) else alto.animateTo(voluto, Scatto.molla())"))
+        assertTrue(pannello.contains("if (alto.value == 0f || t.isRunning || carta.isRunning || cambio.isRunning || voce.isRunning || libero.isRunning) alto.snapTo(voluto) else alto.animateTo(voluto, Scatto.molla())"))
         assertFalse(pannello.contains("morfa"))
     }
 

@@ -51,4 +51,7 @@ object Durate {
      * pausa, una volta sola anche se cambi nome e regola di fila.
      */
     const val ATTESA_PROPOSTE = 1500L
+
+    /** Il volume della voce va a Flutter al più ogni tanto ([InoltroVoce]): circa 30 volte al secondo. */
+    const val VOCE_MS = 33L
 }

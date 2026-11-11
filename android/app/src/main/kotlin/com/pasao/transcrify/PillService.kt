@@ -210,7 +210,16 @@ class PillService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         }
         // L'app disegna Transcri nel Dock che ascolta: le serve lo stato e il volume della voce.
         scope.launch {
-            snapshotFlow { liveNow() }.collect { liveListener?.invoke(it) }
+            // A Flutter: lo stato subito, il solo volume al più ogni [Durate.VOCE_MS] ([InoltroVoce]).
+            var mandato: Map<String, Any?>? = null
+            var quando = 0L
+            snapshotFlow { liveNow() }.collect {
+                val ora = android.os.SystemClock.uptimeMillis()
+                if (!InoltroVoce.daMandare(mandato, it, ora - quando)) return@collect
+                mandato = it
+                quando = ora
+                liveListener?.invoke(it)
+            }
         }
     }
 

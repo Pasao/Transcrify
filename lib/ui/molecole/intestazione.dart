@@ -209,16 +209,18 @@ class _PillolaTitolo extends StatelessWidget {
     padding: Isola.bordo(tondoPrima: indietro != null),
     child: SizedBox(
       height: Misura.tondo,
+      // Gli stacchi a mano: [accanto] porta da sé il suo (11 nov: c'è anche vuoto, per comparire piano), e vuoto non
+      // deve lasciare spazio.
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        spacing: Spazio.s2,
         children: [
-          ?indietro,
+          if (indietro case final i?) ...[i, const SizedBox(width: Spazio.s2)],
           Flexible(
             flex: 2,
             child: Text(titolo, maxLines: 1, overflow: TextOverflow.ellipsis, style: Testo.titoloPillola.copyWith(color: context.col.testo)),
           ),
-          for (final s in [?segno, ?accanto]) Flexible(child: _stretto(s)),
+          if (segno case final s?) ...[const SizedBox(width: Spazio.s2), Flexible(child: _stretto(s))],
+          if (accanto case final a?) Flexible(child: _stretto(a)),
         ],
       ),
     ),

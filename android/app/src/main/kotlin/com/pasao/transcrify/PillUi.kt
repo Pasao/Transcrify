@@ -713,6 +713,11 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
     val voce = remember { Animatable(if (acceso) 1f else 0f) }
     // Spento (fermato o buttato) torna a riposo con lo scatto che richiude, non quello svelto: si vede passare.
     LaunchedEffect(acceso) { voce.animateTo(if (acceso) 1f else 0f, if (acceso) Scatto.molla() else Scatto.richiude()) }
+    // Nella prova guidata dell'introduzione solo il registratore: i cassetti (l'ultima, i vocali, la pausa), butta,
+    // pausa e la pulizia se ne vanno, stringendosi e sfumando come quando si butta ([Modifier.comparsa],
+    // [Scatto.richiude]), non tutti insieme di colpo. Da 1 (tutto) a 0 (solo il tasto grande).
+    val libero = remember { Animatable(if (svc.guidata == null) 1f else 0f) }
+    LaunchedEffect(svc.guidata == null) { libero.animateTo(if (svc.guidata == null) 1f else 0f, Scatto.richiude()) }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val w = constraints.maxWidth.toFloat()
@@ -747,7 +752,7 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
         val alto = remember { Animatable(0f) }
         val voluto = if (contenuto > 0f) contenuto else with(density) { PillGeometry.PANNELLO_MIN.dp.toPx() }
         LaunchedEffect(voluto) {
-            if (alto.value == 0f || t.isRunning || carta.isRunning || cambio.isRunning || voce.isRunning) alto.snapTo(voluto) else alto.animateTo(voluto, Scatto.molla())
+            if (alto.value == 0f || t.isRunning || carta.isRunning || cambio.isRunning || voce.isRunning || libero.isRunning) alto.snapTo(voluto) else alto.animateTo(voluto, Scatto.molla())
         }
         Blob(
             rect = lerpRect(bar, menu(alto.value.coerceAtLeast(1f)), p),
@@ -760,7 +765,7 @@ private fun MenuStage(svc: PillService, nest: Rect? = null) {
             maxRadius = with(density) { PillGeometry.MENU_RADIUS.dp.toPx() },
         ) {
             Pannello(
-                svc, carta, cambio, voce.value,
+                svc, carta, cambio, voce.value, libero.value,
                 maxCarta = with(density) { (h * 0.36f).toDp() },
                 larghezzaCarta = with(density) { largo.toDp() } - PADDING_PANNELLO * 2,
                 onCollapse = ::collapse,
@@ -813,7 +818,7 @@ private fun Modifier.pelle(color: Color, shadow: Float, stroke: Boolean = true, 
  */
 @Composable
 private fun Pannello(
-    svc: PillService, carta: Animatable<Float, AnimationVector1D>, cambio: Animatable<Float, AnimationVector1D>, voce: Float,
+    svc: PillService, carta: Animatable<Float, AnimationVector1D>, cambio: Animatable<Float, AnimationVector1D>, voce: Float, libero: Float,
     maxCarta: Dp, larghezzaCarta: Dp,
     onCollapse: () -> Unit, modifier: Modifier,
 ) {
@@ -823,14 +828,13 @@ private fun Pannello(
     val parla = s.phase == Phase.RECORDING || s.phase == Phase.PROCESSING
     Column(modifier.padding(horizontal = PADDING_PANNELLO, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         // I cassetti, e la carta di quello aperto che cresce da lui: una forma sola (CarteFuse).
-        // Nella prova guidata dell'introduzione solo il registratore: niente cassetti (l'ultima, i vocali, la pausa).
-        if (svc.guidata == null) CarteFuse(svc, quali, carta, cambio, maxCarta, larghezzaCarta)
+        if (libero > 0f) Box(Modifier.comparsa(libero)) { CarteFuse(svc, quali, carta, cambio, maxCarta, larghezzaCarta) }
         StatoRegistratore(svc.session, Coreografia.conVoce(parla, voce, s.phase != Phase.IDLE || s.notice != null))
         Spacer(Modifier.height(6.dp))
-        TastiVoce(svc, voce, onCollapse)
+        TastiVoce(svc, voce, libero, onCollapse)
         // La pulizia compare con la voce, dallo stesso scatto del pannello che si allarga (e se ne va con lei).
-        if ((parla || voce > 0f) && svc.guidata == null) {
-            Column(Modifier.comparsa(voce)) {
+        if ((parla || voce > 0f) && libero > 0f) {
+            Column(Modifier.comparsa(voce * libero)) {
                 Spacer(Modifier.height(10.dp))
                 ModeSlider(s)
             }
@@ -850,29 +854,30 @@ private fun StatoRegistratore(s: Session, quanto: Float) {
 
 /** I tasti di Transcri: butta · il tasto grande · pausa. */
 @Composable
-private fun TastiVoce(svc: PillService, voce: Float, onCollapse: () -> Unit) {
+private fun TastiVoce(svc: PillService, voce: Float, libero: Float, onCollapse: () -> Unit) {
     val s = svc.session
     val recording = s.phase == Phase.RECORDING
     // A riposo c'è solo il microfono, al centro: i posti di butta e pausa si aprono di lato con la voce, dallo stesso
     // scatto del pannello (vuoti, spingevano il microfono a destra nel pannello stretto).
-    // Nella prova guidata solo il tasto grande (fermare): niente butta né pausa.
-    val lati = if (svc.guidata != null) 0f else Coreografia.conVoce(recording, voce, s.phase == Phase.ERROR)
+    // Nella prova guidata solo il tasto grande (fermare): butta e pausa se ne vanno con [libero].
+    val lati = Coreografia.conVoce(recording, voce, s.phase == Phase.ERROR) * libero
+    val guidata = svc.guidata != null
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp * lati)) {
         Box(Modifier.comparsa(lati, diLato = true).size(40.dp), contentAlignment = Alignment.Center) {
             // Buttato (11 nov, suo): il pannello resta aperto e torna a riposo, col microfono; butta e pausa si
             // ritirano con la voce ([Coreografia.conVoce]) e intanto restano disegnati, spenti.
-            if (svc.guidata == null && (recording || s.phase == Phase.ERROR || lati > 0f)) CircleButton(Icons.Rounded.DeleteOutline, "Butta l'audio", Palette.Muted) {
-                if (recording || s.phase == Phase.ERROR) s.discard()
+            if (lati > 0f) CircleButton(Icons.Rounded.DeleteOutline, "Butta l'audio", Palette.Muted) {
+                if (!guidata && (recording || s.phase == Phase.ERROR)) s.discard()
             }
         }
         Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) { MainButton(svc, onCollapse) }
         Box(Modifier.comparsa(lati, diLato = true).size(40.dp), contentAlignment = Alignment.Center) {
-            if (svc.guidata == null && (recording || lati > 0f)) {
+            if (lati > 0f) {
                 CircleButton(
                     if (s.paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
                     if (s.paused) "Riprendi" else "Pausa",
                     if (s.paused) Palette.Paused else Palette.Text,
-                ) { if (recording) s.togglePause() }
+                ) { if (recording && !guidata) s.togglePause() }
             }
         }
     }

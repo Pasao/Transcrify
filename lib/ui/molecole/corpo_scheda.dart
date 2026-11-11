@@ -42,7 +42,20 @@ class CorpoScheda extends StatelessWidget {
         if (riempie) Expanded(child: alto) else alto,
         Padding(
           padding: margineFascia,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [titolo, info]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            // Il titolo può comparire o cambiare (una nota senza titolo, offuscata, mostra l'ora): con l'offuscare, piano.
+            children: [
+              AnimatedSize(
+                duration: Durata.copre,
+                curve: Curva.scambio,
+                alignment: Alignment.topLeft,
+                child: titolo,
+              ),
+              info,
+            ],
+          ),
         ),
       ],
     );

@@ -657,3 +657,14 @@ Stato: ☐ da fare · ◐ in corso · ☑ fatto
   sotto.» («Avanti»), «Ora tienimi premuto per fermarmi, oppure aprimi e tocca Stop.», fermata «Ricevuto: trascrivo…»,
   poi la scheda senza cestino (`SchedaTrascrizione.onDelete` facoltativo): solo «Entra».
 
+### Giro 11 nov, senza scatti
+
+- **I segni accanto al titolo** (`RigaInAttesa`, `InAttesaCorto`): l'orologio e la scintilla arrivano e se ne vanno
+  sfumando e allargandosi, il numero cambia con una dissolvenza (`AnimatedSize` + `AnimatedSwitcher`, `Durata.normale`);
+  nella pillola di Trascrivi `accanto` c'è sempre (anche vuoto) e porta da sé il suo stacco.
+- **Floater nella prova guidata**: cassetti, butta, pausa e pulizia se ne vanno con `libero` (`Modifier.comparsa`,
+  `Scatto.richiude`), come quando si butta.
+- **Il volume a Flutter** al più ogni `Durate.VOCE_MS` (`InoltroVoce`); un cambio di stato parte subito.
+- **Ancora**: il titolo della fascia delle schede (`CorpoScheda`) cambia piano con l'offuscare; nella prova il tempo,
+  l'onda e l'avviso arrivano con un `AnimatedSize`.
+
