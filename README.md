@@ -14,7 +14,7 @@ Apri [Releases](https://github.com/Pasao/Transcrify/releases), scarica l'ultimo 
 
 In Impostazioni → Informazioni trovi la fase, la versione e il numero di build.
 
-Questa repo contiene solo i file da scaricare. Il codice è privato.
+Questa repo contiene solo i file da scaricare. Il codice è privato durante la fase di prototipazione.
 
 ---
 
